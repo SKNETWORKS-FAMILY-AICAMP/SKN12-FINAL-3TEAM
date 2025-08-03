@@ -1,0 +1,44 @@
+{
+  "result": {
+    "meeting_summary": {
+      "discussion_points": [
+        "Speaker_A는 프로젝트 절차의 중요성과 참여자 확보의 필요성을 강조했습니다.",
+        "Speaker_D와 Speaker_E는 기술 용어의 번역 어려움과 관련된 문제를 논의했습니다.",
+        "Speaker_G는 데이터의 공선성 문제를 언급하며, 이에 대한 추가 분석의 필요성을 제기했습니다.",
+        "참석자들은 데이터 분석과 관련된 다양한 의견을 교환하며, 웹에 올린 캐릭터 캐스트의 유용성을 언급했습니다.",
+        "Speaker_A는 회의의 전반적인 흐름을 정리하고, 추가 논의 주제를 제안했습니다."
+      ],
+      "action_items": [
+        "프로젝트 절차에 대한 명확한 가이드라인을 작성하고 공유합니다.",
+        "기술 용어 번역의 어려움을 해결하기 위한 방안을 모색합니다.",
+        "데이터 공선성 문제에 대한 추가 분석을 수행하고 결과를 공유합니다.",
+        "회의록을 필사하여 참석자들과 공유합니다."
+      ],
+      "next_steps": [
+        "다음 회의에서 기술 용어 번역 문제에 대한 해결책을 논의합니다.",
+        "데이터 공선성 문제에 대한 심층 분석 보고서를 준비하고 발표합니다.",
+        "웹에 올린 자료의 유용성을 평가하고, 추가 자료를 준비합니다.",
+        "추가 논의 주제에 대한 의견을 수렴하고, 다음 회의에서 논의합니다."
+      ]
+    }
+  },
+  "metadata": {
+    "source_file": "../batch_triplet_results\\result_Btr001_processed\\05_final_result.json",
+    "utterance_count": 987,
+    "transcript_length": 30605,
+    "speakers": [
+      "Speaker_G",
+      "Speaker_E",
+      "Speaker_F",
+      "Speaker_D",
+      "Speaker_B",
+      "Speaker_C",
+      "Speaker_A"
+    ]
+  },
+  "generation_info": {
+    "processed_with_chunking": true,
+    "generation_time": "2025-08-01T11:06:13.964776",
+    "model": "gpt-4o"
+  }
+}

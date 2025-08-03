@@ -1,0 +1,21 @@
+{
+  "start_time": "2025-07-31T10:49:12.566580",
+  "processed": 329,
+  "success": 293,
+  "failed": 36,
+  "end_time": "2025-07-31T17:30:14.051005",
+  "final_train_count": 237,
+  "final_val_count": 56,
+  "train_quality_average": 6.0,
+  "val_quality_average": 6.0,
+  "train_length_stats": {
+    "min": 959,
+    "max": 51305,
+    "avg": 13913.189873417721
+  },
+  "val_length_stats": {
+    "min": 1675,
+    "max": 49549,
+    "avg": 14087.285714285714
+  }
+}
