@@ -64,6 +64,394 @@ whisper_model = None
 qwen_model = None
 qwen_tokenizer = None
 
+# Task Master 스타일 복잡도 기반 프로세스 함수들
+async def generate_tasks_from_prd(prd_data: dict, num_tasks: int = 5) -> List[TaskItem]:
+    """PRD에서 Task Master 스타일로 태스크 생성"""
+    try:
+        logger.info(f"🎯 Generating {num_tasks} tasks from PRD using Task Master approach...")
+        
+        # Task Master PRD → Task 생성 프롬프트
+        from prd_generation_prompts import (
+            generate_prd_to_tasks_system_prompt,
+            generate_prd_to_tasks_user_prompt
+        )
+        
+        system_prompt = generate_prd_to_tasks_system_prompt(num_tasks)
+        user_prompt = generate_prd_to_tasks_user_prompt(prd_data, num_tasks)
+        
+        # Qwen 모델로 태스크 생성
+        messages = [{"role": "user", "content": user_prompt}]
+        
+        if qwen_model and qwen_tokenizer:
+            text = qwen_tokenizer.apply_chat_template(
+                messages, tokenize=False, add_generation_prompt=True
+            )
+            
+            inputs = qwen_tokenizer([text], return_tensors="pt").to(qwen_model.device)
+            
+            with torch.no_grad():
+                outputs = qwen_model.generate(
+                    **inputs,
+                    max_new_tokens=2048,
+                    temperature=0.3,
+                    do_sample=True,
+                    pad_token_id=qwen_tokenizer.eos_token_id
+                )
+            
+            response = qwen_tokenizer.decode(
+                outputs[0][len(inputs["input_ids"][0]):], 
+                skip_special_tokens=True
+            )
+            
+            # JSON 파싱
+            if "```json" in response:
+                json_start = response.find("```json") + 7
+                json_end = response.find("```", json_start)
+                if json_end == -1:
+                    json_content = response[json_start:].strip()
+                else:
+                    json_content = response[json_start:json_end].strip()
+            else:
+                json_content = response.strip()
+            
+            task_data = json.loads(json_content)
+            
+            # TaskItem 객체로 변환
+            task_items = []
+            for task_info in task_data.get("tasks", []):
+                task_item = TaskItem(
+                    id=task_info.get("id", len(task_items) + 1),
+                    title=task_info.get("title", f"Task {len(task_items) + 1}"),
+                    description=task_info.get("description", ""),
+                    details=task_info.get("details", ""),
+                    priority=task_info.get("priority", "medium"),
+                    status=task_info.get("status", "pending"),
+                    dependencies=task_info.get("dependencies", []),
+                    test_strategy=task_info.get("testStrategy", ""),
+                    subtasks=[]  # 서브태스크는 나중에 복잡도 분석 후 생성
+                )
+                task_items.append(task_item)
+            
+            logger.info(f"✅ Generated {len(task_items)} tasks from PRD")
+            return task_items
+        else:
+            logger.error("❌ Qwen model not available for task generation")
+            return []
+            
+    except Exception as e:
+        logger.error(f"❌ Error generating tasks from PRD: {e}")
+        return []
+
+async def analyze_task_complexity(task_items: List[TaskItem]) -> dict:
+    """Task Master 스타일 복잡도 분석"""
+    try:
+        logger.info("🔍 Analyzing task complexity using Task Master approach...")
+        
+        from prd_generation_prompts import (
+            generate_complexity_analysis_system_prompt,
+            generate_complexity_analysis_prompt
+        )
+        
+        # 태스크 데이터 준비
+        tasks_data = {
+            "tasks": [
+                {
+                    "id": task.id,
+                    "title": task.title,
+                    "description": task.description,
+                    "details": task.details,
+                    "priority": task.priority
+                }
+                for task in task_items
+            ]
+        }
+        
+        system_prompt = generate_complexity_analysis_system_prompt()
+        user_prompt = generate_complexity_analysis_prompt(tasks_data)
+        
+        # Qwen 모델로 복잡도 분석
+        messages = [{"role": "user", "content": user_prompt}]
+        
+        if qwen_model and qwen_tokenizer:
+            text = qwen_tokenizer.apply_chat_template(
+                messages, tokenize=False, add_generation_prompt=True
+            )
+            
+            inputs = qwen_tokenizer([text], return_tensors="pt").to(qwen_model.device)
+            
+            with torch.no_grad():
+                outputs = qwen_model.generate(
+                    **inputs,
+                    max_new_tokens=2048,
+                    temperature=0.3,
+                    do_sample=True,
+                    pad_token_id=qwen_tokenizer.eos_token_id
+                )
+            
+            response = qwen_tokenizer.decode(
+                outputs[0][len(inputs["input_ids"][0]):], 
+                skip_special_tokens=True
+            )
+            
+            # JSON 파싱
+            if "```json" in response:
+                json_start = response.find("```json") + 7
+                json_end = response.find("```", json_start)
+                if json_end == -1:
+                    json_content = response[json_start:].strip()
+                else:
+                    json_content = response[json_start:json_end].strip()
+            else:
+                # 배열 찾기
+                first_bracket = response.find('[')
+                last_bracket = response.rfind(']')
+                if first_bracket != -1 and last_bracket > first_bracket:
+                    json_content = response[first_bracket:last_bracket + 1]
+                else:
+                    json_content = response.strip()
+            
+            complexity_analysis = json.loads(json_content)
+            
+            # 분석 결과를 딕셔너리로 변환 (taskId를 키로)
+            complexity_map = {}
+            for analysis in complexity_analysis:
+                task_id = analysis.get("taskId")
+                if task_id:
+                    complexity_map[task_id] = analysis
+            
+            logger.info(f"✅ Complexity analysis completed for {len(complexity_map)} tasks")
+            return complexity_map
+        else:
+            logger.error("❌ Qwen model not available for complexity analysis")
+            return {}
+            
+    except Exception as e:
+        logger.error(f"❌ Error analyzing task complexity: {e}")
+        return {}
+
+# Task Master 스타일 복잡도 기반 서브태스크 생성
+async def generate_subtasks_for_all_tasks(task_items: List[TaskItem], complexity_analysis: dict = None) -> List[TaskItem]:
+    """Task Master 스타일: 복잡도 분석 기반 서브태스크 생성"""
+    try:
+        logger.info("🔧 Generating subtasks using Task Master complexity-based approach...")
+        
+        from prd_generation_prompts import (
+            generate_complexity_based_subtask_prompt,
+            generate_complexity_based_subtask_system_prompt
+        )
+        
+        for task in task_items:
+            try:
+                # 복잡도 분석 정보 가져오기
+                task_analysis = complexity_analysis.get(task.id, {}) if complexity_analysis else {}
+                
+                # 기본값 설정
+                complexity_score = task_analysis.get('complexityScore', 5)
+                recommended_subtasks = task_analysis.get('recommendedSubtasks', 3)
+                
+                # 서브태스크 ID 시작점
+                next_subtask_id = 1
+                
+                # Task Master 스타일 프롬프트 생성
+                system_prompt = generate_complexity_based_subtask_system_prompt(
+                    recommended_subtasks, next_subtask_id
+                )
+                user_prompt = generate_complexity_based_subtask_prompt(
+                    {
+                        'id': task.id,
+                        'title': task.title,
+                        'description': task.description,
+                        'details': task.details
+                    },
+                    task_analysis,
+                    next_subtask_id
+                )
+                
+                # Qwen 모델로 서브태스크 생성
+                messages = [{"role": "user", "content": user_prompt}]
+                
+                if qwen_model and qwen_tokenizer:
+                    text = qwen_tokenizer.apply_chat_template(
+                        messages, tokenize=False, add_generation_prompt=True
+                    )
+                    
+                    inputs = qwen_tokenizer([text], return_tensors="pt").to(qwen_model.device)
+                    
+                    with torch.no_grad():
+                        outputs = qwen_model.generate(
+                            **inputs,
+                            max_new_tokens=1024,
+                            temperature=0.3,
+                            do_sample=True,
+                            pad_token_id=qwen_tokenizer.eos_token_id
+                        )
+                    
+                    response = qwen_tokenizer.decode(
+                        outputs[0][len(inputs["input_ids"][0]):], 
+                        skip_special_tokens=True
+                    )
+                    
+                    # JSON 파싱
+                    if "```json" in response:
+                        json_start = response.find("```json") + 7
+                        json_end = response.find("```", json_start)
+                        if json_end == -1:
+                            json_content = response[json_start:].strip()
+                        else:
+                            json_content = response[json_start:json_end].strip()
+                    else:
+                        json_content = response.strip()
+                    
+                    subtask_data = json.loads(json_content)
+                    
+                    # SubTask 객체로 변환 (Task Master 필드 포함)
+                    subtasks = []
+                    for i, subtask_info in enumerate(subtask_data.get("subtasks", [])):
+                        subtask = SubTask(
+                            id=subtask_info.get("id", i + 1),
+                            title=subtask_info.get("title", f"서브태스크 {i+1}"),
+                            description=subtask_info.get("description", ""),
+                            priority=subtask_info.get("priority", "medium"),
+                            estimated_hours=subtask_info.get("estimated_hours", 4),
+                            status=subtask_info.get("status", "pending")
+                        )
+                        subtasks.append(subtask)
+                    
+                    task.subtasks = subtasks
+                    logger.info(f"✅ '{task.title}' 복잡도 기반 서브태스크 {len(subtasks)}개 생성 (복잡도: {complexity_score}/10)")
+                    
+                else:
+                    logger.warning("⚠️ Qwen 모델 없음, 복잡도 기반 기본 서브태스크 생성")
+                    task.subtasks = create_complexity_based_default_subtasks(task, task_analysis)
+                    
+            except Exception as e:
+                logger.warning(f"⚠️ '{task.title}' 서브태스크 생성 실패: {e}")
+                # 복잡도 기반 기본 서브태스크 생성
+                task_analysis = complexity_analysis.get(task.id, {}) if complexity_analysis else {}
+                task.subtasks = create_complexity_based_default_subtasks(task, task_analysis)
+        
+        total_subtasks = sum(len(task.subtasks) for task in task_items)
+        logger.info(f"✅ Task Master 스타일 서브태스크 생성 완료: 총 {total_subtasks}개")
+        return task_items
+        
+    except Exception as e:
+        logger.error(f"❌ Task Master 서브태스크 생성 중 오류: {e}")
+        return task_items
+
+def create_complexity_based_default_subtasks(task: TaskItem, task_analysis: dict) -> List[SubTask]:
+    """Task Master 스타일: 복잡도 기반 기본 서브태스크 생성"""
+    default_subtasks = []
+    
+    # 복잡도 분석 정보
+    complexity_score = task_analysis.get('complexityScore', 5)
+    recommended_subtasks = task_analysis.get('recommendedSubtasks', 3)
+    
+    # 복잡도에 따른 Task Master 스타일 템플릿
+    if complexity_score >= 8:  # 고복잡도 (8-10)
+        templates = [
+            {
+                "title": "Architecture Design & Planning",
+                "desc": f"Design system architecture and create detailed technical specifications for {task.title}",
+                "details": "Create technical design documents, API specifications, database schemas, and implementation roadmap",
+                "hours": 12,
+                "priority": "high"
+            },
+            {
+                "title": "Core Implementation",
+                "desc": f"Implement the main functionality and core features of {task.title}",
+                "details": "Develop core business logic, implement primary user flows, and establish data processing pipeline",
+                "hours": 20,
+                "priority": "high"
+            },
+            {
+                "title": "Integration & Testing",
+                "desc": f"Integrate components and conduct comprehensive testing for {task.title}",
+                "details": "Perform unit testing, integration testing, and end-to-end testing with comprehensive test coverage",
+                "hours": 10,
+                "priority": "medium"
+            },
+            {
+                "title": "Performance Optimization",
+                "desc": f"Optimize performance and conduct security review for {task.title}",
+                "details": "Profile application performance, implement caching strategies, and conduct security audit",
+                "hours": 8,
+                "priority": "medium"
+            }
+        ]
+    elif complexity_score >= 5:  # 중복잡도 (5-7)
+        templates = [
+            {
+                "title": "Requirements Analysis & Design",
+                "desc": f"Analyze requirements and create implementation plan for {task.title}",
+                "details": "Define functional requirements, create wireframes, and establish development approach",
+                "hours": 6,
+                "priority": "high"
+            },
+            {
+                "title": "Implementation & Development",
+                "desc": f"Develop and implement the main features of {task.title}",
+                "details": "Code implementation following best practices, implement business logic, and create user interfaces",
+                "hours": 12,
+                "priority": "high"
+            },
+            {
+                "title": "Testing & Documentation",
+                "desc": f"Test functionality and create documentation for {task.title}",
+                "details": "Write unit tests, conduct manual testing, and create user and technical documentation",
+                "hours": 6,
+                "priority": "medium"
+            }
+        ]
+    else:  # 저복잡도 (1-4)
+        templates = [
+            {
+                "title": "Setup & Preparation",
+                "desc": f"Set up environment and prepare resources for {task.title}",
+                "details": "Configure development environment, gather required resources, and create initial project structure",
+                "hours": 3,
+                "priority": "medium"
+            },
+            {
+                "title": "Implementation",
+                "desc": f"Implement the required functionality for {task.title}",
+                "details": "Code implementation with focus on clean, maintainable code following established patterns",
+                "hours": 6,
+                "priority": "high"
+            },
+            {
+                "title": "Validation & Cleanup",
+                "desc": f"Validate implementation and finalize {task.title}",
+                "details": "Test implementation, review code quality, and ensure all requirements are met",
+                "hours": 3,
+                "priority": "medium"
+            }
+        ]
+    
+    # 추천된 서브태스크 수만큼 생성
+    for i in range(min(recommended_subtasks, len(templates))):
+        template = templates[i]
+        subtask = SubTask(
+            id=i + 1,
+            title=template["title"],
+            description=template["desc"],
+            priority=template["priority"],
+            estimated_hours=template["hours"],
+            status="pending"
+        )
+        default_subtasks.append(subtask)
+    
+    return default_subtasks
+
+# 기존 함수도 유지 (호환성을 위해)
+def create_default_subtasks(task: TaskItem, num_subtasks: int = 3) -> List[SubTask]:
+    """기본 서브태스크 생성 (하위 호환성)"""
+    # Task Master 방식으로 리다이렉트
+    task_analysis = {
+        'complexityScore': getattr(task, 'complexity', 5),
+        'recommendedSubtasks': num_subtasks
+    }
+    return create_complexity_based_default_subtasks(task, task_analysis)
+
 # 새로운 응답 모델들
 class NotionProjectResponse(BaseModel):
     success: bool
@@ -83,6 +471,7 @@ class TwoStageAnalysisRequest(BaseModel):
     generate_tasks: bool = True
     num_tasks: int = 5
     additional_context: Optional[str] = None
+    auto_expand_tasks: bool = True  # 🚀 자동 서브태스크 생성 기본값을 True로 설정
 
 class TwoStageAnalysisResponse(BaseModel):
     success: bool
@@ -878,72 +1267,61 @@ async def two_stage_analysis(request: TwoStageAnalysisRequest):
             
             stage2_result = stage2_response.prd_data
         
-        # 3단계: 태스크 생성 (Task Master 방식)
+        # 3단계: Task Master 워크플로우 (PRD → Task → 복잡도 분석 → 서브태스크)
         stage3_result = None
         if request.generate_tasks and stage2_result:
-            logger.info("🎯 Stage 3: Generating tasks using Task Master approach...")
+            logger.info("🎯 Stage 3: Task Master workflow - PRD to Tasks...")
             
-            # Task Master PRD를 사용한 태스크 생성
-            prd_content = format_task_master_prd(stage2_result)
-            system_prompt = generate_meeting_analysis_system_prompt(request.num_tasks)
-            user_prompt = f"""
-            다음 PRD 문서를 분석하여 {request.num_tasks}개의 구체적인 개발 태스크를 생성하세요:
-            
-            {prd_content}
-            
-            Task Master의 프롬프트 엔지니어링을 적용하여 체계적이고 실행 가능한 태스크를 생성하세요.
-            """
-            
-            result = generate_structured_response(
-                system_prompt=system_prompt,
-                user_prompt=user_prompt,
-                response_schema=TASK_SCHEMA_EXAMPLE,
-                temperature=0.3
-            )
-            
-            # 결과 후처리
-            validated_result = validate_meeting_analysis(result)
-            
-            # TaskItem 객체로 변환
-            task_items = []
-            for i, item in enumerate(validated_result.get("action_items", [])):
-                task_item = TaskItem(
-                    id=i + 1,
-                    title=item.get("task", f"Task {i+1}"),
-                    description=item.get("task", ""),
-                    priority=item.get("priority", "medium"),
-                    assignee=item.get("assignee", "미지정"),
-                    deadline=item.get("deadline", "미정"),
-                    complexity=calculate_task_complexity_advanced(
-                        TaskItem(
-                            id=i + 1,
-                            title=item.get("task", ""),
-                            description=item.get("task", ""),
-                            priority=item.get("priority", "medium")
-                        )
-                    ),
-                    status="pending"
-                )
-                task_items.append(task_item)
-            
-            # 의존성 검증
-            task_items = validate_task_dependencies(task_items)
-            
-            # 최종 결과 구성
-            stage3_result = MeetingAnalysisResult(
-                summary=validated_result.get("summary", ""),
-                action_items=task_items,
-                decisions=validated_result.get("decisions", []),
-                next_steps=validated_result.get("next_steps", []),
-                key_points=validated_result.get("key_points", []),
-                participants=validated_result.get("participants", []),
-                follow_up=validated_result.get("follow_up", {}),
-                metadata={
-                    "processing_time": time.time() - start_time,
-                    "total_tasks": len(task_items),
-                    "process_type": "2-stage-task-master"
+            try:
+                # Step 3-1: PRD에서 태스크 생성 (Task Master 방식)
+                logger.info("   Step 3-1: Generating tasks from PRD...")
+                task_items = await generate_tasks_from_prd(stage2_result, request.num_tasks)
+                
+                if not task_items:
+                    logger.error("❌ No tasks generated from PRD")
+                    stage3_result = {
+                        "success": False,
+                        "error": "Failed to generate tasks from PRD",
+                        "tasks": [],
+                        "complexity_analysis": {},
+                        "total_tasks": 0
+                    }
+                else:
+                    logger.info(f"   ✅ Generated {len(task_items)} tasks")
+                    
+                    # Step 3-2: 복잡도 분석 (Task Master 방식)
+                    logger.info("   Step 3-2: Analyzing task complexity...")
+                    complexity_analysis = await analyze_task_complexity(task_items)
+                    
+                    # Step 3-3: 복잡도 기반 서브태스크 생성
+                    logger.info("   Step 3-3: Generating complexity-based subtasks...")
+                    task_items_with_subtasks = await generate_subtasks_for_all_tasks(
+                        task_items, 
+                        complexity_analysis=complexity_analysis
+                    )
+                    
+                    # Stage 3 결과 구성
+                    stage3_result = {
+                        "success": True,
+                        "tasks": [task.dict() for task in task_items_with_subtasks],
+                        "complexity_analysis": complexity_analysis,
+                        "total_tasks": len(task_items_with_subtasks),
+                        "total_subtasks": sum(len(task.subtasks) for task in task_items_with_subtasks),
+                        "workflow_type": "task_master_3_step"
+                    }
+                    
+                    logger.info(f"   ✅ Task Master workflow completed: {len(task_items_with_subtasks)} tasks, "
+                              f"{stage3_result['total_subtasks']} subtasks")
+                    
+            except Exception as e:
+                logger.error(f"❌ Task Master workflow failed: {str(e)}")
+                stage3_result = {
+                    "success": False,
+                    "error": f"Task Master workflow error: {str(e)}",
+                    "tasks": [],
+                    "complexity_analysis": {},
+                    "total_tasks": 0
                 }
-            )
         
         total_time = time.time() - start_time
         

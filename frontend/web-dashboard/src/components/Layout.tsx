@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import Sidebar from './Sidebar';
@@ -9,8 +9,23 @@ const Layout = () => {
   // Home 페이지에서만 RightSidebar 표시 (현재는 비활성화)
   const showRightSidebar = false;
 
+  // 다크모드 초기화
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('theme') || 'light';
+    const root = document.documentElement;
+    
+    if (savedTheme === 'dark') {
+      root.classList.add('dark');
+    } else if (savedTheme === 'auto') {
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (prefersDark) {
+        root.classList.add('dark');
+      }
+    }
+  }, []);
+
   return (
-    <div className="flex h-screen bg-neutral-50 overflow-hidden">
+    <div className="flex h-screen bg-neutral-50 dark:bg-gray-900 overflow-hidden transition-colors">
       {/* 사이드바 */}
       <motion.div
         initial={{ x: -288 }}

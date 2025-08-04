@@ -2,7 +2,7 @@
  * JIRA 연동 서비스
  * Task Master에서 생성된 업무를 JIRA 이슈로 자동 생성
  */
-
+import axiosInstance from '../lib/axios';
 import { PrismaClient } from '@prisma/client';
 // import fetch from 'node-fetch'; // Node.js 18+ has built-in fetch
 
@@ -125,7 +125,72 @@ class JiraService {
       return null;
     }
   }
+  public async exchangeCodeForToken(code: string) {
+    const response = await fetch('https://auth.atlassian.com/oauth/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        grant_type: 'authorization_code',
+        client_id: process.env.JIRA_CLIENT_ID,
+        client_secret: process.env.JIRA_CLIENT_SECRET,
+        code,
+        redirect_uri: `${process.env.APP_URL}/auth/jira/callback`,
+      }),
+    });
 
+    if (!response.ok) {
+      throw new Error(`JIRA OAuth 토큰 요청 실패: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data; // { access_token, refresh_token, ... }
+  }
+
+
+  /**
+   * JIRA OAuth 토큰 DB 저장
+   */
+  public async saveJiraTokens(
+    tenantId: string,
+    userId: string,
+    tokens: any
+  ) {
+    const encryptedAccess = this.encrypt(tokens.access_token);
+    const encryptedRefresh = this.encrypt(tokens.refresh_token);
+
+    const existing = await this.prisma.integration.findFirst({
+      where: {
+        userId,
+        serviceType: 'JIRA',
+        tenantId,
+        isActive: true
+      }
+    });
+
+    if (existing) {
+      await this.prisma.integration.update({
+        where: { id: existing.id },
+        data: {
+          accessToken: encryptedAccess,
+          refreshToken: encryptedRefresh,
+          isActive: true
+        }
+      });
+    } else {
+      await this.prisma.integration.create({
+        data: {
+          userId,
+          tenantId,
+          serviceType: 'JIRA',
+          accessToken: encryptedAccess,
+          refreshToken: encryptedRefresh,
+          isActive: true
+        }
+      });
+    }
+  }
   /**
    * 테넌트의 JIRA 설정 조회
    */

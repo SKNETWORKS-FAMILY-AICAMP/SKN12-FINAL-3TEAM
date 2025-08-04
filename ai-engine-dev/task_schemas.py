@@ -140,7 +140,7 @@ class PipelineRequest(BaseModel):
     meeting_title: Optional[str] = Field(None, description="회의 제목")
     num_tasks: int = Field(default=5, ge=1, le=20, description="생성할 태스크 수")
     additional_context: Optional[str] = Field(None, description="추가 컨텍스트")
-    auto_expand_tasks: bool = Field(default=False, description="태스크 자동 확장 여부")
+    auto_expand_tasks: bool = Field(default=True, description="태스크 자동 확장 여부")
 
 class PipelineResult(BaseModel):
     """전체 파이프라인 결과"""

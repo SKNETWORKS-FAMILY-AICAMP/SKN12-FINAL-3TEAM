@@ -1,24 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  DndContext,
-  DragEndEvent,
-  DragOverlay,
-  DragStartEvent,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  closestCorners,
-} from '@dnd-kit/core';
-import {
-  SortableContext,
-  verticalListSortingStrategy,
-} from '@dnd-kit/sortable';
-import {
-  useSortable,
-} from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
+// @dnd-kit 임시 제거하고 네이티브 HTML5 드래그 앤 드롭 사용
 import { 
   Clock, 
   User, 
@@ -40,32 +23,114 @@ interface KanbanColumn {
   tasks: Task[];
 }
 
-const TaskCard: React.FC<{ task: Task; isDragging?: boolean }> = ({ task, isDragging }) => {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging: isSortableDragging,
-  } = useSortable({ id: task.id });
+interface DragState {
+  activeTaskId: string | null;
+  overColumnId: string | null;
+  insertPosition: number; // 삽입될 위치 인덱스
+  isValidDrop: boolean;
+}
 
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
+
+// 드래그 중 공간을 만들어주는 Placeholder 컴포넌트 (완전히 새로운 버전)
+const DragPlaceholder: React.FC<{ 
+  isVisible: boolean;
+  taskHeight?: number;
+}> = ({ isVisible, taskHeight = 100 }) => {
+  console.log('🎯 DragPlaceholder 렌더링:', { isVisible, taskHeight });
+  
+  return (
+    <motion.div
+      layout
+      initial={{ height: 0, opacity: 0, marginBottom: 0 }}
+      animate={{ 
+        height: isVisible ? taskHeight : 0,
+        opacity: isVisible ? 0.8 : 0,
+        marginBottom: isVisible ? 12 : 0,
+      }}
+      exit={{ height: 0, opacity: 0, marginBottom: 0 }}
+      transition={{
+        type: "spring",
+        stiffness: 300,
+        damping: 25,
+        duration: 0.3,
+      }}
+      className="w-full bg-gradient-to-br from-blue-50 via-blue-100 to-blue-50 border-2 border-dashed border-blue-400 rounded-2xl flex items-center justify-center overflow-hidden"
+      style={{
+        boxShadow: isVisible ? '0 8px 25px rgba(59, 130, 246, 0.25)' : 'none',
+        backdropFilter: isVisible ? 'blur(1px)' : 'none',
+      }}
+    >
+      {isVisible && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.8, y: 10 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="flex items-center space-x-2 text-blue-600 font-medium text-sm"
+        >
+          <motion.div
+            animate={{ 
+              scale: [1, 1.2, 1],
+              opacity: [0.7, 1, 0.7]
+            }}
+            transition={{ 
+              duration: 1.5, 
+              repeat: Infinity,
+              ease: "easeInOut"
+            }}
+            className="w-2 h-2 bg-blue-500 rounded-full"
+          />
+          <span>여기에 놓으세요</span>
+        </motion.div>
+      )}
+    </motion.div>
+  );
+};
+
+const TaskCard: React.FC<{ 
+  task: Task; 
+  isDragging?: boolean;
+  dragState?: DragState;
+  index: number;
+  columnId: string;
+  onDragStart?: (task: Task, index: number) => void;
+  onDragEnd?: (task: Task) => void;
+  onDragOver?: (task: Task, index: number) => void;
+}> = ({ task, isDragging, dragState, index, columnId, onDragStart, onDragEnd, onDragOver }) => {
+  
+  // 이 태스크가 다른 태스크를 위해 자리를 만들어줘야 하는지 계산
+  const shouldMakeSpace = dragState && 
+    dragState.activeTaskId && 
+    dragState.activeTaskId !== task.id && 
+    dragState.overColumnId === columnId &&
+    index >= dragState.insertPosition;
+    
+  console.log('🎯 TaskCard 렌더링:', {
+    taskTitle: task.title,
+    index,
+    shouldMakeSpace,
+    insertPosition: dragState?.insertPosition,
+    activeTaskId: dragState?.activeTaskId,
+    overColumnId: dragState?.overColumnId,
+    currentColumnId: columnId,
+    isDragActive: !!dragState?.activeTaskId
+  });
+
+  const handleDragStart = (e: React.DragEvent) => {
+    console.log('🎯 드래그 시작:', task.title);
+    e.dataTransfer.setData('text/plain', JSON.stringify({ taskId: task.id, index, columnId }));
+    e.dataTransfer.effectAllowed = 'move';
+    onDragStart?.(task, index);
   };
 
-  const getPriorityColor = (priority: Task['priority']) => {
-    switch (priority) {
-      case 'HIGH':
-        return 'bg-accent-red/10 text-accent-red border-accent-red/20';
-      case 'MEDIUM':
-        return 'bg-accent-amber/10 text-accent-amber border-accent-amber/20';
-      case 'LOW':
-        return 'bg-accent-green/10 text-accent-green border-accent-green/20';
-      default:
-        return 'bg-neutral-100 text-neutral-600 border-neutral-200';
-    }
+  const handleDragEnd = (e: React.DragEvent) => {
+    console.log('🎯 드래그 종료:', task.title);
+    onDragEnd?.(task);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    onDragOver?.(task, index);
   };
 
   const formatDate = (dateString?: string) => {
@@ -78,17 +143,34 @@ const TaskCard: React.FC<{ task: Task; isDragging?: boolean }> = ({ task, isDrag
 
   return (
     <motion.div
+      layout
       ref={setNodeRef}
       style={style}
       {...attributes}
       {...listeners}
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -10 }}
-      whileHover={{ y: -2 }}
-      className={`bg-white rounded-2xl p-4 shadow-soft border border-neutral-200 cursor-grab active:cursor-grabbing transition-all duration-200 hover:shadow-medium ${
-        isDragging || isSortableDragging ? 'opacity-50 rotate-3 scale-105' : ''
-      }`}
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ 
+        opacity: 1,
+        y: shouldMakeSpace ? 35 : 0, // 다른 태스크를 위해 더 많이 아래로 이동
+        scale: shouldMakeSpace ? 0.95 : 1, // 더 뚜렷한 스케일 변화
+        rotateX: shouldMakeSpace ? 5 : 0, // 약간의 3D 효과
+      }}
+      exit={{ opacity: 0, y: -20 }}
+      whileHover={{ 
+        y: shouldMakeSpace ? 35 : -4, 
+        scale: shouldMakeSpace ? 0.95 : 1.03,
+        transition: { duration: 0.2 }
+      }}
+      whileTap={{ scale: 0.95 }}
+      transition={{
+        type: "spring",
+        stiffness: 500,
+        damping: 30,
+        duration: 0.25,
+      }}
+      className={`bg-white rounded-2xl p-4 shadow-soft border border-neutral-200 cursor-grab active:cursor-grabbing transition-all duration-300 hover:shadow-medium ${
+        isDragging || isSortableDragging ? 'opacity-90 rotate-1 scale-105 shadow-xl z-50 ring-2 ring-blue-400' : ''
+      } ${shouldMakeSpace ? 'shadow-sm transform-gpu bg-gray-50 border-gray-300' : ''}`}
     >
       {/* 태스크 헤더 */}
       <div className="flex items-start justify-between mb-3">
@@ -121,23 +203,15 @@ const TaskCard: React.FC<{ task: Task; isDragging?: boolean }> = ({ task, isDrag
           </div>
         )}
 
-        {/* 마감일과 우선순위 */}
-        <div className="flex items-center justify-between">
-          {/* 마감일 */}
-          {task.dueDate && (
-            <div className="flex items-center space-x-1">
-              <Calendar className="w-3 h-3 text-neutral-400" />
-              <span className="text-xs text-neutral-500">
-                {formatDate(task.dueDate)}
-              </span>
-            </div>
-          )}
-
-          {/* 우선순위 배지 */}
-          <span className={`px-2 py-1 rounded-lg text-xs font-medium border ${getPriorityColor(task.priority)}`}>
-            {task.priority === 'HIGH' ? '높음' : task.priority === 'MEDIUM' ? '중간' : '낮음'}
-          </span>
-        </div>
+        {/* 마감일 */}
+        {task.dueDate && (
+          <div className="flex items-center space-x-1">
+            <Calendar className="w-3 h-3 text-neutral-400" />
+            <span className="text-xs text-neutral-500">
+              {formatDate(task.dueDate)}
+            </span>
+          </div>
+        )}
 
         {/* 예상 시간 */}
         {task.metadata?.estimatedHours && (
@@ -153,9 +227,16 @@ const TaskCard: React.FC<{ task: Task; isDragging?: boolean }> = ({ task, isDrag
   );
 };
 
-const KanbanColumn: React.FC<{ column: KanbanColumn; onAddTask: (columnId: string) => void }> = ({ 
+const KanbanColumn: React.FC<{ 
+  column: KanbanColumn; 
+  onAddTask: (columnId: string) => void;
+  isOver?: boolean;
+  dragState?: DragState;
+}> = ({ 
   column, 
-  onAddTask 
+  onAddTask,
+  isOver = false,
+  dragState
 }) => {
   const {
     setNodeRef,
@@ -177,7 +258,9 @@ const KanbanColumn: React.FC<{ column: KanbanColumn; onAddTask: (columnId: strin
   return (
     <div className="flex flex-col h-full">
       {/* 컬럼 헤더 */}
-      <div className={`${column.bgColor} rounded-2xl p-4 mb-4 border border-opacity-20`} style={{ borderColor: column.color }}>
+      <div className={`${column.bgColor} rounded-2xl p-4 mb-4 border border-opacity-20 transition-all duration-200 ${
+        isOver ? 'ring-2 ring-offset-2 ring-blue-400 scale-105' : ''
+      }`} style={{ borderColor: column.color }}>
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <div className={`p-2 rounded-xl ${column.bgColor.replace('/10', '/20')}`} style={{ color: column.color }}>
@@ -200,14 +283,59 @@ const KanbanColumn: React.FC<{ column: KanbanColumn; onAddTask: (columnId: strin
       </div>
 
       {/* 태스크 리스트 */}
-      <div ref={setNodeRef} className="flex-1 space-y-3 min-h-[200px]">
+      <div 
+        ref={setNodeRef} 
+        className={`flex-1 space-y-3 min-h-[200px] transition-all duration-200 rounded-2xl p-2 ${
+          isOver ? 'bg-blue-50 border-2 border-dashed border-blue-300' : ''
+        }`}
+      >
         <SortableContext items={column.tasks.map(task => task.id)} strategy={verticalListSortingStrategy}>
-          {column.tasks.map((task) => (
-            <TaskCard key={task.id} task={task} />
-          ))}
+          <motion.div layout className="space-y-3">
+            {column.tasks.map((task, index) => {
+              // 삽입 위치에 Placeholder 보여주기
+              const shouldShowPlaceholderBefore = 
+                dragState?.overColumnId === column.id && 
+                dragState.insertPosition === index;
+                
+              console.log('🔍 태스크 렌더링:', {
+                taskTitle: task.title,
+                index,
+                insertPosition: dragState?.insertPosition,
+                overColumnId: dragState?.overColumnId,
+                shouldShowPlaceholderBefore
+              });
+              
+              return (
+                <React.Fragment key={task.id}>
+                  {/* 삽입 위치에 Placeholder 표시 */}
+                  {shouldShowPlaceholderBefore && (
+                    <DragPlaceholder isVisible={true} />
+                  )}
+                  
+                  <TaskCard 
+                    task={task}
+                    isDragging={dragState?.activeTaskId === task.id}
+                    dragState={dragState}
+                    index={index}
+                    columnId={column.id}
+                  />
+                </React.Fragment>
+              );
+            })}
+            
+            {/* 마지막에 삽입하는 경우 */}
+            {dragState?.overColumnId === column.id && 
+             dragState.insertPosition === column.tasks.length && (
+              <DragPlaceholder isVisible={true} />
+            )}
+          </motion.div>
         </SortableContext>
         
-        {column.tasks.length === 0 && (
+        {column.tasks.length === 0 && dragState?.overColumnId === column.id && (
+          <DragPlaceholder isVisible={true} taskHeight={140} />
+        )}
+        
+        {column.tasks.length === 0 && dragState?.overColumnId !== column.id && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -225,20 +353,78 @@ const KanbanColumn: React.FC<{ column: KanbanColumn; onAddTask: (columnId: strin
 
 const KanbanBoard: React.FC = () => {
   const [activeTask, setActiveTask] = useState<Task | null>(null);
+  const [dragState, setDragState] = useState<DragState>({
+    activeTaskId: null,
+    overColumnId: null,
+    insertPosition: 0,
+    isValidDrop: false,
+  });
   const queryClient = useQueryClient();
 
-  // 태스크 데이터 가져오기
-  const { data: tasks = [], isLoading } = useQuery({
+  // 임시 mock 데이터 (백엔드 없을 때)
+  const mockTasks: Task[] = [
+    {
+      id: 'task-1',
+      title: '사용자 인증 시스템 구현',
+      description: 'JWT 기반 로그인/로그아웃 기능 구현',
+      status: 'TODO',
+      priority: 'high',
+      createdAt: new Date().toISOString(),
+      assignee: { id: 'user-1', name: '김개발', email: 'dev@example.com' },
+      dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      metadata: { estimatedHours: 8 }
+    },
+    {
+      id: 'task-2', 
+      title: '데이터베이스 스키마 설계',
+      description: '사용자, 태스크, 프로젝트 테이블 설계',
+      status: 'TODO',
+      priority: 'medium',
+      createdAt: new Date().toISOString(),
+      assignee: { id: 'user-2', name: '박디비', email: 'db@example.com' },
+      metadata: { estimatedHours: 4 }
+    },
+    {
+      id: 'task-3',
+      title: 'API 엔드포인트 개발',
+      description: 'RESTful API 구현 및 문서화',
+      status: 'IN_PROGRESS',
+      priority: 'high', 
+      createdAt: new Date().toISOString(),
+      assignee: { id: 'user-1', name: '김개발', email: 'dev@example.com' },
+      metadata: { estimatedHours: 12 }
+    },
+    {
+      id: 'task-4',
+      title: '프론트엔드 컴포넌트 개발',
+      description: 'React 컴포넌트 및 스타일링',
+      status: 'DONE',
+      priority: 'medium',
+      createdAt: new Date().toISOString(),
+      assignee: { id: 'user-3', name: '이프론트', email: 'front@example.com' },
+      metadata: { estimatedHours: 16 }
+    }
+  ];
+
+  // 태스크 데이터 가져오기 (백엔드 연결 시에는 주석 해제)
+  const { data: fetchedTasks = [], isLoading } = useQuery({
     queryKey: ['tasks'],
     queryFn: () => taskAPI.getTasks(),
+    enabled: false, // 백엔드가 없으므로 비활성화
   });
 
-  // 태스크 상태 업데이트 mutation
+  // 백엔드가 없으면 mock 데이터 사용
+  const tasks = fetchedTasks.length > 0 ? fetchedTasks : mockTasks;
+
+  // 태스크 상태 업데이트 mutation (임시로 비활성화)
   const updateTaskMutation = useMutation({
-    mutationFn: ({ taskId, status }: { taskId: string; status: Task['status'] }) =>
-      taskAPI.updateTaskStatus(taskId, status),
+    mutationFn: ({ taskId, status }: { taskId: string; status: Task['status'] }) => {
+      console.log(`태스크 ${taskId} 상태를 ${status}로 변경`);
+      return Promise.resolve(); // 임시로 성공 반환
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      console.log('태스크 상태 업데이트 성공 (mock)');
+      // queryClient.invalidateQueries({ queryKey: ['tasks'] }); // 백엔드 연결 시 활성화
     },
   });
 
@@ -271,9 +457,15 @@ const KanbanBoard: React.FC = () => {
   ];
 
   const sensors = useSensors(
-    useSensor(PointerSensor, {
+    useSensor(MouseSensor, {
       activationConstraint: {
-        distance: 8,
+        distance: 5, // 마우스 드래그용
+      },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: {
+        delay: 250, // 터치 드래그용
+        tolerance: 10,
       },
     })
   );
@@ -282,29 +474,131 @@ const KanbanBoard: React.FC = () => {
     const { active } = event;
     const task = tasks.find(t => t.id === active.id);
     setActiveTask(task || null);
+    setDragState(prev => ({
+      ...prev,
+      activeTaskId: active.id as string,
+    }));
+    console.log('🎯 드래그 시작:', task?.title, 'activeTaskId:', active.id);
+  };
+
+  const handleDragOver = (event: DragOverEvent) => {
+    const { over, active } = event;
+    if (!over || !active) {
+      setDragState(prev => ({
+        ...prev,
+        overColumnId: null,
+        insertPosition: 0,
+        isValidDrop: false,
+      }));
+      return;
+    }
+
+    const overId = over.id as string;
+    const activeId = active.id as string;
+
+    // 컬럼 위에 있는지 확인 (빈 컬럼)
+    const column = columns.find(col => col.id === overId);
+    if (column) {
+      setDragState(prev => ({
+        ...prev,
+        overColumnId: column.id,
+        insertPosition: 0, // 빈 컬럼이면 첫 번째 위치에 삽입
+        isValidDrop: true,
+      }));
+      console.log('🎯 드래그 오버 (빈 컬럼):', column.title);
+      return;
+    }
+
+    // 태스크 위에 있는지 확인
+    const overTask = tasks.find(t => t.id === overId);
+    if (overTask && activeId !== overId) {
+      // 타겟 컬럼 찾기
+      const targetColumn = columns.find(col => 
+        col.tasks.some(t => t.id === overId)
+      );
+      
+      if (targetColumn) {
+        // 마우스 위치에 따라 삽입 위치 결정
+        const rect = over.rect;
+        const activeRect = active.rect.current.translated;
+        
+        if (rect && activeRect) {
+          const hoverMiddleY = rect.top + rect.height / 2;
+          const activeCenterY = activeRect.top + activeRect.height / 2;
+          const isAbove = activeCenterY < hoverMiddleY;
+          
+          // 타겟 태스크의 인덱스 찾기
+          const targetTaskIndex = targetColumn.tasks.findIndex(t => t.id === overId);
+          const insertPosition = isAbove ? targetTaskIndex : targetTaskIndex + 1;
+          
+          setDragState(prev => ({
+            ...prev,
+            overColumnId: targetColumn.id,
+            insertPosition,
+            isValidDrop: true,
+          }));
+          
+          console.log('🎯 드래그 오버 (태스크):', {
+            targetTask: overTask.title,
+            targetTaskIndex,
+            insertPosition,
+            isAbove,
+            column: targetColumn.title,
+            activeId: activeId
+          });
+        }
+      }
+    }
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     
-    if (!over) {
-      setActiveTask(null);
+    // 클린업
+    setActiveTask(null);
+    const currentDragState = { ...dragState };
+    setDragState({
+      activeTaskId: null,
+      overColumnId: null,
+      insertPosition: 0,
+      isValidDrop: false,
+    });
+    
+    if (!over || !currentDragState.isValidDrop) {
+      console.log('🚫 드래그 종료: 유효하지 않은 드롭');
       return;
     }
 
     const activeTaskId = active.id as string;
-    const overId = over.id as string;
-
-    // 컬럼으로 드롭한 경우
-    const targetColumn = columns.find(col => col.id === overId);
+    const targetColumn = columns.find(col => col.id === currentDragState.overColumnId);
+    
     if (targetColumn) {
-      updateTaskMutation.mutate({
-        taskId: activeTaskId,
-        status: targetColumn.status,
-      });
+      const activeTask = tasks.find(t => t.id === activeTaskId);
+      
+      if (activeTask) {
+        // 상태가 다르면 상태 변경
+        if (activeTask.status !== targetColumn.status) {
+          updateTaskMutation.mutate({
+            taskId: activeTaskId,
+            status: targetColumn.status,
+          });
+          
+          console.log('✅ 태스크 상태 변경:', {
+            taskTitle: activeTask.title,
+            fromStatus: activeTask.status,
+            toStatus: targetColumn.status,
+            insertPosition: currentDragState.insertPosition
+          });
+        } else {
+          console.log('📝 같은 컬럼 내 순서 변경:', {
+            taskTitle: activeTask.title,
+            insertPosition: currentDragState.insertPosition
+          });
+          // TODO: 같은 컬럼 내에서 순서 변경 로직 추가
+          // 현재는 상태 변경만 지원하지만, 추후 순서 변경 API 추가 시 구현
+        }
+      }
     }
-
-    setActiveTask(null);
   };
 
   const handleAddTask = (columnId: string) => {
@@ -312,7 +606,7 @@ const KanbanBoard: React.FC = () => {
     console.log('Add task to column:', columnId);
   };
 
-  if (isLoading) {
+  if (isLoading && fetchedTasks.length === 0 && mockTasks.length === 0) {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="loading-spinner w-8 h-8"></div>
@@ -335,8 +629,9 @@ const KanbanBoard: React.FC = () => {
       {/* 칸반 보드 */}
       <DndContext
         sensors={sensors}
-        collisionDetection={closestCorners}
+        collisionDetection={rectIntersection}
         onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
       >
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 h-full">
@@ -348,14 +643,22 @@ const KanbanBoard: React.FC = () => {
               transition={{ delay: 0.1 * columns.indexOf(column) }}
               className="flex flex-col"
             >
-              <KanbanColumn column={column} onAddTask={handleAddTask} />
+              <KanbanColumn 
+                column={column} 
+                onAddTask={handleAddTask}
+                isOver={dragState.overColumnId === column.id}
+                dragState={dragState}
+              />
             </motion.div>
           ))}
         </div>
 
         {/* 드래그 오버레이 */}
-        <DragOverlay>
-          {activeTask ? <TaskCard task={activeTask} isDragging /> : null}
+        <DragOverlay dropAnimation={{
+          duration: 200,
+          easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)',
+        }}>
+          {activeTask ? <TaskCard task={activeTask} isDragging index={-1} columnId="overlay" /> : null}
         </DragOverlay>
       </DndContext>
     </div>

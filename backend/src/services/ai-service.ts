@@ -3,9 +3,8 @@
  * Triplet 파이프라인 및 BERT 분류 지원
  * WhisperX + Triplet + BERT + Qwen 통합 처리
  */
-
+import axiosInstance from '../lib/axios';
 import FormData from 'form-data';
-import fetch from 'node-fetch';
 
 interface TranscriptionResult {
   success: boolean;
@@ -193,22 +192,16 @@ class AIService {
    * AI 서버 헬스 체크
    */
   async healthCheck(): Promise<any> {
-    try {
-      const response = await fetch(`${this.baseUrl}/health`, {
-        method: 'GET',
-        timeout: 10000
-      });
-
-      if (!response.ok) {
-        throw new Error(`Health check failed: ${response.status}`);
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error('❌ AI server health check failed:', error);
-      throw error;
-    }
+  try {
+    const response = await axiosInstance.get(`${this.baseUrl}/health`, {
+      timeout: 10000
+    });
+    return response.data;
+  } catch (error) {
+    console.error('[AIService.healthCheck] 실패:', error);
+    throw error;
   }
+}
 
   /**
    * 음성 파일 전사
@@ -223,19 +216,13 @@ class AIService {
         contentType: 'audio/wav'
       });
 
-      const response = await fetch(`${this.baseUrl}/transcribe`, {
-        method: 'POST',
-        body: formData,
+      const response = await axiosInstance.post<TranscriptionResult>(`${this.baseUrl}/transcribe`, formData, {
         timeout: this.timeout,
         headers: formData.getHeaders()
       });
 
-      if (!response.ok) {
-        throw new Error(`Transcription failed: ${response.status} ${response.statusText}`);
-      }
+      const result: TranscriptionResult = response.data;
 
-      const result: TranscriptionResult = await response.json();
-      
       if (result.success) {
         console.log(`✅ Transcription completed: ${result.transcription?.full_text?.length || 0} characters`);
       } else {
@@ -243,11 +230,13 @@ class AIService {
       }
 
       return result;
-    } catch (error) {
+
+    } catch (error: any) {
       console.error('❌ Transcription error:', error);
+
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error?.response?.data?.error || error.message || 'Unknown error'
       };
     }
   }
@@ -259,21 +248,12 @@ class AIService {
     try {
       console.log(`🧠 Analyzing meeting: ${transcript.length} characters`);
 
-      const response = await fetch(`${this.baseUrl}/analyze`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ transcript }),
+      const response = await axiosInstance.post<AnalysisResult>(`${this.baseUrl}/analyze`, { transcript }, {
         timeout: this.timeout
       });
 
-      if (!response.ok) {
-        throw new Error(`Analysis failed: ${response.status} ${response.statusText}`);
-      }
+      const result: AnalysisResult = response.data;
 
-      const result: AnalysisResult = await response.json();
-      
       if (result.success) {
         console.log(`✅ Analysis completed`);
       } else {
@@ -281,11 +261,13 @@ class AIService {
       }
 
       return result;
-    } catch (error) {
+
+    } catch (error: any) {
       console.error('❌ Analysis error:', error);
+
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error?.response?.data?.error || error.message || 'Unknown error'
       };
     }
   }
@@ -303,19 +285,13 @@ class AIService {
         contentType: 'audio/wav'
       });
 
-      const response = await fetch(`${this.baseUrl}/pipeline`, {
-        method: 'POST',
-        body: formData,
+      const response = await axiosInstance.post<PipelineResult>(`${this.baseUrl}/pipeline`, formData, {
         timeout: this.timeout,
         headers: formData.getHeaders()
       });
 
-      if (!response.ok) {
-        throw new Error(`Pipeline failed: ${response.status} ${response.statusText}`);
-      }
+      const result: PipelineResult = response.data;
 
-      const result: PipelineResult = await response.json();
-      
       if (result.success) {
         console.log(`✅ Pipeline completed successfully`);
       } else {
@@ -323,11 +299,13 @@ class AIService {
       }
 
       return result;
-    } catch (error) {
+
+    } catch (error: any) {
       console.error('❌ Pipeline error:', error);
+
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error?.response?.data?.error || error.message || 'Unknown error'
       };
     }
   }
@@ -339,21 +317,12 @@ class AIService {
     try {
       console.log(`📋 Generating Notion project: ${transcript.length} characters`);
 
-      const response = await fetch(`${this.baseUrl}/generate-notion-project`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ transcript }),
+      const response = await axiosInstance.post<NotionProjectResult>(`${this.baseUrl}/generate-notion-project`, { transcript }, {
         timeout: this.timeout
       });
 
-      if (!response.ok) {
-        throw new Error(`Notion project generation failed: ${response.status} ${response.statusText}`);
-      }
+      const result: NotionProjectResult = response.data;
 
-      const result: NotionProjectResult = await response.json();
-      
       if (result.success) {
         console.log(`✅ Notion project generated successfully`);
       } else {
@@ -361,11 +330,13 @@ class AIService {
       }
 
       return result;
-    } catch (error) {
+
+    } catch (error: any) {
       console.error('❌ Notion project generation error:', error);
+
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error?.response?.data?.error || error.message || 'Unknown error'
       };
     }
   }
@@ -377,21 +348,12 @@ class AIService {
     try {
       console.log(`📝 Generating Task Master PRD`);
 
-      const response = await fetch(`${this.baseUrl}/generate-task-master-prd`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(notionProject),
+      const response = await axiosInstance.post<TaskMasterPRDResult>(`${this.baseUrl}/generate-task-master-prd`, notionProject, {
         timeout: this.timeout
       });
 
-      if (!response.ok) {
-        throw new Error(`PRD generation failed: ${response.status} ${response.statusText}`);
-      }
+      const result: TaskMasterPRDResult = response.data;
 
-      const result: TaskMasterPRDResult = await response.json();
-      
       if (result.success) {
         console.log(`✅ Task Master PRD generated successfully`);
       } else {
@@ -399,11 +361,13 @@ class AIService {
       }
 
       return result;
-    } catch (error) {
+
+    } catch (error: any) {
       console.error('❌ PRD generation error:', error);
+
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error?.response?.data?.error || error.message || 'Unknown error'
       };
     }
   }
@@ -415,42 +379,32 @@ class AIService {
     try {
       console.log(`⚡ Generating tasks from PRD using VLLM AI server`);
 
-      // 실제 AI 서버 호출 시도
       try {
-        const response = await fetch(`${this.baseUrl}/generate-tasks`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(prd),
+        const response = await axiosInstance.post<GeneratedTasksResult> (`${this.baseUrl}/generate-tasks`, prd, {
           timeout: this.timeout
         });
 
-        if (response.ok) {
-          const result: GeneratedTasksResult = await response.json();
-          
-          if (result.success) {
-            console.log(`✅ Tasks generated successfully via VLLM: ${result.tasks?.length || 0} tasks`);
-            return result;
-          } else {
-            console.error(`❌ AI task generation failed: ${result.error}`);
-          }
+        const result: GeneratedTasksResult = response.data;
+
+        if (result.success) {
+          console.log(`✅ Tasks generated successfully via VLLM: ${result.tasks?.length || 0} tasks`);
+          return result;
         } else {
-          console.warn(`AI 서버 응답 오류: ${response.status}`);
+          console.error(`❌ AI task generation failed: ${result.error}`);
         }
-      } catch (error) {
-        console.warn(`AI 서버 연결 실패: ${error instanceof Error ? error.message : 'Unknown error'}`);
+
+      } catch (error: any) {
+        console.warn(`AI 서버 연결 실패: ${error?.response?.data?.error || error.message || 'Unknown error'}`);
       }
 
-      // AI 서버 실패 시에만 더미 데이터 사용
+      // fallback dummy data
       console.log('⚠️ AI server failed, using fallback dummy tasks');
-      
-      // 현재 날짜 기준으로 동적 날짜 생성
+
       const today = new Date();
       const formatDate = (daysFromToday: number) => {
         const date = new Date(today);
         date.setDate(date.getDate() + daysFromToday);
-        return date.toISOString().split('T')[0]; // YYYY-MM-DD 형식
+        return date.toISOString().split('T')[0];
       };
 
       const dummyTasks = [
@@ -695,68 +649,57 @@ class AIService {
     try {
       console.log(`🚀 Starting 2-stage pipeline: ${filename || 'unknown'}`);
 
-      // 먼저 실제 AI 서버 연결 시도
       try {
-        // 텍스트 입력인지 확인
         const isTextInput = filename?.endsWith('.txt') || audioBuffer.toString('utf-8').length < 10000;
-        
-        let response;
+
+        let result: TwoStagePipelineResult;
+
         if (isTextInput) {
-          // 텍스트 입력 - 최종 파이프라인 API 사용
           const transcript = audioBuffer.toString('utf-8');
-          response = await fetch(`${this.baseUrl}/pipeline-final`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              transcript: transcript,
-              generate_notion: true,
-              generate_tasks: true,
-              num_tasks: 5
-            }),
+
+          const response = await axiosInstance.post<TwoStagePipelineResult>(`${this.baseUrl}/pipeline-final`, {
+            transcript,
+            generate_notion: true,
+            generate_tasks: true,
+            num_tasks: 5
+          }, {
             timeout: this.timeout
           });
+
+          result = response.data;
+
         } else {
-          // 기존 음성 파일 API 사용
           const formData = new FormData();
           formData.append('audio', audioBuffer, {
             filename: filename || 'audio.wav',
             contentType: 'audio/wav'
           });
 
-          response = await fetch(`${this.baseUrl}/pipeline-final`, {
-            method: 'POST',
-            body: formData,
+          const response = await axiosInstance.post<TwoStagePipelineResult>(`${this.baseUrl}/pipeline-final`, formData, {
             timeout: this.timeout,
             headers: formData.getHeaders()
           });
+
+          result = response.data;
         }
 
-        if (response.ok) {
-          const result: TwoStagePipelineResult = await response.json();
-          console.log(`✅ 2-stage pipeline completed successfully via AI server`);
-          return result;
-        } else {
-          console.warn(`AI 서버 응답 오류: ${response.status}`);
-        }
-      } catch (error) {
-        console.warn(`AI 서버 연결 실패: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        console.log(`✅ 2-stage pipeline completed successfully via AI server`);
+        return result;
+
+      } catch (error: any) {
+        console.warn(`AI 서버 연결 실패: ${error?.response?.data?.error || error.message || 'Unknown error'}`);
       }
 
-      // AI 서버 연결 실패 시 더미 응답 사용
+      // 🔁 fallback 더미 처리
       console.log(`⚠️ AI 서버 연결 실패, 더미 응답 사용`);
-      
-      // 텍스트 입력인 경우 내용 읽기
+
       const transcript = audioBuffer.toString('utf-8');
-      
-      // generateTasks 메서드를 사용하여 날짜가 포함된 업무 생성
       const tasksResult = await this.generateTasks({});
-      
+
       if (!tasksResult.success || !tasksResult.tasks) {
         throw new Error('업무 생성 실패');
       }
-      
+
       const dummyResult: TwoStagePipelineResult = {
         success: true,
         stage1: {
@@ -780,18 +723,83 @@ class AIService {
           task_master_prd: {
             title: "딸깍 시스템 개발",
             overview: "AI 기반 프로젝트 관리 시스템 구축",
-            tasks: tasksResult.tasks // 날짜가 포함된 실제 업무 데이터 사용
+            tasks: tasksResult.tasks
           }
         }
       };
 
       console.log(`✅ 2-stage pipeline completed successfully (dummy response)`);
       return dummyResult;
-    } catch (error) {
+
+    } catch (error: any) {
       console.error('❌ 2-stage pipeline error:', error);
+
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error?.message || 'Unknown error'
+      };
+    }
+  }
+
+
+  /**
+   * 슬랙용 음성 파일 처리 (URL에서 다운로드 후 전체 파이프라인 실행)
+   */
+  async processAudioFile(params: {
+    fileUrl: string;
+    fileName: string;
+    projectName: string;
+    userId: string;
+  }): Promise<{
+    success: boolean;
+    notionUrl?: string;
+    jiraUrl?: string;
+    tasks?: any[];
+    error?: string;
+  }> {
+    try {
+      console.log(`🎵 Processing audio file from Slack: ${params.fileName}`);
+      console.log(`📂 Project: ${params.projectName}, User: ${params.userId}`);
+
+      // 1. 슬랙에서 파일 다운로드
+      const axios = require('axios');
+      const response = await axios.get(params.fileUrl, {
+        headers: {
+          'Authorization': `Bearer ${process.env.SLACK_BOT_TOKEN}`
+        },
+        responseType: 'arraybuffer',
+        timeout: 30000
+      });
+
+      const audioBuffer = Buffer.from(response.data);
+      console.log(`✅ Downloaded file: ${audioBuffer.length} bytes`);
+
+      // 2. 전체 파이프라인 실행 (Task Master 워크플로우 포함)
+      const result = await this.processTwoStagePipeline(audioBuffer, params.fileName);
+
+      if (result.success) {
+        console.log(`✅ Audio processing completed successfully`);
+        
+        // 성공 결과 반환 (슬랙 형식에 맞게)
+        return {
+          success: true,
+          notionUrl: result.analysis?.formatted_notion ? '#notion-page' : undefined,
+          jiraUrl: result.analysis?.generated_tasks ? '#jira-issues' : undefined,
+          tasks: result.analysis?.generated_tasks?.tasks || [],
+        };
+      } else {
+        console.error(`❌ Audio processing failed: ${result.error}`);
+        return {
+          success: false,
+          error: result.error || 'Unknown error during processing'
+        };
+      }
+
+    } catch (error: any) {
+      console.error('❌ processAudioFile error:', error);
+      return {
+        success: false,
+        error: error?.message || 'Failed to process audio file'
       };
     }
   }

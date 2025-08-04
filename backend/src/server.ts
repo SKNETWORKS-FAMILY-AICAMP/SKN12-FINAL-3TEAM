@@ -520,7 +520,29 @@ app.get('/auth/jira/:tenantSlug', async (req, res) => {
     const { userId } = req.query;
     
     if (!userId) {
-      return res.status(400).json({ error: 'userId is required' });
+      console.error('❌ userId 파라미터가 누락됨. Slack 앱에서 버튼을 통해 접근해야 합니다.');
+      return res.send(`
+        <html>
+          <head>
+            <title>JIRA 연동 - 접근 오류</title>
+            <style>
+              body { font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; text-align: center; }
+              .error { color: #dc3545; font-size: 24px; margin-bottom: 20px; }
+              .info { background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0; }
+              code { background: #e9ecef; padding: 2px 6px; border-radius: 4px; font-family: monospace; }
+            </style>
+          </head>
+          <body>
+            <div class="error">⚠️ 잘못된 접근입니다</div>
+            <div class="info">
+              <h3>JIRA 연동 방법</h3>
+              <p>이 페이지는 Slack 앱의 연동 버튼을 통해서만 접근할 수 있습니다.</p>
+              <p>Slack에서 <code>/tk start</code> 명령어를 사용하여 연동을 시작해주세요.</p>
+            </div>
+            <p>올바른 경로로 다시 시도해주세요.</p>
+          </body>
+        </html>
+      `);
     }
     
     // tenantSlug에서 실제 tenant 찾기
@@ -1595,4 +1617,19 @@ process.on('SIGTERM', async () => {
   console.log('\n🛑 서버 종료 중...');
   await prisma.$disconnect();
   process.exit(0);
+});
+
+//테스트
+app.get('/tasks', async (req, res) => {
+  try {
+    const tasks = await prisma.task.findMany({
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+    res.json(tasks);
+  } catch (error) {
+    console.error('❌ /tasks API 오류:', error);
+    res.status(500).json({ error: '서버 내부 오류' });
+  }
 });

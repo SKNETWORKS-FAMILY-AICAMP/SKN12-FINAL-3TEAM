@@ -4,9 +4,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'sonner';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
+import Landing from './pages/Landing';
+import Login from './pages/Login';
 import MeetingAnalysis from './pages/MeetingAnalysis';
 import TaskManagement from './pages/TaskManagement';
 import Settings from './pages/Settings';
+import IntegrationSuccess from './pages/JiraSuccess';
+import NotionSuccess from './pages/NotionSuccess';
+import Integration from './pages/Integration';
 import { connectSocket, disconnectSocket } from './services/api';
 import './App.css';
 
@@ -56,13 +61,16 @@ function App() {
               <Route index element={<Dashboard />} />
               <Route path="meeting" element={<MeetingAnalysis />} />
               <Route path="task" element={<TaskManagement />} />
+              <Route path="integration" element={<Integration />} />
               <Route path="settings" element={<Settings />} />
             </Route>
+            <Route path="/landing" element={<Landing />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/integration-success" element={<IntegrationSuccess />} />
+            <Route path="/notion-success" element={<NotionSuccess />} />
+
           </Routes>
-          
-          {/* Toast 알림 */}
-          <Toaster 
-            position="top-right"
+          <Toaster
             toastOptions={{
               duration: 4000,
               style: {
@@ -79,7 +87,6 @@ function App() {
               },
             }}
           />
-          
         </div>
       </Router>
     </QueryClientProvider>

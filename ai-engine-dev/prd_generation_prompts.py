@@ -3,6 +3,9 @@ TtalKkak PRD 생성 프롬프트 시스템
 회의록 → 기획안 → Task Master PRD 형식 변환
 """
 
+import json
+from datetime import datetime
+
 # 노션용 기획안 템플릿
 NOTION_PROJECT_TEMPLATE = """
 ## 프로젝트 개요
@@ -265,6 +268,187 @@ def generate_two_stage_prompts(meeting_transcript: str):
         "stage1_notion": generate_notion_project_prompt(meeting_transcript),
         "stage2_prd": None  # 1단계 결과를 받은 후 생성
     }
+
+# Task Master 스타일 PRD → Task 생성 프롬프트
+def generate_prd_to_tasks_system_prompt(num_tasks: int, next_id: int = 1) -> str:
+    """PRD를 태스크로 변환하는 시스템 프롬프트 (Task Master 스타일)"""
+    return f"""You are an AI assistant specialized in analyzing Product Requirements Documents (PRDs) and generating a structured, logically ordered, dependency-aware and sequenced list of development tasks in JSON format.
+
+Analyze the provided PRD content and generate approximately {num_tasks} top-level development tasks. If the complexity or the level of detail of the PRD is high, generate more tasks relative to the complexity of the PRD
+
+Each task should represent a logical unit of work needed to implement the requirements and focus on the most direct and effective way to implement the requirements without unnecessary complexity or overengineering. Include pseudo-code, implementation details, and test strategy for each task. Find the most up to date information to implement each task.
+
+Assign sequential IDs starting from {next_id}. Infer title, description, details, and test strategy for each task based *only* on the PRD content.
+
+Set status to 'pending', dependencies to an empty array [], and priority to 'medium' initially for all tasks.
+
+Respond ONLY with a valid JSON object containing a single key "tasks", where the value is an array of task objects adhering to the provided schema. Do not include any explanation or markdown formatting.
+
+Each task should follow this JSON structure:
+{{
+    "id": number,
+    "title": string,
+    "description": string,
+    "status": "pending",
+    "dependencies": number[] (IDs of tasks this depends on),
+    "priority": "high" | "medium" | "low", 
+    "details": string (implementation details),
+    "testStrategy": string (validation approach)
+}}
+
+Guidelines:
+1. Unless complexity warrants otherwise, create exactly {num_tasks} tasks, numbered sequentially starting from {next_id}
+2. Each task should be atomic and focused on a single responsibility following the most up to date best practices and standards
+3. Order tasks logically - consider dependencies and implementation sequence
+4. Early tasks should focus on setup, core functionality first, then advanced features
+5. Include clear validation/testing approach for each task
+6. Set appropriate dependency IDs (a task can only depend on tasks with lower IDs, potentially including existing tasks with IDs less than {next_id} if applicable)
+7. Assign priority (high/medium/low) based on criticality and dependency order
+8. Include detailed implementation guidance in the "details" field
+9. If the PRD contains specific requirements for libraries, database schemas, frameworks, tech stacks, or any other implementation details, STRICTLY ADHERE to these requirements in your task breakdown and do not discard them under any circumstance
+10. Focus on filling in any gaps left by the PRD or areas that aren't fully specified, while preserving all explicit requirements
+11. Always aim to provide the most direct path to implementation, avoiding over-engineering or roundabout approaches"""
+
+def generate_prd_to_tasks_user_prompt(prd_data: dict, num_tasks: int, next_id: int = 1) -> str:
+    """PRD를 태스크로 변환하는 사용자 프롬프트"""
+    prd_content = format_task_master_prd(prd_data)
+    
+    return f"""Here's the Product Requirements Document (PRD) to break down into approximately {num_tasks} tasks, starting IDs from {next_id}:
+
+{prd_content}
+
+Return your response in this format:
+{{
+    "tasks": [
+        {{
+            "id": {next_id},
+            "title": "Setup Project Repository", 
+            "description": "...",
+            "status": "pending",
+            "dependencies": [],
+            "priority": "high",
+            "details": "Implementation guidance...",
+            "testStrategy": "Validation approach..."
+        }},
+        ...
+    ],
+    "metadata": {{
+        "projectName": "PRD Implementation",
+        "totalTasks": {num_tasks},
+        "sourceFile": "PRD",
+        "generatedAt": "{datetime.now().isoformat()}"
+    }}
+}}"""
+
+# 복잡도 분석 프롬프트 (Task Master 스타일)
+def generate_complexity_analysis_system_prompt() -> str:
+    """복잡도 분석 시스템 프롬프트"""
+    return 'You are an expert software architect and project manager analyzing task complexity. Respond only with the requested valid JSON array.'
+
+def generate_complexity_analysis_prompt(tasks_data: dict) -> str:
+    """복잡도 분석 프롬프트 생성"""
+    tasks_string = json.dumps(tasks_data.get('tasks', []), ensure_ascii=False, indent=2)
+    return f"""Analyze the following tasks to determine their complexity (1-10 scale) and recommend the number of subtasks for expansion. Provide a brief reasoning and an initial expansion prompt for each.
+
+Tasks:
+{tasks_string}
+
+Respond ONLY with a valid JSON array matching the schema:
+[
+  {{
+    "taskId": <number>,
+    "taskTitle": "<string>",
+    "complexityScore": <number 1-10>,
+    "recommendedSubtasks": <number>,
+    "expansionPrompt": "<string>",
+    "reasoning": "<string>"
+  }},
+  ...
+]
+
+Do not include any explanatory text, markdown formatting, or code block markers before or after the JSON array."""
+
+# Task Master 스타일 서브태스크 확장 프롬프트 (복잡도 기반)
+def generate_complexity_based_subtask_prompt(task: dict, task_analysis: dict, next_subtask_id: int = 1) -> str:
+    """복잡도 분석 기반 서브태스크 생성 프롬프트"""
+    num_subtasks = task_analysis.get('recommendedSubtasks', 3)
+    custom_prompt = task_analysis.get('expansionPrompt', '')
+    
+    if custom_prompt:
+        # 복잡도 분석에서 제공된 커스텀 프롬프트 사용
+        return f"""
+{custom_prompt}
+
+**태스크 정보:**
+- ID: {task.get('id')}
+- 제목: {task.get('title', '')}
+- 설명: {task.get('description', '')}
+- 복잡도: {task_analysis.get('complexityScore', 5)}/10
+- 추천 서브태스크 수: {num_subtasks}개
+
+**복잡도 분석 근거:**
+{task_analysis.get('reasoning', '')}
+
+**응답 형식:**
+다음 JSON 형식으로 정확히 {num_subtasks}개의 서브태스크를 생성하세요:
+{{
+    "subtasks": [
+        {{
+            "id": {next_subtask_id},
+            "title": "서브태스크 제목",
+            "description": "구체적인 작업 내용",
+            "priority": "high/medium/low",
+            "estimated_hours": 숫자,
+            "dependencies": [],
+            "details": "구현 세부사항",
+            "status": "pending"
+        }}
+    ]
+}}
+"""
+    else:
+        # 기본 서브태스크 생성 프롬프트
+        return f"""
+다음 태스크를 {num_subtasks}개의 구체적인 서브태스크로 분해하세요:
+
+**태스크 정보:**
+- ID: {task.get('id')}
+- 제목: {task.get('title', '')}
+- 설명: {task.get('description', '')}
+- 복잡도: {task_analysis.get('complexityScore', 5)}/10
+- 세부사항: {task.get('details', '')}
+
+**서브태스크 분해 가이드라인:**
+1. 각 서브태스크는 독립적으로 실행 가능해야 함
+2. 논리적 순서에 따라 배열
+3. 구체적이고 측정 가능한 결과물 정의
+4. 예상 소요 시간을 현실적으로 설정
+5. 복잡도 {task_analysis.get('complexityScore', 5)}/10에 맞는 세분화 수준 적용
+
+**응답 형식:**
+{{
+    "subtasks": [
+        {{
+            "id": {next_subtask_id},
+            "title": "서브태스크 제목",
+            "description": "구체적인 작업 내용",
+            "priority": "high/medium/low",
+            "estimated_hours": 숫자,
+            "dependencies": [],
+            "details": "구현 세부사항",
+            "status": "pending"
+        }}
+    ]
+}}
+"""
+
+def generate_complexity_based_subtask_system_prompt(num_subtasks: int, next_id: int) -> str:
+    """복잡도 기반 서브태스크 시스템 프롬프트"""
+    return f"""You are an AI assistant helping with task breakdown. Generate exactly {num_subtasks} subtasks based on the provided prompt and context. 
+
+Respond ONLY with a valid JSON object containing a single key "subtasks" whose value is an array of the generated subtask objects. Each subtask object in the array must have keys: "id", "title", "description", "dependencies", "details", "status", "priority", "estimated_hours". 
+
+Ensure the 'id' starts from {next_id} and is sequential. Ensure 'dependencies' only reference valid prior subtask IDs generated in this response (starting from {next_id}). Ensure 'status' is 'pending'. Do not include any other text or explanation."""
 
 # 응답 스키마
 NOTION_PROJECT_SCHEMA = {
