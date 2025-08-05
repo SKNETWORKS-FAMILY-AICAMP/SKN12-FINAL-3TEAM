@@ -352,10 +352,9 @@ class QwenFineTuner:
             learning_rate=2e-4,
             fp16=True,
             logging_steps=10,
-            evaluation_strategy="steps",
-            eval_steps=50,
-            save_steps=100,
-            save_total_limit=3,
+            evaluation_strategy="epoch",
+            save_strategy="epoch",
+            save_total_limit=None,  # 모든 에포크 저장
             load_best_model_at_end=True,
             metric_for_best_model="eval_loss",
             greater_is_better=False,
