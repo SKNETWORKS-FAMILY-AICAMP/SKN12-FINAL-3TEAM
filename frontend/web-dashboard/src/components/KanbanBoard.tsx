@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-// @dnd-kit 임시 제거하고 네이티브 HTML5 드래그 앤 드롭 사용
 import { 
   Clock, 
   User, 
@@ -94,7 +93,7 @@ const TaskCard: React.FC<{
   columnId: string;
   onDragStart?: (task: Task, index: number) => void;
   onDragEnd?: (task: Task) => void;
-  onDragOver?: (task: Task, index: number) => void;
+  onDragOver?: (e: React.DragEvent, task: Task, index: number) => void;
 }> = ({ task, isDragging, dragState, index, columnId, onDragStart, onDragEnd, onDragOver }) => {
   
   // 이 태스크가 다른 태스크를 위해 자리를 만들어줘야 하는지 계산
@@ -130,7 +129,7 @@ const TaskCard: React.FC<{
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
-    onDragOver?.(task, index);
+    onDragOver?.(e, task, index);
   };
 
   const formatDate = (dateString?: string) => {
@@ -144,16 +143,16 @@ const TaskCard: React.FC<{
   return (
     <motion.div
       layout
-      ref={setNodeRef}
-      style={style}
-      {...attributes}
-      {...listeners}
+      draggable
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+      onDragOver={handleDragOver}
       initial={{ opacity: 0, y: 20 }}
       animate={{ 
         opacity: 1,
-        y: shouldMakeSpace ? 35 : 0, // 다른 태스크를 위해 더 많이 아래로 이동
-        scale: shouldMakeSpace ? 0.95 : 1, // 더 뚜렷한 스케일 변화
-        rotateX: shouldMakeSpace ? 5 : 0, // 약간의 3D 효과
+        y: shouldMakeSpace ? 35 : 0,
+        scale: shouldMakeSpace ? 0.95 : 1,
+        rotateX: shouldMakeSpace ? 5 : 0,
       }}
       exit={{ opacity: 0, y: -20 }}
       whileHover={{ 
@@ -169,7 +168,7 @@ const TaskCard: React.FC<{
         duration: 0.25,
       }}
       className={`bg-white rounded-2xl p-4 shadow-soft border border-neutral-200 cursor-grab active:cursor-grabbing transition-all duration-300 hover:shadow-medium ${
-        isDragging || isSortableDragging ? 'opacity-90 rotate-1 scale-105 shadow-xl z-50 ring-2 ring-blue-400' : ''
+        isDragging ? 'opacity-90 rotate-1 scale-105 shadow-xl z-50 ring-2 ring-blue-400' : ''
       } ${shouldMakeSpace ? 'shadow-sm transform-gpu bg-gray-50 border-gray-300' : ''}`}
     >
       {/* 태스크 헤더 */}
@@ -232,15 +231,22 @@ const KanbanColumn: React.FC<{
   onAddTask: (columnId: string) => void;
   isOver?: boolean;
   dragState?: DragState;
+  onDrop?: (e: React.DragEvent) => void;
+  onDragOver?: (e: React.DragEvent) => void;
+  onTaskDragStart?: (task: Task, index: number) => void;
+  onTaskDragEnd?: (task: Task) => void;
+  onTaskDragOver?: (e: React.DragEvent, task: Task, index: number) => void;
 }> = ({ 
   column, 
   onAddTask,
   isOver = false,
-  dragState
+  dragState,
+  onDrop,
+  onDragOver,
+  onTaskDragStart,
+  onTaskDragEnd,
+  onTaskDragOver
 }) => {
-  const {
-    setNodeRef,
-  } = useSortable({ id: column.id });
 
   const getColumnIcon = (status: Task['status']) => {
     switch (status) {
@@ -284,13 +290,14 @@ const KanbanColumn: React.FC<{
 
       {/* 태스크 리스트 */}
       <div 
-        ref={setNodeRef} 
+        onDrop={onDrop}
+        onDragOver={onDragOver}
+        data-column-id={column.id}
         className={`flex-1 space-y-3 min-h-[200px] transition-all duration-200 rounded-2xl p-2 ${
           isOver ? 'bg-blue-50 border-2 border-dashed border-blue-300' : ''
         }`}
       >
-        <SortableContext items={column.tasks.map(task => task.id)} strategy={verticalListSortingStrategy}>
-          <motion.div layout className="space-y-3">
+        <motion.div layout className="space-y-3">
             {column.tasks.map((task, index) => {
               // 삽입 위치에 Placeholder 보여주기
               const shouldShowPlaceholderBefore = 
@@ -318,6 +325,9 @@ const KanbanColumn: React.FC<{
                     dragState={dragState}
                     index={index}
                     columnId={column.id}
+                    onDragStart={onTaskDragStart}
+                    onDragEnd={onTaskDragEnd}
+                    onDragOver={onTaskDragOver}
                   />
                 </React.Fragment>
               );
@@ -329,7 +339,6 @@ const KanbanColumn: React.FC<{
               <DragPlaceholder isVisible={true} />
             )}
           </motion.div>
-        </SortableContext>
         
         {column.tasks.length === 0 && dragState?.overColumnId === column.id && (
           <DragPlaceholder isVisible={true} taskHeight={140} />
@@ -456,149 +465,104 @@ const KanbanBoard: React.FC = () => {
     },
   ];
 
-  const sensors = useSensors(
-    useSensor(MouseSensor, {
-      activationConstraint: {
-        distance: 5, // 마우스 드래그용
-      },
-    }),
-    useSensor(TouchSensor, {
-      activationConstraint: {
-        delay: 250, // 터치 드래그용
-        tolerance: 10,
-      },
-    })
-  );
-
-  const handleDragStart = (event: DragStartEvent) => {
-    const { active } = event;
-    const task = tasks.find(t => t.id === active.id);
-    setActiveTask(task || null);
+  // 네이티브 HTML5 드래그앤드롭 핸들러들
+  const handleTaskDragStart = (task: Task, index: number) => {
+    setActiveTask(task);
     setDragState(prev => ({
       ...prev,
-      activeTaskId: active.id as string,
+      activeTaskId: task.id,
     }));
-    console.log('🎯 드래그 시작:', task?.title, 'activeTaskId:', active.id);
+    console.log('🎯 네이티브 드래그 시작:', task.title);
   };
 
-  const handleDragOver = (event: DragOverEvent) => {
-    const { over, active } = event;
-    if (!over || !active) {
-      setDragState(prev => ({
-        ...prev,
-        overColumnId: null,
-        insertPosition: 0,
-        isValidDrop: false,
-      }));
-      return;
-    }
+  const handleTaskDragEnd = (task: Task) => {
+    console.log('🎯 네이티브 드래그 종료:', task.title);
+  };
 
-    const overId = over.id as string;
-    const activeId = active.id as string;
+  const handleTaskDragOver = (e: React.DragEvent, task: Task, index: number) => {
+    e.preventDefault();
+    
+    // 현재 컬럼 찾기
+    const targetColumn = columns.find(col => 
+      col.tasks.some(t => t.id === task.id)
+    );
+    
+    if (!targetColumn || !dragState.activeTaskId) return;
+    
+    // 마우스 위치 기반으로 삽입 위치 계산
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const mouseY = e.clientY;
+    const elementTop = rect.top;
+    const elementHeight = rect.height;
+    const relativeY = mouseY - elementTop;
+    const isAbove = relativeY < elementHeight / 2;
+    
+    const insertPosition = isAbove ? index : index + 1;
+    
+    setDragState(prev => ({
+      ...prev,
+      overColumnId: targetColumn.id,
+      insertPosition,
+      isValidDrop: true,
+    }));
+    
+    console.log('🎯 네이티브 드래그 오버:', {
+      targetTask: task.title,
+      index,
+      insertPosition,
+      isAbove,
+      column: targetColumn.title
+    });
+  };
 
-    // 컬럼 위에 있는지 확인 (빈 컬럼)
-    const column = columns.find(col => col.id === overId);
-    if (column) {
-      setDragState(prev => ({
-        ...prev,
-        overColumnId: column.id,
-        insertPosition: 0, // 빈 컬럼이면 첫 번째 위치에 삽입
-        isValidDrop: true,
-      }));
-      console.log('🎯 드래그 오버 (빈 컬럼):', column.title);
-      return;
-    }
+  const handleColumnDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
 
-    // 태스크 위에 있는지 확인
-    const overTask = tasks.find(t => t.id === overId);
-    if (overTask && activeId !== overId) {
-      // 타겟 컬럼 찾기
-      const targetColumn = columns.find(col => 
-        col.tasks.some(t => t.id === overId)
-      );
+  const handleColumnDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const data = e.dataTransfer.getData('text/plain');
+    
+    if (!data) return;
+    
+    try {
+      const { taskId, index: sourceIndex, columnId: sourceColumnId } = JSON.parse(data);
+      const targetColumnId = (e.currentTarget as HTMLElement).dataset.columnId;
       
-      if (targetColumn) {
-        // 마우스 위치에 따라 삽입 위치 결정
-        const rect = over.rect;
-        const activeRect = active.rect.current.translated;
+      if (!targetColumnId) return;
+      
+      const activeTask = tasks.find(t => t.id === taskId);
+      const targetColumn = columns.find(col => col.id === targetColumnId);
+      
+      if (activeTask && targetColumn) {
+        console.log('✅ 네이티브 드롭 완료:', {
+          taskTitle: activeTask.title,
+          fromColumn: sourceColumnId,
+          toColumn: targetColumnId,
+          insertPosition: dragState.insertPosition
+        });
         
-        if (rect && activeRect) {
-          const hoverMiddleY = rect.top + rect.height / 2;
-          const activeCenterY = activeRect.top + activeRect.height / 2;
-          const isAbove = activeCenterY < hoverMiddleY;
-          
-          // 타겟 태스크의 인덱스 찾기
-          const targetTaskIndex = targetColumn.tasks.findIndex(t => t.id === overId);
-          const insertPosition = isAbove ? targetTaskIndex : targetTaskIndex + 1;
-          
-          setDragState(prev => ({
-            ...prev,
-            overColumnId: targetColumn.id,
-            insertPosition,
-            isValidDrop: true,
-          }));
-          
-          console.log('🎯 드래그 오버 (태스크):', {
-            targetTask: overTask.title,
-            targetTaskIndex,
-            insertPosition,
-            isAbove,
-            column: targetColumn.title,
-            activeId: activeId
+        // 상태 변경
+        if (activeTask.status !== targetColumn.status) {
+          updateTaskMutation.mutate({
+            taskId: taskId,
+            status: targetColumn.status,
           });
         }
       }
+    } catch (error) {
+      console.error('드롭 데이터 파싱 실패:', error);
     }
-  };
-
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
     
-    // 클린업
+    // 드래그 상태 초기화
     setActiveTask(null);
-    const currentDragState = { ...dragState };
     setDragState({
       activeTaskId: null,
       overColumnId: null,
       insertPosition: 0,
       isValidDrop: false,
     });
-    
-    if (!over || !currentDragState.isValidDrop) {
-      console.log('🚫 드래그 종료: 유효하지 않은 드롭');
-      return;
-    }
-
-    const activeTaskId = active.id as string;
-    const targetColumn = columns.find(col => col.id === currentDragState.overColumnId);
-    
-    if (targetColumn) {
-      const activeTask = tasks.find(t => t.id === activeTaskId);
-      
-      if (activeTask) {
-        // 상태가 다르면 상태 변경
-        if (activeTask.status !== targetColumn.status) {
-          updateTaskMutation.mutate({
-            taskId: activeTaskId,
-            status: targetColumn.status,
-          });
-          
-          console.log('✅ 태스크 상태 변경:', {
-            taskTitle: activeTask.title,
-            fromStatus: activeTask.status,
-            toStatus: targetColumn.status,
-            insertPosition: currentDragState.insertPosition
-          });
-        } else {
-          console.log('📝 같은 컬럼 내 순서 변경:', {
-            taskTitle: activeTask.title,
-            insertPosition: currentDragState.insertPosition
-          });
-          // TODO: 같은 컬럼 내에서 순서 변경 로직 추가
-          // 현재는 상태 변경만 지원하지만, 추후 순서 변경 API 추가 시 구현
-        }
-      }
-    }
   };
 
   const handleAddTask = (columnId: string) => {
@@ -626,41 +590,50 @@ const KanbanBoard: React.FC = () => {
         <p className="text-neutral-600">드래그 앤 드롭으로 업무 상태를 변경하세요</p>
       </motion.div>
 
-      {/* 칸반 보드 */}
-      <DndContext
-        sensors={sensors}
-        collisionDetection={rectIntersection}
-        onDragStart={handleDragStart}
-        onDragOver={handleDragOver}
-        onDragEnd={handleDragEnd}
-      >
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 h-full">
-          {columns.map((column) => (
-            <motion.div
-              key={column.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 * columns.indexOf(column) }}
-              className="flex flex-col"
-            >
-              <KanbanColumn 
-                column={column} 
-                onAddTask={handleAddTask}
-                isOver={dragState.overColumnId === column.id}
-                dragState={dragState}
-              />
-            </motion.div>
-          ))}
-        </div>
+      {/* 칸반 보드 - 네이티브 HTML5 드래그앤드롭 */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 h-full">
+        {columns.map((column) => (
+          <motion.div
+            key={column.id}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 * columns.indexOf(column) }}
+            className="flex flex-col"
+          >
+            <KanbanColumn 
+              column={column} 
+              onAddTask={handleAddTask}
+              isOver={dragState.overColumnId === column.id}
+              dragState={dragState}
+              onDrop={handleColumnDrop}
+              onDragOver={handleColumnDragOver}
+              onTaskDragStart={handleTaskDragStart}
+              onTaskDragEnd={handleTaskDragEnd}
+              onTaskDragOver={handleTaskDragOver}
+            />
+          </motion.div>
+        ))}
+      </div>
 
-        {/* 드래그 오버레이 */}
-        <DragOverlay dropAnimation={{
-          duration: 200,
-          easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)',
-        }}>
-          {activeTask ? <TaskCard task={activeTask} isDragging index={-1} columnId="overlay" /> : null}
-        </DragOverlay>
-      </DndContext>
+      {/* 드래그 오버레이 - 네이티브 구현 */}
+      {activeTask && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.95 }}
+          className="fixed top-0 left-0 pointer-events-none z-50"
+          style={{
+            transform: 'translate(-50%, -50%)',
+          }}
+        >
+          <TaskCard 
+            task={activeTask} 
+            isDragging={true} 
+            index={-1} 
+            columnId="overlay" 
+          />
+        </motion.div>
+      )}
     </div>
   );
 };

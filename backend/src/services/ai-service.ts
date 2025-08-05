@@ -783,9 +783,9 @@ class AIService {
         // 성공 결과 반환 (슬랙 형식에 맞게)
         return {
           success: true,
-          notionUrl: result.analysis?.formatted_notion ? '#notion-page' : undefined,
-          jiraUrl: result.analysis?.generated_tasks ? '#jira-issues' : undefined,
-          tasks: result.analysis?.generated_tasks?.tasks || [],
+          notionUrl: result.formatted_notion ? '#notion-page' : undefined,
+          jiraUrl: result.generated_tasks ? '#jira-issues' : undefined,
+          tasks: result.generated_tasks?.tasks || [],
         };
       } else {
         console.error(`❌ Audio processing failed: ${result.error}`);

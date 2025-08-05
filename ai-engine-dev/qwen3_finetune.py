@@ -117,7 +117,7 @@ class TtalkkacDatasetConverter:
             return ""
 
     def convert_to_training_format(self, gold_data: List[Dict[str, Any]], 
-                                 source_dir: str = "batch_triplet_results") -> List[Dict[str, str]]:
+                                 source_dir: str = "batch_triplet_results_input") -> List[Dict[str, str]]:
         """골드 스탠다드를 Qwen3 파인튜닝 형식으로 변환 (청킹 지원)"""
         training_data = []
         
@@ -127,10 +127,12 @@ class TtalkkacDatasetConverter:
                 source_file = metadata.get('source_file', '')
                 is_chunk = metadata.get('is_chunk', False)
                 
-                logger.info(f"처리 중: {item.get('id', 'Unknown')}, 청킹여부: {is_chunk}")
+                logger.info(f"🔄 처리 중: {item.get('id', 'Unknown')}")
+                logger.info(f"   📂 청킹여부: {is_chunk}")
+                logger.info(f"   📄 source_file: {source_file}")
                 
                 if not source_file:
-                    logger.warning(f"source_file 없음: {item.get('id', 'Unknown')}")
+                    logger.warning(f"❌ source_file 없음: {item.get('id', 'Unknown')}")
                     continue
                 
                 # source_file에서 실제 폴더명 추출
@@ -140,31 +142,49 @@ class TtalkkacDatasetConverter:
                 else:
                     source_folder = source_file.replace('train_', '').replace('val_', '')
                 
+                logger.info(f"   🗂️  추출된 폴더명: {source_folder}")
+                logger.info(f"   📍 Input 경로: {source_dir}/{source_folder}/05_final_result.json")
+                
                 # 원본 회의 내용 로드
                 full_meeting_content = self.load_meeting_content(source_dir, source_folder)
                 if not full_meeting_content:
-                    logger.warning(f"회의 내용 없음: {source_folder}")
+                    logger.warning(f"❌ 회의 내용 없음: {source_folder}")
                     continue
+                
+                logger.info(f"   📊 원본 회의록 길이: {len(full_meeting_content)}자")
                 
                 # 청킹된 데이터인지 확인하고 처리
                 if is_chunk and 'chunk_info' in item:
                     # 청킹된 데이터: 해당 청크만 추출
                     chunk_info = item['chunk_info']
                     chunk_index = chunk_info.get('chunk_index', 1) - 1  # 0-based index
+                    total_chunks = chunk_info.get('total_chunks', 0)
+                    chunk_length = chunk_info.get('chunk_length', 0)
+                    
+                    logger.info(f"   ✂️  청킹 정보:")
+                    logger.info(f"      - 청크 인덱스: {chunk_index + 1}")
+                    logger.info(f"      - 전체 청크 수: {total_chunks}")
+                    logger.info(f"      - 골드 스탠다드 청크 길이: {chunk_length}자")
                     
                     # 동일한 청킹 방식으로 원본 텍스트 분할
                     chunks = self.chunk_text(full_meeting_content, chunk_size=5000, overlap=512)
+                    logger.info(f"   🔪 원본 텍스트 청킹 결과: {len(chunks)}개 청크 생성")
                     
                     if chunk_index < len(chunks):
                         meeting_content = chunks[chunk_index]
-                        logger.info(f"청크 {chunk_index+1}/{len(chunks)} 사용 (길이: {len(meeting_content)}자)")
+                        logger.info(f"   ✅ 청크 매칭 성공!")
+                        logger.info(f"      - 사용할 청크: {chunk_index+1}/{len(chunks)}")
+                        logger.info(f"      - 실제 청크 길이: {len(meeting_content)}자")
+                        logger.info(f"      - 골드 vs 실제 길이 차이: {abs(len(meeting_content) - chunk_length)}자")
                     else:
-                        logger.warning(f"청크 인덱스 초과: {chunk_index+1} > {len(chunks)}")
+                        logger.error(f"   ❌ 청크 인덱스 초과!")
+                        logger.error(f"      - 요청 인덱스: {chunk_index+1}")
+                        logger.error(f"      - 실제 청크 수: {len(chunks)}")
                         continue
                 else:
                     # 일반 데이터: 전체 회의록 사용
                     meeting_content = full_meeting_content
-                    logger.info(f"전체 회의록 사용 (길이: {len(meeting_content)}자)")
+                    logger.info(f"   📖 전체 회의록 사용 (길이: {len(meeting_content)}자)")
                 
                 # 골드 스탠다드와 동일한 프롬프트 생성
                 user_message = generate_meeting_analysis_user_prompt(meeting_content)
@@ -248,19 +268,9 @@ class QwenFineTuner:
                 low_cpu_mem_usage=True
             )
         except Exception as e:
-            logger.error(f"AWQ 모델 로드 실패: {e}")
-            logger.info("일반 모델로 재시도...")
-            # AWQ 모델 실패 시 일반 모델로 대체
-            self.model_name = "Qwen/Qwen2.5-7B-Instruct"
-            self.model = AutoModelForCausalLM.from_pretrained(
-                self.model_name,
-                torch_dtype=torch.float16,
-                device_map="auto",
-                trust_remote_code=True,
-                attn_implementation="eager",
-                use_cache=False,
-                low_cpu_mem_usage=True
-            )
+            logger.error(f"❌ AWQ 모델 로드 실패: {e}")
+            logger.error("AWQ 모델이 필요합니다. 학습을 중단합니다.")
+            raise RuntimeError(f"AWQ 모델 로드 실패: {e}. 학습을 중단합니다.")
         
         logger.info("모델과 토크나이저 로딩 완료")
     
@@ -292,20 +302,17 @@ class QwenFineTuner:
             tokenized["labels"] = tokenized["input_ids"].copy()
             return tokenized
         
-        # 고품질 데이터만 필터링 (7점 이상)
-        high_quality_data = [
-            item for item in training_data 
-            if item["metadata"]["is_high_quality"]
-        ]
+        # 모든 데이터 사용 (품질 필터링 제거)
+        all_data = training_data
         
-        logger.info(f"전체 데이터: {len(training_data)}개, 고품질 데이터: {len(high_quality_data)}개")
+        logger.info(f"전체 데이터: {len(all_data)}개 (모든 품질 레벨 포함)")
         
         # train/val 분할 (8:2 비율로 자동 분할)
         import random
-        random.shuffle(high_quality_data)
-        split_idx = int(len(high_quality_data) * 0.8)
-        train_data = high_quality_data[:split_idx]
-        val_data = high_quality_data[split_idx:]
+        random.shuffle(all_data)
+        split_idx = int(len(all_data) * 0.8)
+        train_data = all_data[:split_idx]
+        val_data = all_data[split_idx:]
         
         logger.info(f"학습 데이터: {len(train_data)}개, 검증 데이터: {len(val_data)}개")
         
@@ -406,7 +413,7 @@ def main():
     print("\n📊 1. 골드 스탠다드 데이터 로드 및 변환")
     converter = TtalkkacDatasetConverter()
     
-    results_dir = "ttalkkac_gold_standard_results_20250731_104912"
+    results_dir = "ttalkkac_gold_standard_results_20250803_163615"
     gold_data = converter.load_gold_standard_data(results_dir)
     
     if not gold_data:
@@ -434,12 +441,17 @@ def main():
     else:
         print("⚠️ CPU 모드로 실행됩니다.")
     
-    # 파인튜너 초기화 (AWQ 모델 우선 시도)
+    # 파인튜너 초기화 (AWQ 모델만 사용)
     finetuner = QwenFineTuner("Qwen/Qwen3-14B-AWQ")
     finetuner.data_converter = converter
     
     # 모델과 토크나이저 설정
-    finetuner.setup_model_and_tokenizer()
+    try:
+        finetuner.setup_model_and_tokenizer()
+    except RuntimeError as e:
+        print(f"❌ 모델 로드 실패: {e}")
+        print("AWQ 모델이 필요합니다. 프로그램을 종료합니다.")
+        return
     
     # 데이터셋 준비
     train_dataset, val_dataset = finetuner.prepare_dataset(training_data, max_length=2048)

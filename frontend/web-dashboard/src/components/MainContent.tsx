@@ -19,27 +19,6 @@ import {
   RefreshCw,
   Edit3
 } from 'lucide-react';
-import {
-  DndContext,
-  DragEndEvent,
-  DragOverEvent,
-  DragOverlay,
-  DragStartEvent,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  closestCenter,
-  rectIntersection,
-  closestCorners,
-  useDroppable,
-} from '@dnd-kit/core';
-import {
-  SortableContext,
-  verticalListSortingStrategy,
-  useSortable,
-  arrayMove,
-} from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
 import { dashboardAPI, projectAPI, taskAPI, userAPI, subscribeToRealTimeUpdates } from '../services/api';
 import { toast } from 'sonner';
 
@@ -75,25 +54,12 @@ const DropIndicator = ({ isOver }: { isOver: boolean }) => {
 
 // @dnd-kit을 사용한 드래그 앤 드롭 컴포넌트
 const TaskCard = ({ task, columnId, onTaskSelect, isOverTarget }: any) => {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ 
-    id: task.id,
-    transition: {
-      duration: 150,
-      easing: 'cubic-bezier(0.25, 1, 0.5, 1)',
-    },
-  });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
+  // 네이티브 드래그앤드롭으로 변경됨 - @dnd-kit 제거
+  const attributes = {};
+  const listeners = {};
+  const setNodeRef = null;
+  const isDragging = false;
+  const style = {};
 
   const getColumnBgColor = (colId: string) => {
     const colors: Record<string, string> = {
@@ -106,8 +72,6 @@ const TaskCard = ({ task, columnId, onTaskSelect, isOverTarget }: any) => {
 
   return (
     <div
-      ref={setNodeRef}
-      style={style}
       className={`group rounded-lg ${getColumnBgColor(columnId)} ${
         isDragging ? 'opacity-80 rotate-2 scale-105 shadow-lg z-50' : 
         isOverTarget ? 'ring-2 ring-blue-400 ring-offset-2 bg-blue-50/30 scale-105' : 'hover:shadow-md shadow-sm'
@@ -156,20 +120,17 @@ const TaskCard = ({ task, columnId, onTaskSelect, isOverTarget }: any) => {
 };
 
 const DroppableColumn = ({ colId, items, onTaskSelect, isOver: isOverProp, overItemId }: { colId: string; items: any[]; onTaskSelect: any; isOver?: boolean; overItemId?: string | null }) => {
-  const { setNodeRef, isOver: isDroppableOver } = useDroppable({
-    id: colId,
-  });
-
-  const isOver = isOverProp || isDroppableOver;
+  // useDroppable 제거 - 네이티브 드래그앤드롭 사용
+  const setNodeRef = null;
+  const isOver = isOverProp || false;
 
   return (
     <div
-      ref={setNodeRef}
       className={`min-h-[600px] rounded-b-xl p-6 transition-all duration-200 ${
         isOver ? 'bg-blue-50/50 ring-2 ring-offset-2 ring-blue-400 scale-105' : 'bg-neutral-50 hover:bg-neutral-100'
       }`}
     >
-      <SortableContext items={items.map(item => item.id)} strategy={verticalListSortingStrategy}>
+      {/* SortableContext 제거 - 네이티브 드래그앤드롭 사용 */}
         <div className="space-y-4 min-h-[500px]">
           {items.map((item, index) => (
             <div key={item.id} className="mb-4">
@@ -182,7 +143,7 @@ const DroppableColumn = ({ colId, items, onTaskSelect, isOver: isOverProp, overI
             </div>
           ))}
         </div>
-      </SortableContext>
+      {/* SortableContext 종료 */}
     </div>
   );
 };
@@ -294,132 +255,15 @@ const MainContent = () => {
     localStorage.setItem('dashboard-kanban-columns', JSON.stringify(columns));
   }, [columns]);
 
-  // @dnd-kit 센서 설정 - 더 자연스러운 드래그 경험
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 5, // 드래그 시작 거리를 줄여서 더 민감하게
-        delay: 100, // 짧은 지연시간으로 빠른 반응
-      },
-    })
-  );
+  // @dnd-kit 센서 설정 제거 - 네이티브 드래그앤드롭 사용
+  // const sensors = useSensors(...);
 
-  // 드래그 시작
-  const handleDragStart = (event: DragStartEvent) => {
-    const { active } = event;
-    // 현재 드래그되는 아이템 찾기
-    for (const [columnId, column] of Object.entries(columns)) {
-      const task = column.items.find(item => item.id === active.id);
-      if (task) {
-        setActiveTask(task);
-        break;
-      }
-    }
-  };
-
-  // 드래그 오버 - 삽입 위치 시각적 피드백
-  const handleDragOver = (event: DragOverEvent) => {
-    const { over } = event;
-    if (over) {
-      // 컬럼 위에 있는 경우
-      const column = columns[over.id as string];
-      if (column) {
-        setOverColumnId(over.id as string);
-        setOverItemId(null);
-      } else {
-        // 특정 아이템 위에 있는 경우
-        setOverItemId(over.id as string);
-        // 해당 아이템이 속한 컬럼 찾기
-        for (const [columnId, col] of Object.entries(columns)) {
-          const item = col.items.find(item => item.id === over.id);
-          if (item) {
-            setOverColumnId(columnId);
-            break;
-          }
-        }
-      }
-    }
-  };
-
-  // 드래그 종료 - 자리 양보 방식으로 삽입
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    setActiveTask(null);
-    setOverColumnId(null);
-    setOverItemId(null);
-    if (!over) return;
-
-    const activeId = active.id as string;
-    const overId = over.id as string;
-
-    // 소스 컬럼과 아이템 찾기
-    let sourceColumnId = '';
-    let sourceItem = null;
-    let sourceIndex = -1;
-    for (const [columnId, column] of Object.entries(columns)) {
-      const idx = column.items.findIndex(item => item.id === activeId);
-      if (idx !== -1) {
-        sourceColumnId = columnId;
-        sourceItem = column.items[idx];
-        sourceIndex = idx;
-        break;
-      }
-    }
-    if (!sourceItem) return;
-
-    // 타겟 컬럼과 인덱스 찾기
-    let targetColumnId = '';
-    let targetIndex = -1;
-    
-    // 컬럼 자체에 드롭한 경우
-    if (columns[overId]) {
-      targetColumnId = overId;
-      targetIndex = 0; // 맨 위에 삽입
-    } else {
-      // 특정 아이템 위에 드롭한 경우
-      for (const [columnId, column] of Object.entries(columns)) {
-        const idx = column.items.findIndex(item => item.id === overId);
-        if (idx !== -1) {
-          targetColumnId = columnId;
-          targetIndex = idx; // 해당 아이템 위치에 삽입 (자리 양보)
-          break;
-        }
-      }
-    }
-
-    if (!targetColumnId) return;
-
-    // 같은 컬럼 내 이동
-    if (sourceColumnId === targetColumnId) {
-      if (sourceIndex === targetIndex) return;
-      
-      const items = [...columns[sourceColumnId].items];
-      const newItems = arrayMove(items, sourceIndex, targetIndex);
-      setColumns({
-        ...columns,
-        [sourceColumnId]: { ...columns[sourceColumnId], items: newItems }
-      });
-    } else {
-      // 다른 컬럼으로 이동 - 자리 양보 방식으로 삽입
-      const sourceItems = [...columns[sourceColumnId].items];
-      sourceItems.splice(sourceIndex, 1); // 소스에서 제거
-      
-      const targetItems = [...columns[targetColumnId].items];
-      
-      // 자리 양보 방식: 삽입 위치의 기존 아이템들이 한 칸씩 밀려나서 자리를 비워줌
-      const newTargetItems = [
-        ...targetItems.slice(0, targetIndex), // 삽입 위치 이전 아이템들 (그대로 유지)
-        sourceItem, // 삽입할 아이템 (빈 자리에 들어감)
-        ...targetItems.slice(targetIndex) // 삽입 위치 이후 아이템들 (한 칸씩 밀려남)
-      ];
-      
-      setColumns({
-        ...columns,
-        [sourceColumnId]: { ...columns[sourceColumnId], items: sourceItems },
-        [targetColumnId]: { ...columns[targetColumnId], items: newTargetItems }
-      });
-    }
-  };
+  // 드래그 핸들러들 제거 - 네이티브 드래그앤드롭 사용
+  /*
+  const handleDragStart = (event: DragStartEvent) => { ... };
+  const handleDragOver = (event: DragOverEvent) => { ... };
+  const handleDragEnd = (event: DragEndEvent) => { ... };
+  */
 
 
 
@@ -734,13 +578,8 @@ const MainContent = () => {
                 </div>
               </div>
               {/* 칸반보드 스타일 - @dnd-kit 드래그 앤 드롭 */}
-              <DndContext
-                sensors={sensors}
-                collisionDetection={closestCorners}
-                onDragStart={handleDragStart}
-                onDragOver={handleDragOver}
-                onDragEnd={handleDragEnd}
-              >
+              {/* DndContext 제거 - 네이티브 드래그앤드롭 사용 */}
+              <div>
                 <div className="grid grid-cols-3 gap-4 min-h-[700px]">
                   {['todo', 'progress', 'done'].map((colId) => {
                     const col = columns[colId];
@@ -777,14 +616,8 @@ const MainContent = () => {
                 })}
                 </div>
 
-                {/* 드래그 오버레이 */}
-                <DragOverlay dropAnimation={{
-                  duration: 200,
-                  easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)',
-                }}>
-                  {activeTask ? <TaskCard task={activeTask} columnId="todo" onTaskSelect={() => {}} /> : null}
-                </DragOverlay>
-              </DndContext>
+                {/* 드래그 오버레이 제거 - 네이티브 드래그앤드롭 사용 */}
+              </div>
             </motion.div>
           </div>
 

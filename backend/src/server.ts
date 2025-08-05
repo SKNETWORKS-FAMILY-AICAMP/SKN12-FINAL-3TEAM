@@ -83,7 +83,7 @@ const io = new SocketIOServer(server, {
   }
 });
 
-const PORT = parseInt(process.env.PORT || '3500', 10);
+const PORT = parseInt(process.env.PORT || '8000', 10);
 const HOST = process.env.HOST || '0.0.0.0';
 
 // 기본 미들웨어 설정

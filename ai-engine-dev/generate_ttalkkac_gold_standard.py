@@ -535,14 +535,14 @@ def save_final_datasets(train_dataset: List[Dict], val_dataset: List[Dict], stat
     # 통계 계산 및 저장
     if train_dataset:
         train_quality_avg = sum(s["quality_metrics"]["final_score"] for s in train_dataset) / len(train_dataset)
-        train_lengths = [s["metadata"]["transcript_length"] for s in train_dataset]
+        train_lengths = [s["metadata"].get("transcript_length", s["metadata"].get("original_transcript_length", 0)) for s in train_dataset]
     else:
         train_quality_avg = 0
         train_lengths = []
         
     if val_dataset:
         val_quality_avg = sum(s["quality_metrics"]["final_score"] for s in val_dataset) / len(val_dataset)
-        val_lengths = [s["metadata"]["transcript_length"] for s in val_dataset]
+        val_lengths = [s["metadata"].get("transcript_length", s["metadata"].get("original_transcript_length", 0)) for s in val_dataset]
     else:
         val_quality_avg = 0
         val_lengths = []

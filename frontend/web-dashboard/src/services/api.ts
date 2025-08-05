@@ -2,8 +2,8 @@ import axios, { AxiosResponse } from 'axios';
 import { io, Socket } from 'socket.io-client';
 
 // API 기본 설정
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3500';
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3500';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:8000';
 const TENANT_SLUG = import.meta.env.VITE_TENANT_SLUG || 'default';
 
 // Axios 인스턴스 생성
