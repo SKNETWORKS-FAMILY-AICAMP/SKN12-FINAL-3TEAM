@@ -180,20 +180,58 @@ app.event('message', async ({ event, message, say, client }) => {
 // 모든 명령어 디버깅  
 app.command(/.*/, async ({ command, ack, respond, client }) => {
   console.log('🔍 수신된 명령어:', command.command, command);
-  await ack();
   
-  if (command.command === '/tk') {
-    const text = command.text.trim();
-    console.log(`📱 Slack 명령어 수신: /tk ${text}`);
+  try {
+    await ack();
     
-    // 채널 정보를 포함해서 처리
-    await handleTkCommand(text, respond, client, command.channel_id, command.user_id);
-  } else {
-    await respond({
-      text: `알 수 없는 명령어: ${command.command}. \`/tk help\`를 사용해보세요.`
-    });
+    if (command.command === '/tk') {
+      const text = command.text.trim();
+      console.log(`📱 Slack 명령어 수신: /tk ${text}`);
+      
+      // 채널 정보를 포함해서 처리
+      await handleTkCommandSafe(text, respond, client, command.channel_id, command.user_id);
+    } else {
+      await respond({
+        text: `알 수 없는 명령어: ${command.command}. \`/tk help\`를 사용해보세요.`
+      });
+    }
+  } catch (error) {
+    console.error('❌ Slash command 처리 오류:', error);
+    try {
+      await respond({
+        text: `❌ 명령어 처리 중 오류가 발생했습니다: ${error.message}`
+      });
+    } catch (respondError) {
+      console.error('❌ 응답 전송 실패:', respondError);
+    }
   }
 });
+
+// /tk 명령어 안전 처리 래퍼
+async function handleTkCommandSafe(text, respond, client, channelId, userId) {
+  try {
+    console.log(`🎯 처리 시작: /tk ${text}`);
+    await handleTkCommand(text, respond, client, channelId, userId);
+    console.log(`✅ 처리 완료: /tk ${text}`);
+  } catch (error) {
+    console.error(`❌ /tk ${text} 명령어 처리 오류:`, error);
+    console.error('오류 상세:', {
+      message: error.message,
+      stack: error.stack,
+      channelId,
+      userId,
+      text
+    });
+    
+    try {
+      await respond({
+        text: `❌ 명령어 처리 중 오류가 발생했습니다.\n\n**오류 내용:** ${error.message}\n\n다시 시도해주세요.`
+      });
+    } catch (respondError) {
+      console.error('❌ 오류 응답 전송 실패:', respondError);
+    }
+  }
+}
 
 // /tk 명령어 처리 함수
 async function handleTkCommand(text, respond, client, channelId, userId) {
@@ -866,6 +904,64 @@ app.action('input_transcript_button', async ({ ack, body, client }) => {
   }
 });
 
+// 디버깅 버튼 처리
+app.action('debugging_button', async ({ ack, body, client }) => {
+  await ack();
+  
+  try {
+    // 기존 회의록 등록과 완전히 동일한 모달 사용
+    await client.views.open({
+      trigger_id: body.trigger_id,
+      view: {
+        type: 'modal',
+        callback_id: 'transcript_input_modal',  // ⭐ 기존과 동일한 callback_id
+        title: {
+          type: 'plain_text',
+          text: '🐛 디버깅 - 회의록 등록'  // 제목만 살짝 변경
+        },
+        submit: {
+          type: 'plain_text',
+          text: '업무 생성'
+        },
+        close: {
+          type: 'plain_text',
+          text: '취소'
+        },
+        blocks: [
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: '🐛 *디버깅 모드 - 회의록 등록*\n\n이미 정리된 회의록을 입력하시면 AI가 바로 PRD와 업무를 생성합니다.\n*요약 과정은 생략됩니다.*'
+            }
+          },
+          {
+            type: 'input',
+            block_id: 'transcript_input',  // ⭐ 기존과 동일
+            element: {
+              type: 'plain_text_input',
+              action_id: 'transcript_text',  // ⭐ 기존과 동일
+              multiline: true,
+              placeholder: {
+                type: 'plain_text',
+                text: '예시: 오늘 회의에서 논의된 내용을 정리하면...\n\n1. 프로젝트 목표: 새로운 전자상거래 플랫폼 개발\n2. 주요 기능: 사용자 인증, 상품 관리, 결제 시스템\n3. 일정: 3개월 내 완료\n4. 담당자: 프론트엔드 김○○, 백엔드 박○○...'
+              },
+              min_length: 50
+            },
+            label: {
+              type: 'plain_text',
+              text: '회의록 내용 (최소 50자)'
+            }
+          }
+        ]
+      }
+    });
+  } catch (error) {
+    console.error('디버깅 모달 열기 오류:', error);
+  }
+});
+
+
 // 메시지 이벤트 처리
 app.message(async ({ message, ack, say }) => {
   // message_changed 이벤트나 봇 메시지는 무시
@@ -1037,10 +1133,11 @@ async function processTranscriptWithAI(transcript, client, channelId) {
   try {
     console.log('📝 회의록 직접 처리 시작:', transcript.substring(0, 100) + '...');
     
+    // ⭐ AI 서비스 호출 부분 주석처리
+    /*
     if (!aiService) {
       throw new Error('AI 서비스가 초기화되지 않았습니다.');
     }
-
     // 회의록 → PRD → 업무 생성 (요약 과정 생략)
     const result = await aiService.processTwoStagePipeline(
       Buffer.from(transcript), 
@@ -1048,151 +1145,227 @@ async function processTranscriptWithAI(transcript, client, channelId) {
     );
     
     console.log('🔍 2단계 파이프라인 결과:', JSON.stringify(result, null, 2));
+    */
     
-    if (result.success) {
-      // ⭐ AI 결과에서 올바른 데이터 추출 (실제 구조에 맞춰)
-      let extractedSummary = '프로젝트 개요가 생성되었습니다.';
-      let extractedTitle = '생성된 프로젝트';
-      let actionItems = [];
+    // ⭐ JSON 입력 데이터 직접 파싱
+    console.log('📋 입력 JSON 데이터 직접 파싱');
+    let inputData;
+    try {
+      inputData = JSON.parse(transcript);
+      console.log('✅ JSON 파싱 성공:', {
+        hasSummary: !!inputData.summary,
+        hasActionItems: !!inputData.action_items,
+        actionItemsCount: inputData.action_items?.length || 0
+      });
+    } catch (parseError) {
+      console.error('❌ JSON 파싱 실패:', parseError);
+      throw new Error('유효하지 않은 JSON 형식입니다.');
+    }
+
+    // ⭐ 입력 데이터에서 직접 추출 (복잡한 로직 제거)
+    const extractedSummary = inputData.summary || '프로젝트 개요가 생성되었습니다.';
+    const extractedTitle = inputData.summary?.substring(0, 50) || '생성된 프로젝트';
+    const actionItems = inputData.action_items || [];
+    
+    // InputData 인터페이스에 맞게 구성
+    const aiData = {
+      summary: extractedSummary,
+      action_items: actionItems
+    };
+    
+    console.log('📊 추출된 AI 데이터:', {
+      summary: aiData.summary.substring(0, 50) + '...',
+      tasksCount: aiData.action_items.length
+    });
+    
+    const projectTitle = extractedTitle;
+    const projectSummary = aiData.summary;
+    const tasksCount = aiData.action_items.length;
+    
+    // Notion 연동 시도
+    let notionPageUrl = null;
+    try {
+      const { NotionService } = require('./services/notion-service');
+      const { PrismaClient } = require('@prisma/client');
+      const prisma = new PrismaClient();
       
-      // 1. stage1에서 transcript 파싱 (summary 추출)
-      if (result.stage1?.transcript) {
-        try {
-          // transcript는 JSON 문자열이므로 파싱 필요
-          const transcriptMatch = result.stage1.transcript.match(/"summary":\s*"([^"]+)"/);
-          if (transcriptMatch) {
-            extractedSummary = transcriptMatch[1];
-          }
-          
-          // title도 추출 시도
-          const titleMatch = result.stage1.transcript.match(/"title":\s*"([^"]+)"/);
-          if (titleMatch) {
-            extractedTitle = titleMatch[1];
-          }
-        } catch (error) {
-          console.error('transcript 파싱 오류:', error);
-        }
-      }
-      
-      // 2. stage2에서 실제 업무 데이터 추출
-      if (result.stage2?.task_master_prd?.tasks) {
-        actionItems = result.stage2.task_master_prd.tasks;
-        
-        // stage2에서 title도 가져올 수 있으면 업데이트
-        if (result.stage2.task_master_prd.title) {
-          extractedTitle = result.stage2.task_master_prd.title;
-        }
-        
-        // stage2에서 overview도 가져올 수 있으면 업데이트
-        if (result.stage2.task_master_prd.overview) {
-          extractedSummary = result.stage2.task_master_prd.overview;
-        }
-      }
-      
-      // 3. 최종 aiData 구성
-      const aiData = {
-        title: extractedTitle,
-        summary: extractedSummary,
-        action_items: actionItems
-      };
-      
-      console.log('📊 추출된 AI 데이터:', {
-        title: aiData.title,
-        summary: aiData.summary.substring(0, 50) + '...',
-        tasksCount: aiData.action_items.length
+      // tenant slug를 실제 tenant ID로 변환
+      const tenant = await prisma.tenant.findUnique({
+        where: { slug: tenantSlug }
       });
       
-      const projectTitle = aiData.title;
-      const projectSummary = aiData.summary;
-      const tasksCount = aiData.action_items.length;
+      if (!tenant) {
+        throw new Error('Tenant not found');
+      }
       
-      // Notion 연동 시도
-      let notionPageUrl = null;
-      try {
-        const { NotionService } = require('./services/notion-service');
-        const { PrismaClient } = require('@prisma/client');
-        const prisma = new PrismaClient();
-        
-        // tenant slug를 실제 tenant ID로 변환
-        const tenant = await prisma.tenant.findUnique({
-          where: { slug: tenantSlug }
-        });
-        
-        if (!tenant) {
-          throw new Error('Tenant not found');
-        }
-        
-        // Slack 사용자 ID를 실제 User ID로 변환
-        const user = await prisma.user.findFirst({
-          where: {
-            tenantId: tenant.id,
-            slackUserId: slackUserId
-          }
-        });
-        
-        if (!user) {
-          console.log(`❌ Notion 연동 없음: tenantId=${tenantSlug}, userId=${slackUserId}`);
-          throw new Error('User not found');
-        }
-        
-        console.log('🔍 Notion 연동 확인:', {
+      // Slack 사용자 ID를 실제 User ID로 변환
+      const user = await prisma.user.findFirst({
+        where: {
           tenantId: tenant.id,
-          userId: user.id,
           slackUserId: slackUserId
-        });
-        
-        const notionService = await NotionService.createForUser(tenant.id, user.id);
-        
-        if (notionService) {
-          console.log('📝 Notion 페이지 생성 시도...');
-          
-          // ⭐ 새로운 인터페이스에 맞게 데이터 구성
-          const meetingData = {
-            title: aiData.title,
-            summary: aiData.summary,
-            action_items: aiData.action_items,
-            date: new Date().toLocaleDateString('ko-KR'),
-            attendees: [`Slack User ${slackUserId}`]
-          };
-          
-          console.log('📋 Notion에 전달할 데이터:', {
-            title: meetingData.title,
-            summary: meetingData.summary.substring(0, 50) + '...',
-            actionItemsCount: meetingData.action_items.length,
-            firstTaskTitle: meetingData.action_items[0]?.title || 'none'
-          });
-          
-          const notionPage = await notionService.createMeetingPage(meetingData);
-          
-          notionPageUrl = notionPage.url;
-          console.log('✅ Notion 페이지 생성 성공:', notionPageUrl);
-        } else {
-          console.log('ℹ️ Notion 연동 안됨');
         }
-      } catch (notionError) {
-        console.error('❌ Notion 페이지 생성 실패:', notionError);
-        // Notion 실패해도 계속 진행
+      });
+      
+      if (!user) {
+        console.log(`❌ Notion 연동 없음: tenantId=${tenantSlug}, userId=${slackUserId}`);
+        throw new Error('User not found');
       }
       
-      // JIRA 연동 시도
-      let jiraResult = null;
-      try {
-        const { JiraService } = require('./services/jira-service');
-        const { PrismaClient } = require('@prisma/client');
+      console.log('🔍 Notion 연동 확인:', {
+        tenantId: tenant.id,
+        userId: user.id,
+        slackUserId: slackUserId
+      });
+      
+      const notionService = await NotionService.createForUser(tenant.id, user.id);
+      
+      if (notionService) {
+        console.log('📝 Notion 페이지 생성 시도...');
         
-        const prisma = new PrismaClient();
-        const jiraService = new JiraService(prisma);
+        // ⭐ InputData 인터페이스에 맞게 데이터 구성
+        const notionInputData = {
+          summary: aiData.summary,
+          action_items: aiData.action_items
+        };
         
-        // tenant slug를 실제 tenant ID로 변환
-        const tenant = await prisma.tenant.findUnique({
-          where: { slug: tenantSlug }
+        // Notion 페이지 생성 직전에 정확히 어떤 데이터가 전달되는지 확인
+        console.log('📋 Notion에 전달할 데이터 최종 검증:', {
+          summary: notionInputData.summary.substring(0, 50) + '...',
+          actionItemsCount: notionInputData.action_items.length,
+          firstItem: notionInputData.action_items[0] ? {
+            id: notionInputData.action_items[0].id,
+            title: notionInputData.action_items[0].title,
+            start_date: notionInputData.action_items[0].start_date,
+            deadline: notionInputData.action_items[0].deadline,
+            start_date_type: typeof notionInputData.action_items[0].start_date
+          } : 'NONE'
         });
         
-        if (!tenant) {
-          throw new Error('Tenant not found for JIRA');
-        }
+        const notionPage = await notionService.createMeetingPage(notionInputData);
         
-        // Slack 사용자 ID를 실제 User ID로 변환
+        notionPageUrl = notionPage.url;
+        console.log('✅ Notion 페이지 생성 성공:', notionPageUrl);
+      } else {
+        console.log('ℹ️ Notion 연동 안됨');
+      }
+    } catch (notionError) {
+      console.error('❌ Notion 페이지 생성 실패:', notionError);
+      // Notion 실패해도 계속 진행
+    }
+    
+    // JIRA 연동 시도
+    let jiraResult = null;
+    try {
+      const { JiraService } = require('./services/jira-service');
+      const { PrismaClient } = require('@prisma/client');
+      
+      const prisma = new PrismaClient();
+      const jiraService = new JiraService(prisma);
+      
+      // tenant slug를 실제 tenant ID로 변환
+      const tenant = await prisma.tenant.findUnique({
+        where: { slug: tenantSlug }
+      });
+      
+      if (!tenant) {
+        throw new Error('Tenant not found for JIRA');
+      }
+      
+      // Slack 사용자 ID를 실제 User ID로 변환
+      const user = await prisma.user.findFirst({
+        where: {
+          tenantId: tenant.id,
+          slackUserId: slackUserId
+        }
+      });
+      
+      if (!user) {
+        console.log(`❌ JIRA 연동 없음: tenantId=${tenantSlug}, userId=${slackUserId}`);
+        throw new Error('User not found for JIRA');
+      }
+      
+      // JIRA 연동 상태 확인
+      const jiraStatus = await jiraService.checkJiraConnection(tenant.id, user.id);
+      
+      // 실제 AI 태스크 데이터 사용
+      const tasks = aiData.action_items;
+      
+      if (jiraStatus.connected && tasks && tasks.length > 0) {
+        console.log('🎫 JIRA 계층적 이슈 생성 시도...');
+        
+        let projectKey = 'TK'; // fallback
+        try {
+          const jiraService = new JiraService(prisma);
+          const integration = await jiraService.getJiraIntegration(tenant.id, user.id);
+          projectKey = integration?.config?.defaultProjectKey || 'TK284743';
+        } catch (error) {
+          console.log('프로젝트 키 조회 실패, 기본값 사용');
+        }
+
+        const jiraResult = await jiraService.syncTaskMasterToJira(tenant.id, user.id, {
+          title: projectTitle,
+          overview: projectSummary,
+          tasks: tasks,
+          projectKey: projectKey  // ← 프로젝트 키 직접 전달
+        });
+        
+        if (jiraResult.success) {
+          console.log(`✅ TaskMaster → JIRA 매핑 완료: Epic ${jiraResult.epicsCreated}개, Task ${jiraResult.tasksCreated}개`);
+        } else {
+          console.error('❌ TaskMaster → JIRA 매핑 실패:', jiraResult.error);
+        }
+      } else {
+        console.log('ℹ️ JIRA 연동 조건 미충족:', {
+          connected: jiraStatus.connected,
+          jiraError: jiraStatus.error,
+          tasksCount: tasks.length
+        });
+      }
+    } catch (jiraError) {
+      console.error('❌ JIRA 이슈 생성 실패:', jiraError.message);
+      // JIRA 실패해도 계속 진행
+    }
+    
+    // ⭐ 버튼 생성 (무조건 두 개 다 표시)
+    const actionElements = [];
+    
+    // 1. Notion 버튼 (성공/실패 관계없이 항상 표시)
+    const notionUrl = notionPageUrl || `${process.env.APP_URL}/auth/notion/${tenantSlug}?userId=${slackUserId}`;
+    const notionButtonText = notionPageUrl ? '📝 Notion에서 보기' : '🔗 Notion 연결하기';
+    
+    // ⭐ 여기에 디버깅 로그 추가
+    console.log('🔍 Notion 버튼 생성 디버깅:', {
+      notionPageUrl: notionPageUrl,
+      notionPageUrlExists: !!notionPageUrl,
+      buttonText: notionButtonText
+    });
+    
+    actionElements.push({
+      type: 'button',
+      text: {
+        type: 'plain_text',
+        text: notionButtonText
+      },
+      url: notionUrl,
+      action_id: notionPageUrl ? 'view_notion_page' : 'connect_notion'
+    });
+    
+    // 2. JIRA 버튼 (성공/실패 관계없이 항상 표시)
+    let jiraUrl = '#';
+    let jiraButtonText = '🎫 JIRA에서 보기';
+    
+    try {
+      const { JiraService } = require('./services/jira-service');
+      const { PrismaClient } = require('@prisma/client');
+      
+      const prisma = new PrismaClient();
+      const jiraService = new JiraService(prisma);
+      
+      const tenant = await prisma.tenant.findUnique({
+        where: { slug: tenantSlug }
+      });
+      
+      if (tenant) {
         const user = await prisma.user.findFirst({
           where: {
             tenantId: tenant.id,
@@ -1200,109 +1373,27 @@ async function processTranscriptWithAI(transcript, client, channelId) {
           }
         });
         
-        if (!user) {
-          console.log(`❌ JIRA 연동 없음: tenantId=${tenantSlug}, userId=${slackUserId}`);
-          throw new Error('User not found for JIRA');
-        }
-        
-        // JIRA 연동 상태 확인
-        const jiraStatus = await jiraService.checkJiraConnection(tenant.id, user.id);
-        
-        // 실제 AI 태스크 데이터 사용
-        const tasks = aiData.action_items;
-        
-        if (jiraStatus.connected && tasks && tasks.length > 0) {
-          console.log('🎫 JIRA 계층적 이슈 생성 시도...');
+        if (user) {
+          const integration = await jiraService.getJiraIntegration(tenant.id, user.id);
           
-          // TaskMaster → JIRA 올바른 매핑 (실제 데이터 사용)
-          jiraResult = await jiraService.syncTaskMasterToJira(tenant.id, user.id, {
-            title: projectTitle,
-            overview: projectSummary,
-            tasks: tasks
-          });
-          
-          if (jiraResult.success) {
-            console.log(`✅ TaskMaster → JIRA 매핑 완료: Epic ${jiraResult.epicsCreated}개, Task ${jiraResult.tasksCreated}개`);
-          } else {
-            console.error('❌ TaskMaster → JIRA 매핑 실패:', jiraResult.error);
-          }
-        } else {
-          console.log('ℹ️ JIRA 연동 조건 미충족:', {
-            connected: jiraStatus.connected,
-            jiraError: jiraStatus.error,
-            tasksCount: tasks.length
-          });
-        }
-      } catch (jiraError) {
-        console.error('❌ JIRA 이슈 생성 실패:', jiraError.message);
-        // JIRA 실패해도 계속 진행
-      }
-      
-      // ⭐ 버튼 생성 (무조건 두 개 다 표시)
-      const actionElements = [];
-      
-      // 1. Notion 버튼 (성공/실패 관계없이 항상 표시)
-      const notionUrl = notionPageUrl || `${process.env.APP_URL}/auth/notion/${tenantSlug}?userId=${slackUserId}`;
-      const notionButtonText = notionPageUrl ? '📝 Notion에서 보기' : '🔗 Notion 연결하기';
-      
-      actionElements.push({
-        type: 'button',
-        text: {
-          type: 'plain_text',
-          text: notionButtonText
-        },
-        url: notionUrl,
-        action_id: notionPageUrl ? 'view_notion_page' : 'connect_notion'
-      });
-      
-      // 2. JIRA 버튼 (성공/실패 관계없이 항상 표시)
-      let jiraUrl = '#';
-      let jiraButtonText = '🎫 JIRA에서 보기';
-      
-      try {
-        const { JiraService } = require('./services/jira-service');
-        const { PrismaClient } = require('@prisma/client');
-        
-        const prisma = new PrismaClient();
-        const jiraService = new JiraService(prisma);
-        
-        const tenant = await prisma.tenant.findUnique({
-          where: { slug: tenantSlug }
-        });
-        
-        if (tenant) {
-          const user = await prisma.user.findFirst({
-            where: {
-              tenantId: tenant.id,
-              slackUserId: slackUserId
-            }
-          });
-          
-          if (user) {
-            const integration = await jiraService.getJiraIntegration(tenant.id, user.id);
-            
-            if (integration?.config?.site_url) {
-              // JIRA 연동 성공한 경우
-              if (jiraResult?.success && jiraResult.epics && jiraResult.epics.length > 0) {
-                if (jiraResult.epics.length === 1) {
-                  jiraUrl = `${integration.config.site_url}/browse/${jiraResult.epics[0]}`;
-                  jiraButtonText = '🎫 Epic 보기';
-                } else {
-                  const projectKey = jiraResult.projectKey || integration?.config?.defaultProjectKey || 'TK';
-                  jiraUrl = `${integration.config.site_url}/jira/software/projects/${projectKey}/timeline`;
-                  jiraButtonText = '🎫 JIRA 타임라인 보기';
-                }
+          if (integration?.config?.site_url) {
+            // JIRA 연동 성공한 경우
+            if (jiraResult?.success && jiraResult.epics && jiraResult.epics.length > 0) {
+              if (jiraResult.epics.length === 1) {
+                jiraUrl = `${integration.config.site_url}/browse/${jiraResult.epics[0]}`;
+                jiraButtonText = '🎫 Epic 보기';
               } else {
-                const projectKey = jiraResult?.projectKey || integration?.config?.defaultProjectKey || 'TK';
+                const projectKey = jiraResult.projectKey || integration?.config?.defaultProjectKey || 'TK';
                 jiraUrl = `${integration.config.site_url}/jira/software/projects/${projectKey}/timeline`;
                 jiraButtonText = '🎫 JIRA 타임라인 보기';
               }
             } else {
-              // JIRA 연동이 안된 경우
-              jiraUrl = `${process.env.APP_URL}/auth/jira/${tenantSlug}?userId=${slackUserId}`;
-              jiraButtonText = '🔗 JIRA 연결하기';
+              const projectKey = jiraResult?.projectKey || integration?.config?.defaultProjectKey || 'TK';
+              jiraUrl = `${integration.config.site_url}/jira/software/projects/${projectKey}/timeline`;
+              jiraButtonText = '🎫 JIRA 타임라인 보기';
             }
           } else {
+            // JIRA 연동이 안된 경우
             jiraUrl = `${process.env.APP_URL}/auth/jira/${tenantSlug}?userId=${slackUserId}`;
             jiraButtonText = '🔗 JIRA 연결하기';
           }
@@ -1310,77 +1401,77 @@ async function processTranscriptWithAI(transcript, client, channelId) {
           jiraUrl = `${process.env.APP_URL}/auth/jira/${tenantSlug}?userId=${slackUserId}`;
           jiraButtonText = '🔗 JIRA 연결하기';
         }
-      } catch (error) {
-        console.error('JIRA 버튼 생성 실패:', error);
+      } else {
         jiraUrl = `${process.env.APP_URL}/auth/jira/${tenantSlug}?userId=${slackUserId}`;
         jiraButtonText = '🔗 JIRA 연결하기';
       }
-      
-      actionElements.push({
-        type: 'button',
+    } catch (error) {
+      console.error('JIRA 버튼 생성 실패:', error);
+      jiraUrl = `${process.env.APP_URL}/auth/jira/${tenantSlug}?userId=${slackUserId}`;
+      jiraButtonText = '🔗 JIRA 연결하기';
+    }
+    
+    actionElements.push({
+      type: 'button',
+      text: {
+        type: 'plain_text',
+        text: jiraButtonText
+      },
+      url: jiraUrl,
+      action_id: jiraUrl.includes('atlassian') ? 'view_jira_project' : 'connect_jira'
+    });
+    
+    // ⭐ 결과 메시지 전송 (버튼 포함)
+    const resultBlocks = [
+      {
+        type: 'section',
         text: {
-          type: 'plain_text',
-          text: jiraButtonText
-        },
-        url: jiraUrl,
-        action_id: jiraUrl.includes('atlassian') ? 'view_jira_project' : 'connect_jira'
-      });
-      
-      // ⭐ 결과 메시지 전송 (버튼 포함)
-      const resultBlocks = [
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: `🎯 *${projectTitle}*\n\n📋 **개요:**\n${projectSummary.substring(0, 200)}${projectSummary.length > 200 ? '...' : ''}\n\n📊 **생성된 업무:** ${tasksCount}개`
-          }
-        },
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: `*✨ 처리 완료된 항목:*\n• ✅ 회의록 분석\n• ✅ PRD 생성\n• ✅ 업무 생성\n• ✅ 담당자 배정${notionPageUrl ? '\n• ✅ Notion 페이지 생성' : ''}${jiraResult?.success ? `\n• ✅ JIRA Epic ${jiraResult.epicsCreated}개, Task ${jiraResult.tasksCreated}개 생성` : ''}`
-          }
+          type: 'mrkdwn',
+          text: `🎯 *${projectTitle}*\n\n📋 **개요:**\n${projectSummary.substring(0, 200)}${projectSummary.length > 200 ? '...' : ''}\n\n📊 **생성된 업무:** ${tasksCount}개`
         }
-      ];
-      
-      // ⭐ 핵심: actions 블록 추가
-      if (actionElements.length > 0) {
-        resultBlocks.push({
-          type: 'actions',
-          elements: actionElements
-        });
+      },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `*✨ 처리 완료된 항목:*\n• ✅ 회의록 분석\n• ✅ PRD 생성\n• ✅ 업무 생성\n• ✅ 담당자 배정${notionPageUrl ? '\n• ✅ Notion 페이지 생성' : ''}${jiraResult?.success ? `\n• ✅ JIRA Epic ${jiraResult.epicsCreated}개, Task ${jiraResult.tasksCreated}개 생성` : ''}`
+        }
       }
+    ];
+    
+    // ⭐ 핵심: actions 블록 추가
+    if (actionElements.length > 0) {
+      resultBlocks.push({
+        type: 'actions',
+        elements: actionElements
+      });
+    }
+    
+    await client.chat.postMessage({
+      channel: channelId,
+      text: '✅ 회의록 분석 완료!',
+      blocks: resultBlocks
+    });
+    
+    // 생성된 업무 목록 전송 (실제 데이터로)
+    if (aiData.action_items && aiData.action_items.length > 0) {
+      const taskList = aiData.action_items.slice(0, 5).map((task, index) => 
+        `${index + 1}. ${task.title} (복잡도: ${task.complexity || 'medium'}, ${task.estimated_hours || 0}h${task.assignee ? `, 담당: ${task.assignee}` : ''})`
+      ).join('\n');
       
       await client.chat.postMessage({
         channel: channelId,
-        text: '✅ 회의록 분석 완료!',
-        blocks: resultBlocks
-      });
-      
-      // 생성된 업무 목록 전송 (실제 데이터로)
-      if (aiData.action_items && aiData.action_items.length > 0) {
-        const taskList = aiData.action_items.slice(0, 5).map((task, index) => 
-          `${index + 1}. ${task.title} (복잡도: ${task.complexity || 'medium'}, ${task.estimated_hours || 0}h${task.assignee ? `, 담당: ${task.assignee}` : ''})`
-        ).join('\n');
-        
-        await client.chat.postMessage({
-          channel: channelId,
-          text: '📋 생성된 업무 목록',
-          blocks: [
-            {
-              type: 'section',
-              text: {
-                type: 'mrkdwn',
-                text: `*📋 생성된 업무 목록 (상위 ${Math.min(5, aiData.action_items.length)}개)*\n\n${taskList}${aiData.action_items.length > 5 ? `\n\n... 외 ${aiData.action_items.length - 5}개 업무` : ''}`
-              }
+        text: '📋 생성된 업무 목록',
+        blocks: [
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: `*📋 생성된 업무 목록 (상위 ${Math.min(5, aiData.action_items.length)}개)*\n\n${taskList}${aiData.action_items.length > 5 ? `\n\n... 외 ${aiData.action_items.length - 5}개 업무` : ''}`
             }
-          ]
-        });
-      }
-      
-    } else {
-      throw new Error(result.error || 'AI 처리에 실패했습니다.');
+          }
+        ]
+      });
     }
     
   } catch (error) {
@@ -1611,498 +1702,6 @@ app.view('transcript_input_modal', async ({ ack, body, view, client }) => {
     console.error('❌ 모달 처리 오류:', error);
   }
 });
-/*
-// 회의록 전용 처리 함수 (기존 코드, 주석 처리) (요약 과정 생략 + Notion 연동)
-async function processTranscriptWithAI(transcript, client, channelId) {
-  // ⭐ 간단한 print 확인
-  console.log('=== processTranscriptWithAI 시작 ===');
-  console.log('받은 transcript:');
-  console.log(transcript);
-  console.log('transcript 타입:', typeof transcript);
-  console.log('transcript 길이:', transcript.length);
-  console.log('===================================');
-  const slackUserId = channelId; // DM에서는 channelId가 userId와 같음
-  const tenantSlug = 'dev-tenant'; // 임시로 고정
-  
-  try {
-    console.log('📝 회의록 직접 처리 시작:', transcript.substring(0, 100) + '...');
-    
-    if (!aiService) {
-      throw new Error('AI 서비스가 초기화되지 않았습니다.');
-    }
-
-    // 회의록 → PRD → 업무 생성 (요약 과정 생략)
-    const result = await aiService.processTwoStagePipeline(
-      Buffer.from(transcript), 
-      'transcript-input.txt'
-    );
-    
-    console.log('🔍 2단계 파이프라인 결과:', JSON.stringify(result, null, 2));
-    
-    if (result.success) {
-      // ⭐ AI 결과에서 올바른 데이터 추출
-      let aiProjectData = null;
-      let aiTasksData = null;
-      
-      // 데이터 구조 분석
-      console.log('🔍 AI 결과 구조 분석:', {
-        hasNotionProject: !!result.notion_project,
-        hasTasks: !!result.tasks,
-        hasStage2: !!result.stage2,
-        resultKeys: Object.keys(result)
-      });
-      
-      // notion_project에서 기본 정보 추출
-      if (result.notion_project) {
-        aiProjectData = result.notion_project;
-      }
-      
-      // 업무 데이터 추출 (여러 위치에서 시도)
-      if (result.tasks && Array.isArray(result.tasks)) {
-        aiTasksData = result.tasks;
-      } else if (result.stage2?.task_master_prd?.tasks) {
-        aiTasksData = result.stage2.task_master_prd.tasks;
-      } else if (result.action_items) {
-        aiTasksData = result.action_items;
-      }
-      
-      console.log('📊 추출된 데이터:', {
-        projectTitle: aiProjectData?.title,
-        projectOverview: aiProjectData?.overview?.substring(0, 50) + '...',
-        tasksCount: aiTasksData ? aiTasksData.length : 0
-      });
-      
-      const title = aiProjectData?.title || '생성된 프로젝트';
-      const overview = aiProjectData?.overview || '프로젝트 개요가 생성되었습니다.';
-      const tasksCount = aiTasksData ? aiTasksData.length : 0;
-      
-      // Notion 연동 시도
-      let notionPageUrl = null;
-      try {
-        const { NotionService } = require('./services/notion-service');
-        const { PrismaClient } = require('@prisma/client');
-        const prisma = new PrismaClient();
-        
-        // tenant slug를 실제 tenant ID로 변환
-        const tenant = await prisma.tenant.findUnique({
-          where: { slug: tenantSlug }
-        });
-        
-        if (!tenant) {
-          throw new Error('Tenant not found');
-        }
-        
-        // Slack 사용자 ID를 실제 User ID로 변환
-        const user = await prisma.user.findFirst({
-          where: {
-            tenantId: tenant.id,
-            slackUserId: slackUserId
-          }
-        });
-        
-        if (!user) {
-          console.log(`❌ Notion 연동 없음: tenantId=${tenantSlug}, userId=${slackUserId}`);
-          throw new Error('User not found');
-        }
-        
-        console.log('🔍 Notion 연동 확인:', {
-          tenantId: tenant.id,
-          userId: user.id,
-          slackUserId: slackUserId
-        });
-        
-        const notionService = await NotionService.createForUser(tenant.id, user.id);
-        
-        if (notionService) {
-          console.log('📝 Notion 페이지 생성 시도...');
-          
-          // ⭐ 실제 AI 데이터로 meetingData 구성
-          const meetingData = {
-            title: title,
-            overview: overview,
-            objectives: aiProjectData?.objectives || ['프로젝트 목표가 설정되지 않았습니다.'],
-            date: new Date().toLocaleDateString('ko-KR'),
-            attendees: [`Slack User ${slackUserId}`],
-            
-            // ⭐ 핵심: 실제 AI 태스크 데이터 전달
-            tasks: aiTasksData || [],
-            
-            // 추가 정보 (NotionService에서 우선순위 판단을 위해)
-            action_items: aiTasksData,
-            summary: overview
-          };
-          
-          console.log('📋 Notion에 전달할 데이터:', {
-            title: meetingData.title,
-            tasksCount: meetingData.tasks.length,
-            hasActionItems: !!(meetingData.action_items),
-            firstTaskTitle: meetingData.tasks[0]?.title || 'none'
-          });
-          
-          const notionPage = await notionService.createMeetingPage(meetingData);
-          
-          notionPageUrl = notionPage.url;
-          console.log('✅ Notion 페이지 생성 성공:', notionPageUrl);
-        } else {
-          console.log('ℹ️ Notion 연동 안됨');
-        }
-      } catch (notionError) {
-        console.error('❌ Notion 페이지 생성 실패:', notionError);
-        // Notion 실패해도 계속 진행
-      }
-      
-      // JIRA 연동 시도 (기존 코드 유지하되 데이터 수정)
-      let jiraResult = null;
-      try {
-        const { JiraService } = require('./services/jira-service');
-        const { PrismaClient } = require('@prisma/client');
-        
-        const prisma = new PrismaClient();
-        const jiraService = new JiraService(prisma);
-        
-        // tenant slug를 실제 tenant ID로 변환 (Notion과 동일한 로직)
-        const tenant = await prisma.tenant.findUnique({
-          where: { slug: tenantSlug }
-        });
-        
-        if (!tenant) {
-          throw new Error('Tenant not found for JIRA');
-        }
-        
-        // Slack 사용자 ID를 실제 User ID로 변환
-        const user = await prisma.user.findFirst({
-          where: {
-            tenantId: tenant.id,
-            slackUserId: slackUserId
-          }
-        });
-        
-        if (!user) {
-          console.log(`❌ JIRA 연동 없음: tenantId=${tenantSlug}, userId=${slackUserId}`);
-          throw new Error('User not found for JIRA');
-        }
-        
-        // JIRA 연동 상태 확인
-        const jiraStatus = await jiraService.checkJiraConnection(tenant.id, user.id);
-        
-        // ⭐ 실제 AI 태스크 데이터 사용
-        const tasks = aiTasksData || [];
-        
-        if (jiraStatus.connected && tasks && tasks.length > 0) {
-          console.log('🎫 JIRA 계층적 이슈 생성 시도...');
-          
-          // TaskMaster → JIRA 올바른 매핑 (실제 데이터 사용)
-          jiraResult = await jiraService.syncTaskMasterToJira(tenant.id, user.id, {
-            title: title,
-            overview: overview,
-            tasks: tasks // ⭐ 실제 AI 태스크 데이터
-          });
-          
-          if (jiraResult.success) {
-            console.log(`✅ TaskMaster → JIRA 매핑 완료: Epic ${jiraResult.epicsCreated}개, Task ${jiraResult.tasksCreated}개 (총 ${jiraResult.totalCreated}개)`);
-          } else {
-            console.error('❌ TaskMaster → JIRA 매핑 실패:', jiraResult.error);
-          }
-        } else {
-          console.log('ℹ️ JIRA 연동 조건 미충족:', {
-            connected: jiraStatus.connected,
-            jiraError: jiraStatus.error,
-            tasksCount: tasks.length
-          });
-        }
-      } catch (jiraError) {
-        console.error('❌ JIRA 이슈 생성 실패:', jiraError.message);
-        // JIRA 실패해도 계속 진행
-      }
-      
-      // 결과 메시지 전송 (기존 코드 유지)
-      const resultBlocks = [
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: `🎯 *${title}*\n\n📋 **개요:**\n${overview.substring(0, 200)}${overview.length > 200 ? '...' : ''}\n\n📊 **생성된 업무:** ${tasksCount}개`
-          }
-        },
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: `*✨ 처리 완료된 항목:*\n• ✅ 회의록 분석\n• ✅ PRD 생성\n• ✅ 업무 생성\n• ✅ 담당자 배정${notionPageUrl ? '\n• ✅ Notion 페이지 생성' : ''}${jiraResult?.success ? `\n• ✅ JIRA Epic ${jiraResult.epicsCreated}개, Task ${jiraResult.tasksCreated}개 생성` : ''}`
-          }
-        }
-      ];
-      
-      // 외부 링크 버튼들 (무조건 표시)
-      const actionElements = [];
-      
-      // Notion 버튼 (무조건 표시)
-      let notionUrl = notionPageUrl || `${process.env.APP_URL}/auth/notion/${tenantSlug}?userId=${slackUserId}`;
-      let notionButtonText = notionPageUrl ? '📝 Notion에서 보기' : '🔗 Notion 연결하기';
-      
-      actionElements.push({
-        type: 'button',
-        text: {
-          type: 'plain_text',
-          text: notionButtonText
-        },
-        url: notionUrl,
-        action_id: notionPageUrl ? 'view_notion_page' : 'connect_notion'
-      });
-      
-      // JIRA 버튼 로직 (기존 코드 유지)
-      let jiraUrl = '#';
-      let jiraButtonText = '🎫 JIRA에서 보기';
-      
-      try {
-        const { JiraService } = require('./services/jira-service');
-        const { PrismaClient } = require('@prisma/client');
-        
-        const prisma = new PrismaClient();
-        const jiraService = new JiraService(prisma);
-        
-        const tenantSlug = 'dev-tenant';
-        const tenant = await prisma.tenant.findUnique({
-          where: { slug: tenantSlug }
-        });
-        
-        if (!tenant) {
-          throw new Error('Tenant not found for JIRA URL');
-        }
-        
-        const user = await prisma.user.findFirst({
-          where: {
-            tenantId: tenant.id,
-            slackUserId: slackUserId
-          }
-        });
-        
-        if (!user) {
-          throw new Error('User not found for JIRA URL');
-        }
-        
-        const integration = await jiraService.getJiraIntegration(tenant.id, user.id);
-        
-        if (integration?.config?.site_url) {
-          if (jiraResult?.success && jiraResult.epics && jiraResult.epics.length > 0) {
-            if (jiraResult.epics.length === 1) {
-              jiraUrl = `${integration.config.site_url}/browse/${jiraResult.epics[0]}`;
-              jiraButtonText = '🎫 Epic 보기';
-            } else {
-              const projectKey = jiraResult.projectKey || integration?.config?.defaultProjectKey || 'TK';
-              jiraUrl = `${integration.config.site_url}/jira/software/projects/${projectKey}/timeline`;
-              jiraButtonText = '🎫 JIRA 타임라인 보기';
-            }
-          } else {
-            const projectKey = jiraResult?.projectKey || integration?.config?.defaultProjectKey || 'TK';
-            jiraUrl = `${integration.config.site_url}/jira/software/projects/${projectKey}/timeline`;
-            jiraButtonText = '🎫 JIRA 타임라인 보기';
-          }
-        } else {
-          jiraUrl = 'https://atlassian.com/software/jira';
-        }
-      } catch (error) {
-        console.error('JIRA URL 생성 실패:', error);
-        jiraUrl = 'https://atlassian.com/software/jira';
-      }
-      
-      
-      // JIRA 버튼 추가
-      actionElements.push({
-        type: 'button',
-        text: {
-          type: 'plain_text',
-          text: jiraButtonText
-        },
-        url: jiraUrl,
-        action_id: 'view_jira_project'
-      });
-      
-      // 버튼들을 결과 블록에 추가
-      if (actionElements.length > 0) {
-        resultBlocks.push({
-          type: 'actions',
-          elements: actionElements
-        });
-      }
-      
-      await client.chat.postMessage({
-        channel: channelId,
-        text: '✅ 회의록 분석 완료!',
-        blocks: resultBlocks
-      });
-      
-      // 생성된 업무 목록 전송 (실제 데이터로)
-      if (aiTasksData && aiTasksData.length > 0) {
-        const taskList = aiTasksData.slice(0, 5).map((task, index) => 
-          `${index + 1}. ${task.title} (복잡도: ${task.complexity || 'medium'}, ${task.estimated_hours || 0}h)`
-        ).join('\n');
-        
-        await client.chat.postMessage({
-          channel: channelId,
-          text: '📋 생성된 업무 목록',
-          blocks: [
-            {
-              type: 'section',
-              text: {
-                type: 'mrkdwn',
-                text: `*📋 생성된 업무 목록 (상위 ${Math.min(5, aiTasksData.length)}개)*\n\n${taskList}${aiTasksData.length > 5 ? `\n\n... 외 ${aiTasksData.length - 5}개 업무` : ''}`
-              }
-            }
-          ]
-        });
-      }
-      
-    } else {
-      throw new Error(result.error || 'AI 처리에 실패했습니다.');
-    }
-    
-  } catch (error) {
-    console.error('❌ 회의록 처리 오류:', error);
-    await client.chat.postMessage({
-      channel: channelId,
-      text: '❌ 회의록 분석 중 오류가 발생했습니다.',
-      blocks: [
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: `⚠️ *처리 오류*\n\n${error.message}\n\n🔄 다시 시도하거나 \`/tk help\`를 입력해서 도움말을 확인해보세요.`
-          }
-        }
-      ]
-    });
-  }
-}
-*/
-
-async function processTranscriptWithAI(transcript, client, channelId) {
-  console.log('=== processTranscriptWithAI 시작 ===');
-  console.log('받은 transcript:', transcript);
-  console.log('transcript 타입:', typeof transcript);
-  console.log('transcript 길이:', transcript.length);
-  console.log('===================================');
-  
-  const slackUserId = channelId;
-  const tenantSlug = 'dev-tenant';
-  
-  try {
-    console.log('📝 회의록 직접 처리 시작:', transcript.substring(0, 100) + '...');
-    
-    /* ==================== 기존 AI 처리 코드 (주석처리) ====================
-    // 모든 기존 AI 처리 로직들...
-    ============================================================================= */
-    
-    // ⭐ 현재: 입력데이터(transcript)를 그대로 Notion으로 전달
-    console.log('🔄 입력데이터를 그대로 notion-service.ts로 전달합니다...');
-    
-    // Notion 연동 시도
-    let notionPageUrl = null;
-    try {
-      const { NotionService } = require('./services/notion-service');
-      const { PrismaClient } = require('@prisma/client');
-      const prisma = new PrismaClient();
-      
-      // tenant slug를 실제 tenant ID로 변환
-      const tenant = await prisma.tenant.findUnique({
-        where: { slug: tenantSlug }
-      });
-      
-      if (!tenant) {
-        throw new Error('Tenant not found');
-      }
-      
-      // Slack 사용자 ID를 실제 User ID로 변환
-      const user = await prisma.user.findFirst({
-        where: {
-          tenantId: tenant.id,
-          slackUserId: slackUserId
-        }
-      });
-      
-      if (!user) {
-        console.log(`❌ Notion 연동 없음: tenantId=${tenantSlug}, userId=${slackUserId}`);
-        throw new Error('User not found');
-      }
-      
-      console.log('🔍 Notion 연동 확인:', {
-        tenantId: tenant.id,
-        userId: user.id,
-        slackUserId: slackUserId
-      });
-      
-      const notionService = await NotionService.createForUser(tenant.id, user.id);
-      
-      if (notionService) {
-        console.log('📝 Notion 페이지 생성 시도...');
-        console.log('📋 notion-service.ts로 전달할 원본 데이터:', transcript);
-        
-        // ⭐ transcript(입력데이터)를 그대로 전달
-        const notionPage = await notionService.createMeetingPage(transcript);
-        
-        notionPageUrl = notionPage.url;
-        console.log('✅ Notion 페이지 생성 성공:', notionPageUrl);
-      } else {
-        console.log('ℹ️ Notion 연동 안됨');
-      }
-    } catch (notionError) {
-      console.error('❌ Notion 페이지 생성 실패:', notionError);
-      // Notion 실패해도 계속 진행
-    }
-    
-    // 결과 메시지 전송
-    const resultBlocks = [
-      {
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: `🎯 *입력데이터 그대로 전달 테스트*\n\n📋 **상태:** ${notionPageUrl ? '✅ 성공' : '❌ 실패'}\n📊 **데이터 길이:** ${transcript.length}자`
-        }
-      }
-    ];
-    
-    // 버튼 추가
-    if (notionPageUrl) {
-      resultBlocks.push({
-        type: 'actions',
-        elements: [
-          {
-            type: 'button',
-            text: {
-              type: 'plain_text',
-              text: '📋 Notion에서 보기'
-            },
-            url: notionPageUrl,
-            action_id: 'view_notion_page'
-          }
-        ]
-      });
-    }
-    
-    await client.chat.postMessage({
-      channel: channelId,
-      text: notionPageUrl ? '✅ 테스트 성공!' : '❌ 테스트 실패',
-      blocks: resultBlocks
-    });
-    
-  } catch (error) {
-    console.error('❌ 회의록 처리 오류:', error);
-    await client.chat.postMessage({
-      channel: channelId,
-      text: '❌ 처리 중 오류가 발생했습니다.',
-      blocks: [
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: `⚠️ *처리 오류*\n\n${error.message}\n\n🔄 다시 시도하거나 \`/tk help\`를 입력해서 도움말을 확인해보세요.`
-          }
-        }
-      ]
-    });
-  }
-}
-
 
 
 // 에러 핸들링
@@ -2482,7 +2081,7 @@ async function checkRecentFiles(client, userId, projectName) {
             });
             
             // Notion 페이지 생성
-            const notionPage = await notionService.createMeetingPage(meetingData);
+            const notionPage = await notionService.createMeetingPage(aiData);
             
             notionUrl = notionPage.url;
             notionButtonText = '📋 Notion에서 보기';

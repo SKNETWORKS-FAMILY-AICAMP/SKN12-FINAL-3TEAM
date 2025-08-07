@@ -1,26 +1,60 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { 
-  Calendar, 
-  Clock, 
-  Target, 
-  Bell,
   Volume2,
   FileText,
   LayoutDashboard,
-  List,
-  TrendingUp,
-  Users,
-  CheckCircle,
-  AlertCircle,
   Plus,
-  Search,
   RefreshCw,
-  Edit3
+  Edit3,
+  ExternalLink
 } from 'lucide-react';
+import {
+  DndContext,
+  DragEndEvent,
+  DragOverEvent,
+  DragStartEvent,
+  DragOverlay,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  closestCenter,
+  useDroppable,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  useSortable,
+  arrayMove,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { dashboardAPI, projectAPI, taskAPI, userAPI, subscribeToRealTimeUpdates } from '../services/api';
 import { toast } from 'sonner';
+
+
+interface KanbanItem {
+  id: string;
+  content: string;
+  date: string;
+  assignee?: string;
+  priority?: string;
+  originalTask?: any;
+}
+
+interface KanbanColumn {
+  name: string;
+  items: KanbanItem[];
+}
+
+interface KanbanColumns {
+  todo: KanbanColumn;
+  progress: KanbanColumn;
+  done: KanbanColumn;
+  [key: string]: KanbanColumn; // 이것이 핵심! 동적 키 접근 허용
+}
+
+type ColumnId = 'todo' | 'progress' | 'done';
 
 // 날짜가 지났는지 확인하는 함수
 const isOverdue = (dateString: string, columnId: string) => {
@@ -43,23 +77,29 @@ const isOverdue = (dateString: string, columnId: string) => {
   }
 };
 
-// 드롭 영역 표시 컴포넌트
-const DropIndicator = ({ isOver }: { isOver: boolean }) => {
-  if (!isOver) return null;
-  
-  return (
-    <div className="h-2 bg-blue-400 rounded-full my-2 opacity-60 animate-pulse" />
-  );
-};
+
 
 // @dnd-kit을 사용한 드래그 앤 드롭 컴포넌트
 const TaskCard = ({ task, columnId, onTaskSelect, isOverTarget }: any) => {
-  // 네이티브 드래그앤드롭으로 변경됨 - @dnd-kit 제거
-  const attributes = {};
-  const listeners = {};
-  const setNodeRef = null;
-  const isDragging = false;
-  const style = {};
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ 
+    id: task.id,
+    transition: {
+      duration: 150,
+      easing: 'cubic-bezier(0.25, 1, 0.5, 1)',
+    },
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
 
   const getColumnBgColor = (colId: string) => {
     const colors: Record<string, string> = {
@@ -72,9 +112,11 @@ const TaskCard = ({ task, columnId, onTaskSelect, isOverTarget }: any) => {
 
   return (
     <div
+      ref={setNodeRef}
+      style={style}
       className={`group rounded-lg ${getColumnBgColor(columnId)} ${
-        isDragging ? 'opacity-80 rotate-2 scale-105 shadow-lg z-50' : 
-        isOverTarget ? 'ring-2 ring-blue-400 ring-offset-2 bg-blue-50/30 scale-105' : 'hover:shadow-md shadow-sm'
+        isDragging ? 'opacity-90 rotate-1 scale-105 shadow-xl z-50 border-2 border-blue-400' : 
+        isOverTarget ? 'ring-2 ring-blue-400 ring-offset-2 bg-blue-50/50 scale-105 border-blue-300' : 'hover:shadow-md shadow-sm'
       } transition-all duration-200 border border-gray-200 cursor-grab active:cursor-grabbing`}
       {...attributes}
       {...listeners}
@@ -120,19 +162,22 @@ const TaskCard = ({ task, columnId, onTaskSelect, isOverTarget }: any) => {
 };
 
 const DroppableColumn = ({ colId, items, onTaskSelect, isOver: isOverProp, overItemId }: { colId: string; items: any[]; onTaskSelect: any; isOver?: boolean; overItemId?: string | null }) => {
-  // useDroppable 제거 - 네이티브 드래그앤드롭 사용
-  const setNodeRef = null;
-  const isOver = isOverProp || false;
+  const { setNodeRef, isOver: isDroppableOver } = useDroppable({
+    id: colId,
+  });
+
+  const isOver = isOverProp || isDroppableOver;
 
   return (
     <div
+      ref={setNodeRef}
       className={`min-h-[600px] rounded-b-xl p-6 transition-all duration-200 ${
         isOver ? 'bg-blue-50/50 ring-2 ring-offset-2 ring-blue-400 scale-105' : 'bg-neutral-50 hover:bg-neutral-100'
       }`}
     >
-      {/* SortableContext 제거 - 네이티브 드래그앤드롭 사용 */}
+      <SortableContext items={items.map(item => item.id)} strategy={verticalListSortingStrategy}>
         <div className="space-y-4 min-h-[500px]">
-          {items.map((item, index) => (
+          {items.map((item, _index) => (
             <div key={item.id} className="mb-4">
               <TaskCard 
                 task={item} 
@@ -140,10 +185,20 @@ const DroppableColumn = ({ colId, items, onTaskSelect, isOver: isOverProp, overI
                 onTaskSelect={onTaskSelect}
                 isOverTarget={overItemId === item.id}
               />
+              {/* 드래그 중 삽입 위치 표시 */}
+              {isOver && overItemId === item.id && (
+                <div className="h-2 bg-blue-400 rounded-full my-2 opacity-60 animate-pulse" />
+              )}
             </div>
           ))}
+          {/* 빈 컬럼에 드롭할 때의 표시 */}
+          {isOver && items.length === 0 && (
+            <div className="h-32 border-2 border-dashed border-blue-400 rounded-lg flex items-center justify-center bg-blue-50/30">
+              <span className="text-blue-600 font-medium">여기에 드롭하세요</span>
+            </div>
+          )}
         </div>
-      {/* SortableContext 종료 */}
+      </SortableContext>
     </div>
   );
 };
@@ -166,21 +221,22 @@ const MainContent = () => {
   const [editedTaskData, setEditedTaskData] = useState<any>({});
 
   // React Query로 데이터 패칭
-  const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useQuery({
+  const { data: stats, isLoading: statsLoading, refetch: refetchStats, error: statsError } = useQuery({
     queryKey: ['dashboard-stats'],
     queryFn: dashboardAPI.getStats,
     refetchInterval: 30000, // 30초마다 자동 갱신
   });
 
-  const { data: tasks = [], isLoading: tasksLoading, refetch: refetchTasks } = useQuery({
+  const { data: tasks = [], isLoading: tasksLoading, refetch: refetchTasks, error: tasksError } = useQuery({
     queryKey: ['tasks'],
     queryFn: () => taskAPI.getTasks(),
   });
 
-  const { data: users = [], isLoading: usersLoading } = useQuery({
+  const { data: users = [], isLoading: usersLoading, error: usersError } = useQuery({
     queryKey: ['users'],
     queryFn: userAPI.getUsers,
   });
+
 
   // 실시간 업데이트 구독
   useEffect(() => {
@@ -197,10 +253,19 @@ const MainContent = () => {
     return unsubscribe;
   }, [refetchTasks, refetchStats]);
 
+  // ⬇️ 여기에 새로 추가할 디버깅 로그 ⬇️
+  useEffect(() => {
+    console.log('=== API 데이터 상태 체크 ===');
+    console.log('📊 Stats:', { data: stats, loading: statsLoading, error: statsError });
+    console.log('📋 Tasks:', { data: tasks, count: tasks?.length, loading: tasksLoading, error: tasksError });
+    console.log('👥 Users:', { data: users, count: users?.length, loading: usersLoading, error: usersError });
+    console.log('========================');
+  }, [stats, tasks, users, statsLoading, tasksLoading, usersLoading, statsError, tasksError, usersError]);
+
 
   // 칸반보드용 초기 데이터
   // Tailwind 동적 클래스 문제 해결: 색상 클래스 분리
-  const columnColors = {
+  const columnColors: Record<ColumnId, { bg: string; text: string }> = {
     done: {
       bg: 'bg-accent-green/10',
       text: 'text-accent-green',
@@ -214,56 +279,212 @@ const MainContent = () => {
       text: 'text-accent-amber',
     },
   };
-  const initialColumns = {
-    done: {
-      name: '완료',
-      items: [
-        { id: '1', content: 'WBS 문서 작성', date: '07.04' },
-        { id: '2', content: '요구사항 정의서(초안)', date: '07.04' },
-        { id: '3', content: '요구사항 정의서', date: '07.11' },
-      ],
-    },
-    progress: {
-      name: '진행중',
-      items: [
-        { id: '4', content: '프로젝트 기획서', date: '07.11' },
-        { id: '5', content: '수집 데이터', date: '07.11' },
-        { id: '6', content: '데이터 베이스 설문분석', date: '07.11' },
-        { id: '7', content: '데이터 조회 프로그램', date: '07.11' },
-      ],
-    },
-    todo: {
-      name: '해야할 일',
-      items: [
-        { id: '8', content: '인공지능 데이터 처리 결과서', date: '07.18' },
-        { id: '9', content: '인공지능 학습 결과서', date: '07.18' },
-        { id: '10', content: '학습된 인공지능 모델', date: '07.18' },
-        { id: '11', content: '수집된 데이터 및 전체 리포트', date: '07.18' },
-        { id: '12', content: '시스템 아키텍처', date: '07.18' },
-      ],
-    },
-  };
-
-  // localStorage에서 칸반보드 데이터 불러오기
-  const [columns, setColumns] = useState(() => {
-    const savedColumns = localStorage.getItem('dashboard-kanban-columns');
-    return savedColumns ? JSON.parse(savedColumns) : initialColumns;
+  const [columns, setColumns] = useState<KanbanColumns>({
+    todo: { name: '해야할 일', items: [] },
+    progress: { name: '진행중', items: [] },
+    done: { name: '완료', items: [] }
   });
 
-  // columns가 변경될 때마다 localStorage에 저장
+  // API 데이터를 칸반보드에 매핑하는 useEffect 추가
   useEffect(() => {
-    localStorage.setItem('dashboard-kanban-columns', JSON.stringify(columns));
-  }, [columns]);
+    if (tasks && tasks.length > 0) {
+      console.log('🔄 업무 데이터를 칸반보드에 매핑 중...', tasks);
+      
+      const newColumns: KanbanColumns = {
+        todo: { name: '해야할 일', items: [] },
+        progress: { name: '진행중', items: [] },
+        done: { name: '완료', items: [] }
+      };
 
-  // @dnd-kit 센서 설정 제거 - 네이티브 드래그앤드롭 사용
-  // const sensors = useSensors(...);
+      tasks.forEach(task => {
+        // 날짜 포맷팅 함수
+        const formatDate = (dateString?: string) => {
+          if (!dateString) return '미정';
+          try {
+            const date = new Date(dateString);
+            const month = (date.getMonth() + 1).toString().padStart(2, '0');
+            const day = date.getDate().toString().padStart(2, '0');
+            return `${month}.${day}`;
+          } catch (error) {
+            return '미정';
+          }
+        };
 
-  // 드래그 핸들러들 제거 - 네이티브 드래그앤드롭 사용
-  /*
-  const handleDragStart = (event: DragStartEvent) => { ... };
-  const handleDragOver = (event: DragOverEvent) => { ... };
-  const handleDragEnd = (event: DragEndEvent) => { ... };
-  */
+        const kanbanItem: KanbanItem = {
+          id: task.id,
+          content: task.title,
+          date: formatDate(task.dueDate),
+          assignee: task.assignee?.name || '미지정',
+          priority: task.priority?.toLowerCase() || 'medium',
+          originalTask: task
+        };
+
+        // 백엔드 상태를 칸반 컬럼에 매핑
+        if (task.status === 'TODO') {
+          newColumns.todo.items.push(kanbanItem);
+        } else if (task.status === 'IN_PROGRESS') {
+          newColumns.progress.items.push(kanbanItem);
+        } else if (task.status === 'DONE') {
+          newColumns.done.items.push(kanbanItem);
+        }
+      });
+
+      console.log('✅ 칸반보드 업데이트:', newColumns);
+      setColumns(newColumns);
+    } else {
+      console.log('❌ 업무 데이터가 없습니다:', { tasks, tasksLoading });
+    }
+  }, [tasks]);
+
+
+  // @dnd-kit 센서 설정 - 더 자연스러운 드래그 경험
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5, // 드래그 시작 거리를 줄여서 더 민감하게
+        delay: 100, // 짧은 지연시간으로 빠른 반응
+      },
+    })
+  );
+
+  // 드래그 시작
+  const handleDragStart = (event: DragStartEvent) => {
+    const { active } = event;
+    // 현재 드래그되는 아이템 찾기
+    for (const [columnId, column] of Object.entries(columns)) {
+      const task = column.items.find(item => item.id === active.id);
+      if (task) {
+        setActiveTask(task);
+        break;
+      }
+    }
+  };
+
+  // 드래그 오버 - 삽입 위치 시각적 피드백
+  const handleDragOver = (event: DragOverEvent) => {
+    const { over } = event;
+    if (over) {
+      // 컬럼 위에 있는 경우
+      const column = columns[over.id as string];
+      if (column) {
+        setOverColumnId(over.id as string);
+        setOverItemId(null);
+      } else {
+        // 특정 아이템 위에 있는 경우
+        setOverItemId(over.id as string);
+        // 해당 아이템이 속한 컬럼 찾기
+        for (const [columnId, col] of Object.entries(columns)) {
+          const item = col.items.find(item => item.id === over.id);
+          if (item) {
+            setOverColumnId(columnId);
+            break;
+          }
+        }
+      }
+    } else {
+      // 드래그가 컬럼 밖으로 나간 경우
+      setOverColumnId(null);
+      setOverItemId(null);
+    }
+  };
+
+  // 드래그 종료 - 자리 양보 방식으로 삽입
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveTask(null);
+    setOverColumnId(null);
+    setOverItemId(null);
+    if (!over) return;
+
+    const activeId = active.id as string;
+    const overId = over.id as string;
+
+    // 소스 컬럼과 아이템 찾기
+    let sourceColumnId = '';
+    let sourceItem = null;
+    let sourceIndex = -1;
+    for (const [columnId, column] of Object.entries(columns)) {
+      const idx = column.items.findIndex(item => item.id === activeId);
+      if (idx !== -1) {
+        sourceColumnId = columnId;
+        sourceItem = column.items[idx];
+        sourceIndex = idx;
+        break;
+      }
+    }
+    if (!sourceItem) return;
+
+    // 타겟 컬럼과 인덱스 찾기
+    let targetColumnId = '';
+    let targetIndex = -1;
+    
+    // 컬럼 자체에 드롭한 경우
+    if (columns[overId]) {
+      targetColumnId = overId;
+      targetIndex = 0; // 맨 위에 삽입
+    } else {
+      // 특정 아이템 위에 드롭한 경우
+      for (const [columnId, column] of Object.entries(columns)) {
+        const idx = column.items.findIndex(item => item.id === overId);
+        if (idx !== -1) {
+          targetColumnId = columnId;
+          targetIndex = idx; // 해당 아이템 위치에 삽입 (기존 아이템들이 아래로 밀려남)
+          break;
+        }
+      }
+    }
+
+    if (!targetColumnId) return;
+
+    // 같은 컬럼 내 이동
+    if (sourceColumnId === targetColumnId) {
+      if (sourceIndex === targetIndex) return;
+      
+      const items = [...columns[sourceColumnId].items];
+      const newItems = arrayMove(items, sourceIndex, targetIndex);
+      setColumns({
+        ...columns,
+        [sourceColumnId]: { ...columns[sourceColumnId], items: newItems }
+      });
+    } else {
+      // 다른 컬럼으로 이동 - 자리 양보 방식으로 삽입
+      const sourceItems = [...columns[sourceColumnId].items];
+      sourceItems.splice(sourceIndex, 1); // 소스에서 제거
+      
+      const targetItems = [...columns[targetColumnId].items];
+      
+      // 자리 양보 방식: 삽입 위치의 기존 아이템들이 한 칸씩 밀려나서 자리를 비워줌
+      const newTargetItems = [
+        ...targetItems.slice(0, targetIndex), // 삽입 위치 이전 아이템들 (그대로 유지)
+        sourceItem, // 삽입할 아이템 (빈 자리에 들어감)
+        ...targetItems.slice(targetIndex) // 삽입 위치 이후 아이템들 (한 칸씩 밀려남)
+      ];
+      
+      setColumns({
+        ...columns,
+        [sourceColumnId]: { ...columns[sourceColumnId], items: sourceItems },
+        [targetColumnId]: { ...columns[targetColumnId], items: newTargetItems }
+      });
+
+      // 백엔드 상태 업데이트
+      if (sourceItem?.originalTask) {
+        const newStatus = 
+          targetColumnId === 'todo' ? 'TODO' :
+          targetColumnId === 'progress' ? 'IN_PROGRESS' : 'DONE';
+        
+        // 비동기로 백엔드 업데이트
+        taskAPI.updateTaskStatus(sourceItem.originalTask.id, newStatus)
+          .then(() => {
+            toast.success('업무 상태가 업데이트되었습니다! ✅');
+            refetchTasks(); // 데이터 새로고침
+          })
+          .catch((error) => {
+            console.error('Failed to update task status:', error);
+            toast.error('상태 업데이트에 실패했습니다. 😞');
+          });
+      }
+    }
+  };
 
 
 
@@ -280,17 +501,17 @@ const MainContent = () => {
     // 선택된 상태에 따라 해당 컬럼에 추가
     const targetColumn = taskData.status || 'todo'; // 기본값은 'todo'
 
-    setColumns(prev => ({
+    setColumns((prev: any) => ({
       ...prev,
       [targetColumn]: {
         ...prev[targetColumn],
-        items: [...prev[targetColumn].items, newTask]
+        items: [newTask, ...prev[targetColumn].items] // 새 업무를 맨 위에 추가하여 기존 업무들이 아래로 밀려남
       }
     }));
   };
 
   // 업무 삭제 함수
-  const deleteTask = (taskId: any) => {
+  const deleteTask = (taskId: string) => {
     setColumns(prev => {
       const newColumns = { ...prev };
       Object.keys(newColumns).forEach(colId => {
@@ -304,7 +525,7 @@ const MainContent = () => {
   };
 
   // 업무 수정 함수
-  const updateTask = (taskId: any, updatedData: any) => {
+  const updateTask = (taskId: string, updatedData: any) => {
     setColumns(prev => {
       const newColumns = { ...prev };
       Object.keys(newColumns).forEach(colId => {
@@ -425,7 +646,7 @@ const MainContent = () => {
           priority: '중간'
         };
 
-        setColumns(prev => ({
+        setColumns((prev: any) => ({
           ...prev,
           todo: {
             ...prev.todo,
@@ -468,7 +689,7 @@ const MainContent = () => {
             <p className="text-neutral-600 dark:text-gray-300 mt-1">AI 기반 실시간 업무 관리 대시보드</p>
           </div>
           
-          {/* 뷰 모드 전환 (버튼은 남겨둬도 무방) */}
+          {/* 뷰 모드 전환 및 랜딩페이지 버튼 */}
           <div className="flex items-center space-x-4">
             <div className="flex bg-neutral-100 rounded-2xl p-1">
               <motion.button
@@ -485,6 +706,17 @@ const MainContent = () => {
                 대시보드
               </motion.button>
             </div>
+            
+            {/* 랜딩페이지 버튼 */}
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => window.location.href = '/landing'}
+              className="flex items-center px-4 py-2 bg-brand-600 text-white rounded-xl hover:bg-brand-700 transition-all duration-200 shadow-soft"
+            >
+              <ExternalLink className="w-4 h-4 mr-2" />
+              랜딩페이지
+            </motion.button>
           </div>
         </div>
 
@@ -500,8 +732,8 @@ const MainContent = () => {
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.5 }}
-              className="bg-white rounded-2xl p-6 shadow-soft border border-neutral-200"
+              transition={{ delay: 0.3 }}
+              className="grid grid-cols-2 md:grid-cols-4 gap-4"
             >
               <h3 className="text-lg font-bold text-neutral-900 mb-4">빠른 액션</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -577,21 +809,33 @@ const MainContent = () => {
                   </button>
                 </div>
               </div>
-              {/* 칸반보드 스타일 - @dnd-kit 드래그 앤 드롭 */}
-              {/* DndContext 제거 - 네이티브 드래그앤드롭 사용 */}
-              <div>
+              
+              {/* 새로운 요소를 위한 공간 - 여기에 추가하면 칸반보드가 자동으로 아래로 밀려남 */}
+              <div className="space-y-4 mb-6">
+                {/* 새로운 요소들을 여기에 추가하세요 */}
+                {/* 예시: 새로운 요소가 추가되면 칸반보드가 자동으로 아래로 밀려납니다 */}
+              </div>
+              
+              {/* 칸반보드 스타일 - @dnd-kit 드래그 앤 드롭 - 아래쪽에 배치 */}
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragStart={handleDragStart}
+                onDragOver={handleDragOver}
+                onDragEnd={handleDragEnd}
+              >
                 <div className="grid grid-cols-3 gap-4 min-h-[700px]">
                   {['todo', 'progress', 'done'].map((colId) => {
                     const col = columns[colId];
                     return (
                     <div key={colId} className="w-full">
                       {/* 컬럼 헤더 */}
-                      <div className={`rounded-t-xl px-4 py-3 ${columnColors[colId].bg} border-b-2 ${
+                      <div className={`rounded-t-xl px-4 py-3 ${columnColors[colId as ColumnId].bg} border-b-2 ${
                         colId === 'todo' ? 'border-accent-amber' : 
                         colId === 'progress' ? 'border-accent-blue' : 'border-accent-green'
                       }`}>
                         <div className="flex items-center justify-between">
-                          <h4 className={`font-bold text-lg ${columnColors[colId].text}`}>
+                          <h4 className={`font-bold text-lg ${columnColors[colId as ColumnId].text}`}>
                             {col.name}
                           </h4>
                           <span className={`text-sm font-medium px-2 py-1 rounded-full ${
@@ -616,8 +860,14 @@ const MainContent = () => {
                 })}
                 </div>
 
-                {/* 드래그 오버레이 제거 - 네이티브 드래그앤드롭 사용 */}
-              </div>
+                {/* 드래그 오버레이 */}
+                <DragOverlay dropAnimation={{
+                  duration: 200,
+                  easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)',
+                }}>
+                  {activeTask ? <TaskCard task={activeTask} columnId="todo" onTaskSelect={() => {}} /> : null}
+                </DragOverlay>
+              </DndContext>
             </motion.div>
           </div>
 
@@ -747,7 +997,7 @@ const MainContent = () => {
                   <input
                     type="text"
                     value={editedTaskData.content || ''}
-                    onChange={(e) => setEditedTaskData(prev => ({ ...prev, content: e.target.value }))}
+                    onChange={(e) => setEditedTaskData((prev: any) => ({ ...prev, content: e.target.value }))}
                     className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder="업무명을 입력하세요"
                   />
@@ -763,11 +1013,7 @@ const MainContent = () => {
                     <input
                       type="date"
                       value={editedTaskData.dateForInput || ''}
-                      onChange={(e) => setEditedTaskData(prev => ({ 
-                        ...prev, 
-                        dateForInput: e.target.value,
-                        date: formatDateFromInput(e.target.value)
-                      }))}
+                      onChange={(e) => setEditedTaskData((prev: any) => ({ ...prev, content: e.target.value }))}
                       className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                   ) : (
@@ -790,7 +1036,7 @@ const MainContent = () => {
                   <input
                     type="text"
                     value={editedTaskData.assignee || ''}
-                    onChange={(e) => setEditedTaskData(prev => ({ ...prev, assignee: e.target.value }))}
+                    onChange={(e) => setEditedTaskData((prev: any) => ({ ...prev, content: e.target.value }))}
                     className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder="담당자를 입력하세요"
                   />

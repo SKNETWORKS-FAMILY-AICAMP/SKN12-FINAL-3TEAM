@@ -176,7 +176,11 @@ const Login = () => {
               {/* Slack 로그인 버튼 */}
               <motion.button
                 type="button"
-                onClick={() => window.open('https://slack.com/app_redirect?app=YOUR_APP_ID', '_blank')}
+                onClick={() => {
+                  setIsLoading(true);
+                  const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3500';
+                  window.location.href = `${backendUrl}/api/auth/slack`;
+                }}
                 whileHover={{ scale: 1.02, y: -2 }}
                 whileTap={{ scale: 0.98, y: 0 }}
                 className="w-full py-4 px-6 bg-gradient-to-r from-indigo-500 to-blue-600 text-white rounded-xl font-bold text-lg hover:shadow-xl hover:shadow-indigo-500/25 transition-all duration-300 flex items-center justify-center space-x-3 relative overflow-hidden group"

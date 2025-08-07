@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Bell, Palette, Sun, Moon, Monitor, Users, Plus, Edit3, Trash2, Mail } from 'lucide-react';
 import { toast } from 'sonner';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { integrationAPI, userAPI } from '../services/api';
 
 interface TeamMember {
   id: number;
@@ -12,6 +14,20 @@ interface TeamMember {
 }
 
 const Settings = () => {
+  const queryClient = useQueryClient();
+
+  // 연동 상태 가져오기
+  const { data: integrationStatus, isLoading: integrationsLoading } = useQuery({
+    queryKey: ['integrationStatus'],
+    queryFn: integrationAPI.getStatus
+  });
+
+  // 팀원 목록 가져오기
+  const { data: users = [], isLoading: usersLoading } = useQuery({
+    queryKey: ['users'],
+    queryFn: userAPI.getUsers
+  });
+
   const [settings, setSettings] = useState({
     notifications: {
       push: true,
@@ -23,34 +39,16 @@ const Settings = () => {
     }
   });
 
-  // 팀원 관리 상태
-  const defaultTeamMembers: TeamMember[] = [
-    { id: 1, name: '김미정', role: '프로젝트 매니저', email: 'kim.mijung@company.com', phone: '', department: '개발팀' },
-    { id: 2, name: '이철수', role: '시니어 개발자', email: 'lee.cheolsu@company.com', phone: '', department: '개발팀' },
-    { id: 3, name: '박영희', role: 'UI/UX 디자이너', email: 'park.younghee@company.com', phone: '', department: '디자인팀' },
-    { id: 4, name: '정수민', role: '데이터 분석가', email: 'jung.sumin@company.com', phone: '', department: '데이터팀' },
-    { id: 5, name: '최민수', role: '프론트엔드 개발자', email: 'choi.minsu@company.com', phone: '', department: '개발팀' },
-    { id: 6, name: '한지영', role: '백엔드 개발자', email: 'han.jiyoung@company.com', phone: '', department: '개발팀' },
-    { id: 7, name: '송민호', role: 'DevOps 엔지니어', email: 'song.minho@company.com', phone: '', department: '개발팀' },
-    { id: 8, name: '윤서연', role: '그래픽 디자이너', email: 'yoon.seoyeon@company.com', phone: '', department: '디자인팀' },
-    { id: 9, name: '임동현', role: '브랜드 디자이너', email: 'lim.donghyun@company.com', phone: '', department: '디자인팀' },
-    { id: 10, name: '강수진', role: '시각 디자이너', email: 'kang.sujin@company.com', phone: '', department: '디자인팀' },
-    { id: 11, name: '조현우', role: '데이터 엔지니어', email: 'jo.hyunwoo@company.com', phone: '', department: '데이터팀' },
-    { id: 12, name: '백지원', role: '머신러닝 엔지니어', email: 'baek.jiwon@company.com', phone: '', department: '데이터팀' },
-    { id: 13, name: '오태현', role: '마케팅 매니저', email: 'oh.taehyun@company.com', phone: '', department: '마케팅팀' },
-    { id: 14, name: '신유진', role: '콘텐츠 마케터', email: 'shin.yujin@company.com', phone: '', department: '마케팅팀' },
-    { id: 15, name: '류승민', role: '디지털 마케터', email: 'ryu.seungmin@company.com', phone: '', department: '마케팅팀' },
-    { id: 16, name: '남궁지은', role: '기획팀장', email: 'namgung.jieun@company.com', phone: '', department: '기획팀' },
-    { id: 17, name: '전우진', role: '서비스 기획자', email: 'jeon.woojin@company.com', phone: '', department: '기획팀' },
-    { id: 18, name: '홍길동', role: '운영 매니저', email: 'hong.gildong@company.com', phone: '', department: '운영팀' },
-    { id: 19, name: '김철수', role: '고객지원팀장', email: 'kim.cheolsu@company.com', phone: '', department: '운영팀' },
-    { id: 20, name: '이영희', role: '운영팀원', email: 'lee.younghee@company.com', phone: '', department: '운영팀' },
-  ];
-
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>(() => {
-    const savedMembers = localStorage.getItem('team-members');
-    return savedMembers ? JSON.parse(savedMembers) : defaultTeamMembers;
-  });
+  // 팀원 데이터 변환 (API 데이터 -> UI 형식)  
+  const teamMembers: TeamMember[] = users.map((user, index) => ({
+    id: index + 1,
+    name: user.name,
+    role: user.role === 'OWNER' ? '프로젝트 오너' : 
+          user.role === 'ADMIN' ? '관리자' : '팀원',
+    email: user.email,
+    phone: '', // API에서 전화번호가 없으므로 빈 문자열
+    department: user.skills?.length ? '개발팀' : '일반팀' // 스킬이 있으면 개발팀으로 가정
+  }));
 
   const [showTeamMemberModal, setShowTeamMemberModal] = useState(false);
   const [editingMember, setEditingMember] = useState<TeamMember | null>(null);
@@ -136,32 +134,70 @@ const Settings = () => {
     }
 
     if (editingMember) {
-      // 수정
-      setTeamMembers(prev => 
-        prev.map(member => 
-          member.id === editingMember.id 
-            ? { ...member, ...memberFormData }
-            : member
-        )
-      );
-      toast.success('팀원 정보가 수정되었습니다! ✏️');
+      // 수정 - API 호출
+      updateUserMutation.mutate({
+        userId: editingMember.id.toString(),
+        updates: {
+          name: memberFormData.name,
+          email: memberFormData.email,
+          // role, skills 등은 UI에 없으므로 생략
+        }
+      });
     } else {
-      // 추가
-      const newMember: TeamMember = {
-        id: Math.max(...teamMembers.map(m => m.id)) + 1,
-        ...memberFormData,
-        phone: ''
-      };
-      setTeamMembers(prev => [...prev, newMember]);
-      toast.success('새 팀원이 추가되었습니다! 👤');
+      // 추가 - API 호출
+      createUserMutation.mutate({
+        name: memberFormData.name,
+        email: memberFormData.email,
+        role: 'MEMBER'
+      });
     }
 
     setShowTeamMemberModal(false);
   };
 
+  // Mutations 정의
+  const createUserMutation = useMutation({
+    mutationFn: userAPI.createUser,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+      toast.success('새 팀원이 추가되었습니다! 👤');
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.error || '팀원 추가에 실패했습니다.');
+    }
+  });
+
+  const updateUserMutation = useMutation({
+    mutationFn: ({ userId, updates }: { userId: string, updates: any }) => 
+      userAPI.updateUser(userId, updates),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+      toast.success('팀원 정보가 수정되었습니다! ✏️');
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.error || '팀원 정보 수정에 실패했습니다.');
+    }
+  });
+
+  const deleteUserMutation = useMutation({
+    mutationFn: userAPI.deleteUser,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+      toast.success('팀원이 삭제되었습니다! 🗑️');
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.error || '팀원 삭제에 실패했습니다.');
+    }
+  });
+
   const deleteMember = (id: number) => {
-    setTeamMembers(prev => prev.filter(member => member.id !== id));
-    toast.success('팀원이 삭제되었습니다! 🗑️');
+    // User API의 User.id는 string이므로 변환 필요
+    const userId = users.find(user => teamMembers.find(tm => tm.id === id)?.email === user.email)?.id;
+    if (userId) {
+      deleteUserMutation.mutate(userId);
+    } else {
+      toast.error('사용자를 찾을 수 없습니다.');
+    }
   };
 
   // 필터링된 팀원 목록

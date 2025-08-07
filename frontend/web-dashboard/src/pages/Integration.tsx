@@ -2,36 +2,45 @@ import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Check, Settings, MoreHorizontal, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { useQuery } from '@tanstack/react-query';
+import { integrationAPI } from '../services/api';
 
 const Integration = () => {
+  // 연동 상태 가져오기
+  const { data: integrationStatus, isLoading } = useQuery({
+    queryKey: ['integrationStatus'],
+    queryFn: integrationAPI.getStatus
+  });
+
+  // 더미 데이터를 실제 API 데이터로 교체
   const [integrations, setIntegrations] = useState([
     {
       id: 1,
       name: "슬랙(Slack)",
-      tag: "활성화",
-      status: "connected",
-      url: "SYNC_PRJ_321AM",
-      lastSync: "2024.03.23 13:33",
+      tag: integrationStatus?.slack ? "활성화" : "비활성화",
+      status: integrationStatus?.slack ? "connected" : "disconnected",
+      url: integrationStatus?.slack ? "SYNC_PRJ_321AM" : "연결 필요",
+      lastSync: integrationStatus?.slack ? "방금 전" : "-",
       color: "bg-purple-100",
       logo: "https://cdn.worldvectorlogo.com/logos/slack-new-logo.svg"
     },
     {
       id: 2,
       name: "노션(Notion)",
-      tag: "활성화", 
-      status: "connected",
-      url: "SYNC_PRJ_321AM",
-      lastSync: "2024.03.23 16:46",
+      tag: integrationStatus?.notion ? "활성화" : "비활성화",
+      status: integrationStatus?.notion ? "connected" : "disconnected",
+      url: integrationStatus?.notion ? "SYNC_PRJ_321AM" : "연결 필요",
+      lastSync: integrationStatus?.notion ? "방금 전" : "-",
       color: "bg-gray-100",
       logo: "https://upload.wikimedia.org/wikipedia/commons/4/45/Notion_app_logo.png"
     },
     {
       id: 3,
-      name: "지라(Jira)",
-      tag: "대기중",
-      status: "disconnected",
-      url: "SYNC_PRJ_321AM",
-      lastSync: "2024.03.23 17:45",
+      name: "지라(Jira)", 
+      tag: integrationStatus?.jira ? "활성화" : "비활성화",
+      status: integrationStatus?.jira ? "connected" : "disconnected",
+      url: integrationStatus?.jira ? "SYNC_PRJ_321AM" : "연결 필요",
+      lastSync: integrationStatus?.jira ? "방금 전" : "-",
       color: "bg-blue-100",
       logo: "https://cdn.worldvectorlogo.com/logos/jira-1.svg"
     }
@@ -65,45 +74,71 @@ const Integration = () => {
     setShowConfirmModal(true);
   };
 
-  // 실제 연동 추가 실행
+  // 실제 연동 추가 실행 - OAuth 리다이렉트
   const executeAddIntegration = () => {
     if (!confirmData) return;
     
-    setIntegrations(prev => prev.map(integration => 
-      integration.id === confirmData.id 
-        ? { 
-            ...integration, 
-            status: 'connected', 
-            tag: '활성화',
-            lastSync: new Date().toLocaleString('ko-KR', {
-              year: 'numeric',
-              month: '2-digit', 
-              day: '2-digit',
-              hour: '2-digit',
-              minute: '2-digit'
-            }).replace(/\. /g, '.').replace(/:/g, ':')
-          }
-        : integration
-    ));
-    toast.success('연동이 추가되었습니다! 🔗');
-    setShowConfirmModal(false);
-    setConfirmData(null);
-    setConfirmAction(null);
+    const tenantSlug = 'dev-tenant'; // 환경변수에서 가져올 예정
+    let oauthUrl = '';
+    
+    // 서비스별 OAuth URL 생성
+    switch (confirmData.name) {
+      case '슬랙(Slack)':
+        oauthUrl = `${import.meta.env.VITE_API_BASE_URL}/auth/slack/${tenantSlug}`;
+        break;
+      case '노션(Notion)':
+        oauthUrl = `${import.meta.env.VITE_API_BASE_URL}/auth/notion/${tenantSlug}`;
+        break;
+      case '지라(Jira)':
+        oauthUrl = `${import.meta.env.VITE_API_BASE_URL}/auth/jira/${tenantSlug}`;
+        break;
+      default:
+        toast.error('지원하지 않는 서비스입니다.');
+        return;
+    }
+    
+    // OAuth 페이지로 이동
+    toast.info(`${confirmData.name} 연동 페이지로 이동합니다...`);
+    window.location.href = oauthUrl;
   };
 
-  // 실제 연동 해지 실행
-  const executeRemoveIntegration = () => {
+  // 실제 연동 해지 실행 - API 연결
+  const executeRemoveIntegration = async () => {
     if (!confirmData) return;
     
-    setIntegrations(prev => prev.map(integration => 
-      integration.id === confirmData.id 
-        ? { ...integration, status: 'disconnected', tag: '비활성화' }
-        : integration
-    ));
-    toast.success('연동이 해지되었습니다. 🔌');
-    setShowConfirmModal(false);
-    setConfirmData(null);
-    setConfirmAction(null);
+    // 서비스 이름 매핑
+    const serviceMap: { [key: string]: 'slack' | 'notion' | 'jira' } = {
+      '슬랙(Slack)': 'slack',
+      '노션(Notion)': 'notion', 
+      '지라(Jira)': 'jira'
+    };
+    
+    const service = serviceMap[confirmData.name];
+    if (!service) {
+      toast.error('지원하지 않는 서비스입니다.');
+      return;
+    }
+
+    try {
+      toast.info(`${confirmData.name} 연동을 해제하고 있습니다...`);
+      
+      const result = await integrationAPI.disconnectService(service);
+      
+      if (result.success) {
+        toast.success(`${confirmData.name} 연동이 해제되었습니다! 🔌`);
+        // 연동 상태 새로고침을 위해 페이지 리로드 (임시)
+        window.location.reload();
+      } else {
+        toast.error(result.message);
+      }
+    } catch (error) {
+      console.error('Integration disconnect failed:', error);
+      toast.error('연동 해제 중 오류가 발생했습니다.');
+    } finally {
+      setShowConfirmModal(false);
+      setConfirmData(null);
+      setConfirmAction(null);
+    }
   };
 
   // 모달 취소

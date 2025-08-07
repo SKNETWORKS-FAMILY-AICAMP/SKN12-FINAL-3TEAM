@@ -1,34 +1,49 @@
-export interface MeetingStats {
-  totalMeetings: number;
-  avgOnlineTime: number;
-  accuracy: number;
-}
-
 export interface Task {
   id: string;
   title: string;
-  dueDate: string;
-  status: 'completed' | 'inProgress' | 'scheduled';
-  priority?: 'high' | 'medium' | 'low';
+  description?: string;
+  status: 'TODO' | 'IN_PROGRESS' | 'DONE';
+  assigneeId?: string;
+  assignee?: User;
+  dueDate?: string;
+  priority: 'HIGH' | 'MEDIUM' | 'LOW';
+  complexity?: string;
+  metadata?: TaskMetadata;
+  children?: Task[];
 }
 
-export interface TaskItem {
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: 'OWNER' | 'ADMIN' | 'MEMBER';
+  skills?: string[];
+  availableHours?: number;
+  experienceLevel?: string;
+}
+
+export interface Project {
   id: string;
   title: string;
-  date: string;
-  category: 'completed' | 'inProgress' | 'scheduled';
+  overview: string;
+  content: any;
+  notionPageUrl?: string;
+  createdAt: string;
+  tasks: Task[];
 }
 
-export interface DetailedTask {
-  id: number;
-  name: string;
-  assignee: string;
-  dueDate: string;
-  status: '완료' | '진행 중' | '예정';
-  statusColor: string;
-  priority: '높음' | '중간' | '낮음';
-  description: string;
+
+export interface TaskMetadata {
+  estimatedHours?: number;
+  actualHours?: number;
+  requiredSkills?: string[];
+  taskType?: string;
+  jiraIssueKey?: string;
+  assignmentScore?: number;
+  assignmentReason?: string;
+  jiraStatus?: string;
 }
+
 
 export interface MeetingFilters {
   meetingName: string;
@@ -59,14 +74,18 @@ export interface RecentSummary {
 export interface User {
   id: string;
   name: string;
-  role: string;
-  avatar?: string;
+  email: string;
+  role: 'OWNER' | 'ADMIN' | 'MEMBER';
+  skills?: string[];
+  availableHours?: number;
+  experienceLevel?: string;
 }
 
-export interface DashboardData {
-  meetingStats: MeetingStats;
-  tasks: TaskItem[];
-  notifications: Notification[];
-  recentSummaries: RecentSummary[];
-  user: User;
-} 
+export interface DashboardStats {
+  totalMeetings: number;
+  averageProcessingTime: number;
+  accuracy: number;
+  completedTasks: number;
+  inProgressTasks: number;
+  scheduledTasks: number;
+}

@@ -743,68 +743,6 @@ class AIService {
 
 
   /**
-   * 슬랙용 음성 파일 처리 (URL에서 다운로드 후 전체 파이프라인 실행)
-   */
-  async processAudioFile(params: {
-    fileUrl: string;
-    fileName: string;
-    projectName: string;
-    userId: string;
-  }): Promise<{
-    success: boolean;
-    notionUrl?: string;
-    jiraUrl?: string;
-    tasks?: any[];
-    error?: string;
-  }> {
-    try {
-      console.log(`🎵 Processing audio file from Slack: ${params.fileName}`);
-      console.log(`📂 Project: ${params.projectName}, User: ${params.userId}`);
-
-      // 1. 슬랙에서 파일 다운로드
-      const axios = require('axios');
-      const response = await axios.get(params.fileUrl, {
-        headers: {
-          'Authorization': `Bearer ${process.env.SLACK_BOT_TOKEN}`
-        },
-        responseType: 'arraybuffer',
-        timeout: 30000
-      });
-
-      const audioBuffer = Buffer.from(response.data);
-      console.log(`✅ Downloaded file: ${audioBuffer.length} bytes`);
-
-      // 2. 전체 파이프라인 실행 (Task Master 워크플로우 포함)
-      const result = await this.processTwoStagePipeline(audioBuffer, params.fileName);
-
-      if (result.success) {
-        console.log(`✅ Audio processing completed successfully`);
-        
-        // 성공 결과 반환 (슬랙 형식에 맞게)
-        return {
-          success: true,
-          notionUrl: result.formatted_notion ? '#notion-page' : undefined,
-          jiraUrl: result.generated_tasks ? '#jira-issues' : undefined,
-          tasks: result.generated_tasks?.tasks || [],
-        };
-      } else {
-        console.error(`❌ Audio processing failed: ${result.error}`);
-        return {
-          success: false,
-          error: result.error || 'Unknown error during processing'
-        };
-      }
-
-    } catch (error: any) {
-      console.error('❌ processAudioFile error:', error);
-      return {
-        success: false,
-        error: error?.message || 'Failed to process audio file'
-      };
-    }
-  }
-
-  /**
    * AI 서버 연결 테스트
    */
   async testConnection(): Promise<boolean> {

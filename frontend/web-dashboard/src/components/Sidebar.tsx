@@ -1,49 +1,81 @@
 import { Link, useLocation } from 'react-router-dom';
 import { Home, MessageSquare, FileText, Settings, ChevronRight, Link as LinkIcon } from 'lucide-react';
 import ttalkkakLogo from '../assets/logo.png';
+import { useQuery } from '@tanstack/react-query';
+import { integrationAPI, taskAPI } from '../services/api';
 
 interface SidebarProps {
   setActiveMenu: (menu: string) => void;
 }
 
+interface MenuItemType {
+  id: string;
+  icon: any;
+  label: string;
+  path: string;
+  description: string;
+  badge?: number;
+  status?: 'connected' | 'disconnected' | 'loading';
+}
+
 const Sidebar = ({ setActiveMenu }: SidebarProps) => {
   const location = useLocation();
+
+  // 실시간 데이터 가져오기
+  const { data: integrationStatus } = useQuery({
+    queryKey: ['integrationStatus'],
+    queryFn: integrationAPI.getStatus,
+    refetchInterval: 30000 // 30초마다 갱신
+  });
+
+  const { data: tasks = [] } = useQuery({
+    queryKey: ['tasks'],
+    queryFn: taskAPI.getTasks,
+    refetchInterval: 30000 // 30초마다 갱신
+  });
+
+  // 진행 중인 작업 개수 계산
+  const inProgressTasksCount = tasks.filter(task => task.status === 'IN_PROGRESS').length;
   
-  const menuItems = [
+  const menuItems: MenuItemType[] = [
     { 
       id: 'home', 
       icon: Home, 
       label: '대시보드', 
-      path: '/',
+      path: '/dashboard',
       description: '전체 현황 보기'
     },
     { 
       id: 'meeting', 
       icon: MessageSquare, 
       label: '회의 분석', 
-      path: '/meeting',
+      path: '/dashboard/meeting',
       description: '회의록 및 인사이트'
     },
     { 
       id: 'task', 
       icon: FileText, 
       label: '업무 관리', 
-      path: '/task',
-      description: '프로젝트 및 태스크'
+      path: '/dashboard/task',
+      description: '프로젝트 및 태스크',
+      badge: inProgressTasksCount > 0 ? inProgressTasksCount : undefined
     },
     // 연동 메뉴 추가
     {
       id: 'integration',
       icon: LinkIcon,
       label: '연동',
-      path: '/integration',
-      description: '외부 서비스 연동'
+      path: '/dashboard/integration',
+      description: '외부 서비스 연동',
+      status: integrationStatus ? 
+        (integrationStatus.slack || integrationStatus.notion || integrationStatus.jira ? 'connected' : 'disconnected') 
+        : 'loading'
     },
     { 
       id: 'settings', 
       icon: Settings, 
       label: '설정', 
-      path: '/settings',
+      path: '/dashboard/settings',
       description: '시스템 설정'
     },
   ];
@@ -52,11 +84,11 @@ const Sidebar = ({ setActiveMenu }: SidebarProps) => {
     const currentPath = location.pathname;
     
     // 정확한 경로 매칭
-    if (currentPath === '/') return 'home';
-    if (currentPath === '/meeting') return 'meeting';
-    if (currentPath === '/task') return 'task';
-    if (currentPath === '/integration') return 'integration';
-    if (currentPath === '/settings') return 'settings';
+    if (currentPath === '/dashboard' || currentPath === '/dashboard/') return 'home';
+    if (currentPath === '/dashboard/meeting') return 'meeting';
+    if (currentPath === '/dashboard/task') return 'task';
+    if (currentPath === '/dashboard/integration') return 'integration';
+    if (currentPath === '/dashboard/settings') return 'settings';
     
     // 기본값
     return 'home';
@@ -116,11 +148,26 @@ const Sidebar = ({ setActiveMenu }: SidebarProps) => {
               {/* Content */}
               <div className="ml-4 flex-1">
                 <div className="flex items-center justify-between">
-                  <span className={`font-semibold text-sm ${
-                    isActive ? 'text-brand-700 dark:text-blue-400' : 'text-neutral-700 dark:text-gray-300'
-                  }`}>
-                    {item.label}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className={`font-semibold text-sm ${
+                      isActive ? 'text-brand-700 dark:text-blue-400' : 'text-neutral-700 dark:text-gray-300'
+                    }`}>
+                      {item.label}
+                    </span>
+                    {/* Badge for task count */}
+                    {item.badge && (
+                      <span className="bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                        {item.badge}
+                      </span>
+                    )}
+                    {/* Status indicator for integrations */}
+                    {item.status && (
+                      <div className={`w-2 h-2 rounded-full ${
+                        item.status === 'connected' ? 'bg-green-500' : 
+                        item.status === 'disconnected' ? 'bg-gray-400' : 'bg-yellow-500'
+                      }`}></div>
+                    )}
+                  </div>
                   <ChevronRight className={`w-4 h-4 transition-all duration-200 ${
                     isActive 
                       ? 'text-brand-500 dark:text-blue-400 translate-x-0 opacity-100' 

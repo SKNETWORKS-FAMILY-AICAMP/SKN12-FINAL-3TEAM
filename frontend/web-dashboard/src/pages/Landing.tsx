@@ -2,9 +2,21 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import ttalkkakLogo from '../assets/logo.png';
 import { useState } from 'react';
+import SplitText from '../components/SplitText';
 
 
-const slackUrl = 'https://slack.com/app_redirect?app=YOUR_APP_ID';
+
+// Slack 앱 설치 URL (OAuth 인증 포함)
+const getSlackInstallUrl = () => {
+  const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3500';
+  return `${backendUrl}/api/auth/slack/install`;
+};
+
+// Dashboard URL (세션 체크 포함)
+const getDashboardUrl = () => {
+  const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3500';
+  return `${backendUrl}/api/auth/check-session`;
+};
 
 const Landing = () => {
   const navigate = useNavigate();
@@ -143,28 +155,46 @@ const Landing = () => {
           `,
         }}
       >
-        회의에서<br />
-        <motion.span 
-          className="block text-white"
-          style={{
-            textShadow: `
-              -1px -1px 0 #000,
-               1px -1px 0 #000,
-              -1px  1px 0 #000,
-               1px  1px 0 #000
-            `,
-          }}
-          animate={{ 
-            textShadow: [
-              "-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 0 20px rgba(255,255,255,0.5)",
-              "-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 0 30px rgba(255,255,255,0.8)",
-              "-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 0 20px rgba(255,255,255,0.5)"
-            ]
-          }}
-          transition={{ duration: 2, repeat: Infinity }}
+        <motion.div
+          initial={{ opacity: 0, y: 60 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 1, delay: 0.3 }}
+          className="block mb-4"
         >
-          자동으로 업무까지
-        </motion.span>
+          <SplitText
+            text="회의에서"
+            className="text-6xl lg:text-7xl font-bold text-white"
+            delay={100}
+            duration={0.6}
+            ease="power3.out"
+            splitType="chars"
+            from={{ opacity: 0, y: 40 }}
+            to={{ opacity: 1, y: 0 }}
+            threshold={0.1}
+            rootMargin="-100px"
+            textAlign="center"
+          />
+        </motion.div>
+        <motion.div
+          initial={{ opacity: 0, y: 60 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 1, delay: 1.5 }}
+          className="block"
+        >
+          <SplitText
+            text="자동으로 분석까지"
+            className="text-6xl lg:text-7xl font-bold text-white"
+            delay={100}
+            duration={0.6}
+            ease="power3.out"
+            splitType="chars"
+            from={{ opacity: 0, y: 40 }}
+            to={{ opacity: 1, y: 0 }}
+            threshold={0.1}
+            rootMargin="-100px"
+            textAlign="center"
+          />
+        </motion.div>
       </motion.h1>
       <motion.p 
         initial={{ opacity: 0, y: 20 }}
@@ -182,8 +212,11 @@ const Landing = () => {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 1, delay: 0.9 }}
       >
-        <motion.a
-          href={slackUrl}
+        <motion.button
+          onClick={() => {
+            // Go to Market - Slack 앱 설치 및 채널 초대
+            window.location.href = getSlackInstallUrl();
+          }}
           whileHover={{ 
             scale: 1.05, 
             y: -2
@@ -204,12 +237,20 @@ const Landing = () => {
             >
               <path d="M6 15a2 2 0 1 1 0-4 2 2 0 0 1 0 4zm0 2a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm6-8a2 2 0 1 1 0-4 2 2 0 0 1 0 4zm0 2a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm6 8a2 2 0 1 1 0-4 2 2 0 0 1 0 4zm0 2a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"/>
             </svg>
-            <span>Go to TtalKkak</span>
+            <span>Go to Market</span>
           </span>
-        </motion.a>
+        </motion.button>
         
         <motion.button
-          onClick={() => navigate('/dashboard')}
+          onClick={() => {
+            // Go to Dashboard - 세션 체크 후 이동
+            const token = localStorage.getItem('token');
+            if (token) {
+              navigate('/dashboard');
+            } else {
+              navigate('/login');
+            }
+          }}
           whileHover={{ 
             scale: 1.05, 
             y: -2

@@ -1,19 +1,22 @@
 import { useState, useEffect } from 'react';
-import { Search, Plus, Calendar, AlertTriangle, CheckCircle, Clock, Star, Edit3, Trash2, FileText, Users } from 'lucide-react';
+import { Search, Plus, Calendar, CheckCircle, Clock, Star, Edit3, Trash2, FileText } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { DetailedTask } from '../types';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'; // ✅ 추가
+import { taskAPI, Task, projectAPI } from '../services/api'; // ✅ 추가
 import { toast } from 'sonner';
 
 const TaskManagement = () => {
+  // 에러 처리를 위한 try-catch
+  try {
   const [filters, setFilters] = useState({
     assignee: '전체',
     status: '전체',
     search: ''
   });
   
-  const [selectedTask, setSelectedTask] = useState<DetailedTask | null>(null);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [showNewTaskModal, setShowNewTaskModal] = useState(false);
-  const [editingTaskForModal, setEditingTaskForModal] = useState<DetailedTask | null>(null);
+  const [editingTaskForModal, setEditingTaskForModal] = useState<Task | null>(null);
   const [isEditingTask, setIsEditingTask] = useState(false);
   const [editedTaskData, setEditedTaskData] = useState<any>(null);
   const [showCalendarModal, setShowCalendarModal] = useState(false);
@@ -37,119 +40,109 @@ const TaskManagement = () => {
     }
   };
 
-  // 새 업무 추가 함수
+  // ✅ 새로운 버전 (교체)
   const addNewTask = (taskData: any) => {
-    const newTask: DetailedTask = {
-      id: Math.max(...tasks.map(t => t.id)) + 1,
-      name: taskData.title,
-      assignee: taskData.assignee || '미지정',
-      dueDate: taskData.dueDate || '',
-      status: taskData.status === 'todo' ? '예정' : 
-              taskData.status === 'progress' ? '진행 중' : '완료',
-      statusColor: taskData.status === 'todo' ? 'bg-orange-500 text-white' :
-                   taskData.status === 'progress' ? 'bg-blue-500 text-white' : 
-                   'bg-green-500 text-white',
-      priority: '중간', // 기본값으로 설정
-      description: taskData.description || ''
+    // 프로젝트가 없으면 생성 불가
+    if (!projects || projects.length === 0) {
+      toast.error('먼저 프로젝트를 생성해주세요.');
+      return;
+    }
+    
+    const newTask = {
+      title: taskData.title,
+      description: taskData.description || '',
+      status: taskData.status === 'todo' ? 'TODO' : 
+              taskData.status === 'progress' ? 'IN_PROGRESS' : 'DONE',
+      priority: taskData.priority === '상' ? 'HIGH' : 
+                taskData.priority === '하' ? 'LOW' : 'MEDIUM',
+      dueDate: taskData.dueDate || undefined,
+      assigneeId: taskData.assignee || undefined,
+      projectId: projects[0].id // 첫 번째 프로젝트 사용
     };
     
-    setTasks(prevTasks => [...prevTasks, newTask]);
+    createTaskMutation.mutate(newTask);
   };
 
-  // 업무 수정 함수
   const updateTask = (taskData: any) => {
     if (editingTaskForModal) {
-      const updatedTask: DetailedTask = {
-        ...editingTaskForModal,
-        name: taskData.title,
-        assignee: taskData.assignee || '미지정',
-        dueDate: taskData.dueDate || '',
-        status: taskData.status === 'todo' ? '예정' : 
-                taskData.status === 'progress' ? '진행 중' : '완료',
-        statusColor: taskData.status === 'todo' ? 'bg-orange-500 text-white' :
-                     taskData.status === 'progress' ? 'bg-blue-500 text-white' : 
-                     'bg-green-500 text-white',
-        description: taskData.description || ''
+      const updates = {
+        title: taskData.title,
+        description: taskData.description || '',
+        status: taskData.status === 'todo' ? 'TODO' : 
+                taskData.status === 'progress' ? 'IN_PROGRESS' : 'DONE',
+        dueDate: taskData.dueDate || undefined,
+        assigneeId: taskData.assignee || undefined
       };
       
-      setTasks(prevTasks => 
-        prevTasks.map(task => 
-          task.id === editingTaskForModal.id ? updatedTask : task
-        )
-      );
+      updateTaskMutation.mutate({ 
+        taskId: editingTaskForModal.id, 
+        updates 
+      });
     }
   };
-  // 기본 업무 데이터
-  const defaultTasks: DetailedTask[] = [
-    {
-      id: 1,
-      name: '데이터 전처리 자동화',
-      assignee: '김미정',
-      dueDate: '2025-01-25',
-      status: '완료',
-      statusColor: 'bg-green-500 text-white',
-      priority: '높음',
-      description: '수집된 데이터의 전처리 자동화 스크립트 작성 및 검증.'
-    },
-    {
-      id: 2,
-      name: '모델 성능 리포트 작성',
-      assignee: '이철수',
-      dueDate: '2025-01-27',
-      status: '진행 중',
-      statusColor: 'bg-blue-500 text-white',
-      priority: '중간',
-      description: '최신 모델의 성능 평가 및 리포트 문서화.'
-    },
-    {
-      id: 3,
-      name: 'UI 피드백 반영',
-      assignee: '박영희',
-      dueDate: '2025-01-30',
-      status: '예정',
-      statusColor: 'bg-orange-500 text-white',
-      priority: '낮음',
-      description: '사용자 피드백을 바탕으로 UI 개선 작업 예정.'
-    },
-    {
-      id: 4,
-      name: 'API 문서화 작업',
-      assignee: '정수민',
-      dueDate: '2025-02-01',
-      status: '진행 중',
-      statusColor: 'bg-blue-500 text-white',
-      priority: '높음',
-      description: 'REST API 문서화 및 예제 코드 작성.'
-    },
-    {
-      id: 5,
-      name: '보안 취약점 점검',
-      assignee: '김미정',
-      dueDate: '2025-02-05',
-      status: '예정',
-      statusColor: 'bg-orange-500 text-white',
-      priority: '높음',
-      description: '시스템 전반의 보안 취약점 검사 및 대응.'
-    }
-  ];
+  
 
-  // localStorage에서 데이터 불러오기
-  const [tasks, setTasks] = useState<DetailedTask[]>(() => {
-    const savedTasks = localStorage.getItem('taskManagement-tasks');
-    return savedTasks ? JSON.parse(savedTasks) : defaultTasks;
+  const queryClient = useQueryClient();
+  
+  // 프로젝트 목록 가져오기
+  const { data: projects = [] } = useQuery({
+    queryKey: ['projects'],
+    queryFn: projectAPI.getProjects
   });
 
-  // tasks가 변경될 때마다 localStorage에 저장
-  useEffect(() => {
-    localStorage.setItem('taskManagement-tasks', JSON.stringify(tasks));
-  }, [tasks]);
+  // 태스크 목록 가져오기
+  const { data: tasks = [], isLoading: tasksLoading } = useQuery({
+    queryKey: ['tasks'],
+    queryFn: () => taskAPI.getTasks()
+  });
+
+  const createTaskMutation = useMutation({
+    mutationFn: (newTask: any) => taskAPI.createTask(newTask),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      toast.success('새 업무가 추가되었습니다! ✨');
+    },
+    onError: (error) => {
+      console.error('Task creation failed:', error);
+      toast.error('업무 생성에 실패했습니다.');
+    }
+  });
+
+  const updateTaskMutation = useMutation({
+    mutationFn: ({ taskId, updates }: { taskId: string; updates: any }) =>
+      taskAPI.updateTask(taskId, updates),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      toast.success('업무가 수정되었습니다! ✏️');
+    },
+    onError: (error) => {
+      console.error('Task update failed:', error);
+      toast.error('업무 수정에 실패했습니다.');
+    }
+  });
+
+  const deleteTaskMutation = useMutation({
+    mutationFn: (taskId: string) => taskAPI.deleteTask(taskId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      toast.success('업무가 삭제되었습니다! 🗑️');
+    },
+    onError: (error) => {
+      console.error('Task deletion failed:', error);
+      toast.error('업무 삭제에 실패했습니다.');
+    }
+  });
 
   // 필터링된 업무 목록
   const filteredTasks = tasks.filter(task => {
-    const matchesAssignee = filters.assignee === '전체' || task.assignee === filters.assignee;
-    const matchesStatus = filters.status === '전체' || task.status === filters.status;
-    const matchesSearch = task.name.toLowerCase().includes(filters.search.toLowerCase()) ||
-                         task.assignee.toLowerCase().includes(filters.search.toLowerCase());
+    const assigneeName = task.assignee?.name || '미지정';
+    const statusKorean = task.status === 'DONE' ? '완료' : 
+                        task.status === 'IN_PROGRESS' ? '진행 중' : '예정';
+    
+    const matchesAssignee = filters.assignee === '전체' || assigneeName === filters.assignee;
+    const matchesStatus = filters.status === '전체' || statusKorean === filters.status;
+    const matchesSearch = task.title.toLowerCase().includes(filters.search.toLowerCase()) ||
+                        assigneeName.toLowerCase().includes(filters.search.toLowerCase());
     
     return matchesAssignee && matchesStatus && matchesSearch;
   });
@@ -159,9 +152,9 @@ const TaskManagement = () => {
   // 상태 아이콘 반환
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case '완료': return <CheckCircle className="w-4 h-4 text-green-500" />;
-      case '진행 중': return <Clock className="w-4 h-4 text-blue-500" />;
-      case '예정': return <Calendar className="w-4 h-4 text-orange-500" />;
+      case 'DONE': return <CheckCircle className="w-4 h-4 text-green-500" />;
+      case 'IN_PROGRESS': return <Clock className="w-4 h-4 text-blue-500" />;
+      case 'TODO': return <Calendar className="w-4 h-4 text-orange-500" />;
       default: return null;
     }
   };
@@ -169,35 +162,21 @@ const TaskManagement = () => {
 
 
   // 상태 변경 함수
-  const handleStatusChange = (taskId: number, newStatus: string) => {
-    setTasks(prev => prev.map(task => 
-      task.id === taskId 
-        ? { 
-            ...task, 
-            status: newStatus,
-            statusColor: newStatus === '완료' ? 'bg-green-500 text-white' :
-                        newStatus === '진행 중' ? 'bg-blue-500 text-white' :
-                        'bg-orange-500 text-white'
-          }
-        : task
-    ));
-    if (selectedTask?.id === taskId) {
-      setSelectedTask(prev => prev ? { 
-        ...prev, 
-        status: newStatus,
-        statusColor: newStatus === '완료' ? 'bg-green-500 text-white' :
-                    newStatus === '진행 중' ? 'bg-blue-500 text-white' :
-                    'bg-orange-500 text-white'
-      } : null);
-    }
-    toast.success('상태가 변경되었습니다! 📋');
+  const handleStatusChange = (taskId: string, newStatus: string) => {
+    const apiStatus = newStatus === '완료' ? 'DONE' : 
+                    newStatus === '진행 중' ? 'IN_PROGRESS' : 'TODO';
+    
+    updateTaskMutation.mutate({ 
+      taskId, 
+      updates: { status: apiStatus } 
+    });
   };
 
   // 업무 편집 시작
   const startEditingTask = () => {
     if (selectedTask) {
       setEditedTaskData({
-        name: selectedTask.name,
+        name: selectedTask.title,
         assignee: selectedTask.assignee,
         dueDate: selectedTask.dueDate,
         description: selectedTask.description
@@ -209,19 +188,13 @@ const TaskManagement = () => {
   // 업무 편집 저장
   const saveTaskEdit = () => {
     if (selectedTask && editedTaskData) {
-      const updatedTask = {
-        ...selectedTask,
-        ...editedTaskData
-      };
-      
-      setTasks(prev => prev.map(task => 
-        task.id === selectedTask.id ? updatedTask : task
-      ));
-      
-      setSelectedTask(updatedTask);
+      updateTaskMutation.mutate({ 
+        taskId: selectedTask.id, 
+        updates: editedTaskData 
+      });
+      setSelectedTask(null);
       setIsEditingTask(false);
       setEditedTaskData(null);
-      toast.success('업무가 수정되었습니다! ✏️');
     }
   };
 
@@ -257,15 +230,35 @@ const TaskManagement = () => {
 
 
   // 업무 삭제 함수
-  const handleDeleteTask = (taskId: number) => {
+  const handleDeleteTask = (taskId: string) => {
     if (window.confirm('정말로 이 업무를 삭제하시겠습니까?')) {
-      setTasks(prev => prev.filter(task => task.id !== taskId));
+      deleteTaskMutation.mutate(taskId);
       if (selectedTask?.id === taskId) {
         setSelectedTask(null);
       }
-      toast.success('업무가 삭제되었습니다. 🗑️');
     }
   };
+
+  // 디버깅용 로그
+  console.log('TaskManagement - tasksLoading:', tasksLoading);
+  console.log('TaskManagement - tasks:', tasks);
+  console.log('TaskManagement - projects:', projects);
+
+  // 로딩 상태 처리
+  if (tasksLoading) {
+    return (
+      <div className="flex h-full bg-gray-100 dark:bg-gray-900">
+        <div className="flex-1 p-6 overflow-auto">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
+            <h1 className="text-2xl font-bold mb-6 text-gray-900 dark:text-white">업무 관리</h1>
+            <div className="flex items-center justify-center py-20">
+              <div className="text-gray-500">데이터를 불러오는 중...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
 
 
@@ -304,7 +297,7 @@ const TaskManagement = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm opacity-90">완료</p>
-                  <p className="text-2xl font-bold">{tasks.filter(t => t.status === '완료').length}</p>
+                  <p className="text-2xl font-bold">{tasks.filter(t => t.status === 'DONE').length}</p>
                 </div>
                 <CheckCircle className="w-8 h-8 opacity-80" />
               </div>
@@ -319,7 +312,7 @@ const TaskManagement = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm opacity-90">진행 중</p>
-                  <p className="text-2xl font-bold">{tasks.filter(t => t.status === '진행 중').length}</p>
+                  <p className="text-2xl font-bold">{tasks.filter(t => t.status === 'IN_PROGRESS').length}</p>
                 </div>
                 <Clock className="w-8 h-8 opacity-80" />
               </div>
@@ -334,7 +327,7 @@ const TaskManagement = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm opacity-90">예정</p>
-                  <p className="text-2xl font-bold">{tasks.filter(t => t.status === '예정').length}</p>
+                  <p className="text-2xl font-bold">{tasks.filter(t => t.status === 'TODO').length}</p>
                 </div>
                 <Calendar className="w-8 h-8 opacity-80" />
               </div>
@@ -434,13 +427,13 @@ const TaskManagement = () => {
                   <div className="flex items-center justify-between">
                     <div className="flex-1" onClick={() => setSelectedTask(task)}>
                       <div className="flex items-center gap-3 mb-2">
-                        <h3 className="font-medium text-gray-900">{task.name}</h3>
+                        <h3 className="font-medium text-gray-900">{task.title}</h3>
                       </div>
                       
                       <div className="flex items-center gap-4 text-sm text-gray-600">
                         <div className="flex items-center gap-1">
                           <span>👤</span>
-                          <span>{task.assignee}</span>
+                          <span>{task.assignee?.name || '미지정'}</span>
                         </div>
                         <div className="flex items-center gap-1">
                           <Calendar className="w-4 h-4" />
@@ -451,8 +444,13 @@ const TaskManagement = () => {
                         </div>
                         <div className="flex items-center gap-1">
                           {getStatusIcon(task.status)}
-                          <span className={`px-2 py-1 text-xs rounded-full ${task.statusColor}`}>
-                            {task.status}
+                          <span className={`px-2 py-1 text-xs rounded-full ${
+                            task.status === 'TODO' ? 'bg-orange-100 text-orange-700' :
+                            task.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700' :
+                            'bg-green-100 text-green-700'
+                          }`}>
+                            {task.status === 'TODO' ? '예정' : 
+                             task.status === 'IN_PROGRESS' ? '진행 중' : '완료'}
                           </span>
                         </div>
                       </div>
@@ -625,12 +623,17 @@ const TaskManagement = () => {
                   placeholder="업무명"
                 />
               ) : (
-                <h4 className="font-medium text-gray-900 mb-2">{selectedTask.name}</h4>
+                <h4 className="font-medium text-gray-900 mb-2">{selectedTask.title}</h4>
               )}
               <div className="flex items-center gap-2 mb-3">
                 {getStatusIcon(selectedTask.status)}
-                <span className={`px-2 py-1 text-xs rounded-full ${selectedTask.statusColor}`}>
-                  {selectedTask.status}
+                <span className={`px-2 py-1 text-xs rounded-full ${
+                  selectedTask.status === 'TODO' ? 'bg-orange-100 text-orange-700' :
+                  selectedTask.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700' :
+                  'bg-green-100 text-green-700'
+                }`}>
+                  {selectedTask.status === 'TODO' ? '예정' : 
+                   selectedTask.status === 'IN_PROGRESS' ? '진행 중' : '완료'}
                 </span>
               </div>
               <div className="flex items-center gap-4 text-sm text-gray-600">
@@ -657,13 +660,13 @@ const TaskManagement = () => {
                 {isEditingTask ? (
                   <input
                     type="text"
-                    value={editedTaskData?.assignee || ''}
+                    value={typeof editedTaskData?.assignee === 'string' ? editedTaskData.assignee : editedTaskData?.assignee?.name || ''}
                     onChange={(e) => setEditedTaskData(prev => ({ ...prev, assignee: e.target.value }))}
                     className="flex-1 text-sm text-gray-900 p-2 border border-gray-300 rounded-lg"
                     placeholder="담당자"
                   />
                 ) : (
-                  <span className="text-sm text-gray-900">{selectedTask.assignee}</span>
+                  <span className="text-sm text-gray-900">{selectedTask.assignee?.name || '미지정'}</span>
                 )}
               </div>
             </div>
@@ -889,9 +892,9 @@ const TaskManagement = () => {
                                     ? 'bg-green-100 text-green-700 border border-green-200'
                                     : 'bg-blue-100 text-blue-700 border border-blue-200'
                                 }`}
-                                title={task.name}
+                                title={task.title}
                               >
-                                {task.name}
+                                {task.title}
                               </div>
                             );
                           })}
@@ -967,9 +970,14 @@ const TaskManagement = () => {
                     }}
                   >
                     <div className="flex items-center justify-between mb-3">
-                      <h4 className="font-semibold text-gray-900">{task.name}</h4>
-                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${task.statusColor}`}>
-                        {task.status}
+                      <h4 className="font-semibold text-gray-900">{task.title}</h4>
+                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                        task.status === 'TODO' ? 'bg-orange-100 text-orange-700' :
+                        task.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700' :
+                        'bg-green-100 text-green-700'
+                      }`}>
+                        {task.status === 'TODO' ? '예정' : 
+                         task.status === 'IN_PROGRESS' ? '진행 중' : '완료'}
                       </span>
                     </div>
                     
@@ -1005,6 +1013,21 @@ const TaskManagement = () => {
       )}
     </div>
   );
+  } catch (error) {
+    console.error('TaskManagement 컴포넌트 에러:', error);
+    return (
+      <div className="flex h-full bg-gray-100 dark:bg-gray-900">
+        <div className="flex-1 p-6 overflow-auto">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
+            <h1 className="text-2xl font-bold mb-6 text-gray-900 dark:text-white">업무 관리</h1>
+            <div className="flex items-center justify-center py-20">
+              <div className="text-red-500">페이지 로드 중 오류가 발생했습니다. 콘솔을 확인해주세요.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 };
 
 export default TaskManagement; 

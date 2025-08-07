@@ -9,7 +9,8 @@ from transformers import (
     AutoModelForCausalLM,
     TrainingArguments,
     Trainer,
-    DataCollatorForSeq2Seq
+    DataCollatorForSeq2Seq,
+    __version__ as transformers_version
 )
 from peft import LoraConfig, get_peft_model, TaskType
 from datasets import Dataset
@@ -153,36 +154,33 @@ class TtalkkacDatasetConverter:
                 
                 logger.info(f"   📊 원본 회의록 길이: {len(full_meeting_content)}자")
                 
-                # 청킹된 데이터인지 확인하고 처리
-                if is_chunk and 'chunk_info' in item:
-                    # 청킹된 데이터: 해당 청크만 추출
-                    chunk_info = item['chunk_info']
-                    chunk_index = chunk_info.get('chunk_index', 1) - 1  # 0-based index
-                    total_chunks = chunk_info.get('total_chunks', 0)
-                    chunk_length = chunk_info.get('chunk_length', 0)
-                    
-                    logger.info(f"   ✂️  청킹 정보:")
-                    logger.info(f"      - 청크 인덱스: {chunk_index + 1}")
-                    logger.info(f"      - 전체 청크 수: {total_chunks}")
-                    logger.info(f"      - 골드 스탠다드 청크 길이: {chunk_length}자")
-                    
-                    # 동일한 청킹 방식으로 원본 텍스트 분할
+                # 골드 스탠다드 생성과 동일한 청킹 조건 적용
+                if len(full_meeting_content) > 5000:
+                    # 5000자 초과: 청킹 처리
+                    logger.info(f"   📏 긴 텍스트 감지 ({len(full_meeting_content)}자) - 청킹 처리")
                     chunks = self.chunk_text(full_meeting_content, chunk_size=5000, overlap=512)
-                    logger.info(f"   🔪 원본 텍스트 청킹 결과: {len(chunks)}개 청크 생성")
+                    logger.info(f"   ✂️ {len(chunks)}개 청크로 분할")
                     
-                    if chunk_index < len(chunks):
-                        meeting_content = chunks[chunk_index]
-                        logger.info(f"   ✅ 청크 매칭 성공!")
-                        logger.info(f"      - 사용할 청크: {chunk_index+1}/{len(chunks)}")
-                        logger.info(f"      - 실제 청크 길이: {len(meeting_content)}자")
-                        logger.info(f"      - 골드 vs 실제 길이 차이: {abs(len(meeting_content) - chunk_length)}자")
+                    # 골드 스탠다드 ID에서 청크 인덱스 추출
+                    item_id = item.get('id', '')
+                    if '_chunk_' in item_id:
+                        chunk_str = item_id.split('_chunk_')[-1]
+                        chunk_index = int(chunk_str) - 1  # 1-based → 0-based
+                        
+                        if chunk_index < len(chunks):
+                            meeting_content = chunks[chunk_index]
+                            logger.info(f"   ✅ 청크 매칭 성공!")
+                            logger.info(f"      - 사용할 청크: {chunk_index+1}/{len(chunks)}")
+                            logger.info(f"      - 실제 청크 길이: {len(meeting_content)}자")
+                        else:
+                            logger.error(f"   ❌ 청크 인덱스 초과: {chunk_index+1} > {len(chunks)}")
+                            continue
                     else:
-                        logger.error(f"   ❌ 청크 인덱스 초과!")
-                        logger.error(f"      - 요청 인덱스: {chunk_index+1}")
-                        logger.error(f"      - 실제 청크 수: {len(chunks)}")
-                        continue
+                        # 청크 인덱스 없으면 첫 번째 청크 사용
+                        meeting_content = chunks[0]
+                        logger.info(f"   ⚠️  청크 인덱스 없음, 첫 번째 청크 사용")
                 else:
-                    # 일반 데이터: 전체 회의록 사용
+                    # 5000자 이하: 전체 텍스트 사용
                     meeting_content = full_meeting_content
                     logger.info(f"   📖 전체 회의록 사용 (길이: {len(meeting_content)}자)")
                 
@@ -198,9 +196,16 @@ class TtalkkacDatasetConverter:
                 # JSON 문자열인 경우 파싱
                 if isinstance(notion_output, str):
                     try:
-                        notion_output = json.loads(notion_output)
-                    except:
-                        logger.warning(f"JSON 파싱 실패: {item.get('id', 'Unknown')}")
+                        # 마크다운 코드블록 제거
+                        clean_json = notion_output.strip()
+                        if clean_json.startswith('```json\n') and clean_json.endswith('\n```'):
+                            clean_json = clean_json[8:-4]  # ```json\n과 \n``` 제거
+                        elif clean_json.startswith('```\n') and clean_json.endswith('\n```'):
+                            clean_json = clean_json[4:-4]  # ```\n과 \n``` 제거
+                        
+                        notion_output = json.loads(clean_json)
+                    except Exception as e:
+                        logger.warning(f"JSON 파싱 실패: {item.get('id', 'Unknown')} - {str(e)}")
                         continue
                     
                 assistant_response = json.dumps(notion_output, ensure_ascii=False, indent=2)
@@ -235,7 +240,7 @@ class TtalkkacDatasetConverter:
         return training_data
 
 class QwenFineTuner:
-    def __init__(self, model_name: str = "Qwen/Qwen2.5-7B-Instruct"):
+    def __init__(self, model_name: str = "Qwen/Qwen3-4B"):
         self.model_name = model_name
         self.tokenizer = None
         self.model = None
@@ -243,6 +248,12 @@ class QwenFineTuner:
     def setup_model_and_tokenizer(self):
         """모델과 토크나이저 설정"""
         logger.info(f"모델 로딩: {self.model_name}")
+        
+        # 메모리 사용량 모니터링
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            initial_memory = torch.cuda.memory_allocated() / 1024**3
+            logger.info(f"초기 GPU 메모리: {initial_memory:.1f}GB")
         
         # 토크나이저 로드
         self.tokenizer = AutoTokenizer.from_pretrained(
@@ -255,22 +266,33 @@ class QwenFineTuner:
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
         
-        # AWQ 모델 로드 (Flash Attention 강제 비활성화)
+        # 일반 모델 로드 (메모리 최적화)
         try:
+            # GPU 메모리 정리
+            torch.cuda.empty_cache()
+            
             self.model = AutoModelForCausalLM.from_pretrained(
                 self.model_name,
                 torch_dtype=torch.float16,
-                device_map="auto",
+                device_map={"": 0},  # 단일 GPU로 강제 배치
                 trust_remote_code=True,
-                attn_implementation="eager",  # Flash Attention 비활성화
-                # AWQ 모델 특화 설정
+                attn_implementation="flash_attention_2",  # Flash Attention 활성화로 메모리 절약
                 use_cache=False,
-                low_cpu_mem_usage=True
+                low_cpu_mem_usage=True,
             )
         except Exception as e:
-            logger.error(f"❌ AWQ 모델 로드 실패: {e}")
-            logger.error("AWQ 모델이 필요합니다. 학습을 중단합니다.")
-            raise RuntimeError(f"AWQ 모델 로드 실패: {e}. 학습을 중단합니다.")
+            logger.error(f"❌ 모델 로드 실패: {e}")
+            logger.error("모델 로드에 실패했습니다. 학습을 중단합니다.")
+            raise RuntimeError(f"모델 로드 실패: {e}. 학습을 중단합니다.")
+        
+        # 모델 로딩 후 메모리 확인
+        if torch.cuda.is_available():
+            model_memory = torch.cuda.memory_allocated() / 1024**3
+            logger.info(f"모델 로딩 후 GPU 메모리: {model_memory:.1f}GB")
+            
+        # 모델 크기 확인
+        total_params = sum(p.numel() for p in self.model.parameters())
+        logger.info(f"실제 모델 파라미터 수: {total_params:,}")
         
         logger.info("모델과 토크나이저 로딩 완료")
     
@@ -279,14 +301,14 @@ class QwenFineTuner:
         return LoraConfig(
             task_type=TaskType.CAUSAL_LM,
             inference_mode=False,
-            r=16,  # LoRA rank
-            lora_alpha=32,  # LoRA scaling parameter
+            r=16,   # 일반 모델에서는 더 높은 rank 사용
+            lora_alpha=32, # LoRA scaling parameter
             lora_dropout=0.1,
-            target_modules=["q_proj", "v_proj", "k_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+            target_modules=["q_proj", "v_proj", "k_proj", "o_proj"],  # 어텐션 모듈 전체
             bias="none",
         )
     
-    def prepare_dataset(self, training_data: List[Dict[str, str]], max_length: int = 2048):
+    def prepare_dataset(self, training_data: List[Dict[str, str]], max_length: int = 12000):
         """데이터셋 준비 및 토크나이징"""
         def tokenize_function(examples):
             # 텍스트 토크나이징
@@ -299,7 +321,14 @@ class QwenFineTuner:
             )
             
             # labels = input_ids (자동회귀 언어 모델링)
-            tokenized["labels"] = tokenized["input_ids"].copy()
+            # 중요: labels는 input_ids와 완전히 동일해야 함
+            tokenized["labels"] = [ids[:] for ids in tokenized["input_ids"]]  # 깊은 복사
+            
+            logger.info(f"토크나이징 샘플 확인:")
+            logger.info(f"  input_ids 길이: {len(tokenized['input_ids'][0])}")
+            logger.info(f"  labels 길이: {len(tokenized['labels'][0])}")
+            logger.info(f"  input_ids == labels: {tokenized['input_ids'][0] == tokenized['labels'][0]}")
+            
             return tokenized
         
         # 모든 데이터 사용 (품질 필터링 제거)
@@ -324,10 +353,10 @@ class QwenFineTuner:
         train_dataset = Dataset.from_list([{"text": item["text"]} for item in train_data])
         val_dataset = Dataset.from_list([{"text": item["text"]} for item in val_data]) if val_data else None
         
-        # 토크나이징
-        train_dataset = train_dataset.map(tokenize_function, batched=True, remove_columns=["text"])
+        # 토크나이징 (메모리 절약을 위해 배치 크기 제한)
+        train_dataset = train_dataset.map(tokenize_function, batched=True, batch_size=1, remove_columns=["text"])
         if val_dataset is not None:
-            val_dataset = val_dataset.map(tokenize_function, batched=True, remove_columns=["text"])
+            val_dataset = val_dataset.map(tokenize_function, batched=True, batch_size=1, remove_columns=["text"])
         
         return train_dataset, val_dataset
     
@@ -338,6 +367,33 @@ class QwenFineTuner:
         lora_config = self.setup_lora_config()
         self.model = get_peft_model(self.model, lora_config)
         
+        # LoRA 파라미터 상태 자세히 확인
+        lora_params = []
+        frozen_params = []
+        
+        for name, param in self.model.named_parameters():
+            if param.requires_grad:
+                lora_params.append((name, param.shape, param.dtype))
+            else:
+                frozen_params.append(name)
+        
+        logger.info(f"✅ 학습 가능한 LoRA 파라미터 수: {len(lora_params)}")
+        for name, shape, dtype in lora_params[:5]:  # 처음 5개만 출력
+            logger.info(f"   - {name}: {shape} ({dtype})")
+        
+        logger.info(f"❄️ 동결된 파라미터 수: {len(frozen_params)}")
+        
+        if len(lora_params) == 0:
+            raise RuntimeError("❌ 학습 가능한 LoRA 파라미터가 없습니다! LoRA 적용 실패")
+        
+        # LoRA 파라미터 강제 활성화 및 베이스 모델 동결
+        for name, param in self.model.named_parameters():
+            if 'lora_' in name:
+                param.requires_grad_(True)
+                logger.info(f"🔧 LoRA 파라미터 활성화: {name}")
+            else:
+                param.requires_grad_(False)
+        
         # 학습 가능한 파라미터 출력
         self.model.print_trainable_parameters()
         
@@ -347,20 +403,21 @@ class QwenFineTuner:
             num_train_epochs=3,
             per_device_train_batch_size=1,
             per_device_eval_batch_size=1,
-            gradient_accumulation_steps=8,
+            gradient_accumulation_steps=32,  # 더 많은 accumulation으로 메모리 절약
             warmup_steps=100,
             learning_rate=2e-4,
             fp16=True,
             logging_steps=10,
-            evaluation_strategy="epoch",
+            eval_strategy="epoch",  # evaluation_strategy → eval_strategy
             save_strategy="epoch",
             save_total_limit=None,  # 모든 에포크 저장
             load_best_model_at_end=True,
             metric_for_best_model="eval_loss",
             greater_is_better=False,
             dataloader_pin_memory=False,
+            dataloader_num_workers=0,  # CPU 코어 사용 안함
             remove_unused_columns=False,
-            gradient_checkpointing=True,
+            gradient_checkpointing=False,  # gradient 문제 해결을 위해 비활성화
             report_to=None,  # wandb 등 비활성화
         )
         
@@ -379,7 +436,7 @@ class QwenFineTuner:
             train_dataset=train_dataset,
             eval_dataset=val_dataset,
             data_collator=data_collator,
-            tokenizer=self.tokenizer,
+            processing_class=self.tokenizer,  # tokenizer → processing_class
         )
         
         # 학습 실행
@@ -408,11 +465,23 @@ def main():
     print("🚀 Ttalkkac Qwen3 LoRA 파인튜닝 시작")
     print("=" * 60)
     
+    # Transformers 버전 확인
+    from packaging import version
+    required_version = "4.51.0"
+    if version.parse(transformers_version) < version.parse(required_version):
+        print(f"❌ Transformers 버전이 부족합니다!")
+        print(f"   현재 버전: {transformers_version}")
+        print(f"   필요 버전: {required_version}+")
+        print(f"   업그레이드: pip install transformers>={required_version}")
+        return
+    
+    print(f"✅ Transformers 버전 확인: {transformers_version}")
+    
     # 1. 데이터 변환
     print("\n📊 1. 골드 스탠다드 데이터 로드 및 변환")
     converter = TtalkkacDatasetConverter()
     
-    results_dir = "ttalkkac_gold_standard_results_20250803_163615"
+    results_dir = "ttalkkac_gold_standard_results_output"
     gold_data = converter.load_gold_standard_data(results_dir)
     
     if not gold_data:
@@ -440,8 +509,8 @@ def main():
     else:
         print("⚠️ CPU 모드로 실행됩니다.")
     
-    # 파인튜너 초기화 (AWQ 모델만 사용)
-    finetuner = QwenFineTuner("Qwen/Qwen3-14B-AWQ")
+    # 파인튜너 초기화 (Qwen3-4B 모델 사용)
+    finetuner = QwenFineTuner("Qwen/Qwen3-4B")
     finetuner.data_converter = converter
     
     # 모델과 토크나이저 설정
@@ -449,11 +518,11 @@ def main():
         finetuner.setup_model_and_tokenizer()
     except RuntimeError as e:
         print(f"❌ 모델 로드 실패: {e}")
-        print("AWQ 모델이 필요합니다. 프로그램을 종료합니다.")
+        print("모델 로드에 실패했습니다. 프로그램을 종료합니다.")
         return
     
     # 데이터셋 준비
-    train_dataset, val_dataset = finetuner.prepare_dataset(training_data, max_length=2048)
+    train_dataset, val_dataset = finetuner.prepare_dataset(training_data, max_length=12000)
     
     if train_dataset is None:
         print("❌ 학습 데이터셋 준비 실패")

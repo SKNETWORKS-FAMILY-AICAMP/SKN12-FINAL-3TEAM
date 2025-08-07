@@ -116,8 +116,9 @@ async createMeetingPage(inputData: InputData | string): Promise<{ id: string; ur
     });
 
     console.log('📊 데이터베이스 생성 완료:', database.id);
-
+    console.log('🔍 NotionService에서 받은 첫 번째 아이템:', parsedData.action_items[0]);
     for (const item of parsedData.action_items) {
+      
       await this.notion.pages.create({
         parent: { database_id: database.id },
         properties: {
@@ -143,6 +144,7 @@ async createMeetingPage(inputData: InputData | string): Promise<{ id: string; ur
           }]
         }
       },
+      
       children: [
         // 🎈SKN 12기 Final Project 3팀
         {
@@ -310,7 +312,6 @@ async createMeetingPage(inputData: InputData | string): Promise<{ id: string; ur
             ]
           }
         },
-
 
 
         // 기획안 콜아웃 - 전체 기획안을 담는 큰 박스
@@ -508,6 +509,7 @@ async createMeetingPage(inputData: InputData | string): Promise<{ id: string; ur
           }
         }
       ]
+      
     });
     
     console.log('✅ Notion 페이지 생성 완료');

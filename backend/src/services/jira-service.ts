@@ -24,6 +24,7 @@ interface JiraCreateIssueRequest {
   description: string;
   issueType: string;
   priority: string;
+  projectKey?: string | undefined;  // ← 새로 추가
   assignee?: string | undefined;
   parentKey?: string | undefined; // 서브태스크인 경우
   startDate?: string | undefined; // YYYY-MM-DD 형식
@@ -386,7 +387,7 @@ class JiraService {
     const issueData: any = {
       fields: {
         project: {
-          key: jiraProject.jiraProjectKey
+          key: request.projectKey || jiraProject.jiraProjectKey  // 요청에서 온 키 우선 사용
         },
         summary: request.summary,
         description: {
@@ -502,14 +503,15 @@ class JiraService {
     projectData: {
       title: string;
       overview: string;
+      projectKey?: string;
       tasks: Array<{
         title: string;
         description: string;
         priority: string;
         estimated_hours: number;
         complexity: string;
-        startDate?: string;
-        dueDate?: string;
+        start_date?: string;
+        deadline?: string;
         subtasks?: Array<{
           title: string;
           description: string;
@@ -517,6 +519,7 @@ class JiraService {
           startDate?: string;
           dueDate?: string;
         }>;
+      
       }>;
     }
   ) {
@@ -614,8 +617,9 @@ class JiraService {
             issueType: issueTypes.epic || 'Task',
             priority: task.priority || 'MEDIUM',
             epicName: task.title,
-            startDate: task.startDate,
-            dueDate: task.dueDate
+            startDate: task.start_date,
+            dueDate: task.deadline,
+            projectKey: targetProject.key,
           });
           
           console.log(`✅ Epic 생성 (TaskMaster Task): ${epicIssue.key} - ${task.title}`);
@@ -639,8 +643,8 @@ class JiraService {
                   issueType: issueTypes.task || 'Task',
                   priority: 'MEDIUM',
                   // parentKey 제거 - 독립적인 Task로 생성
-                  startDate: subtask.startDate,
-                  dueDate: subtask.dueDate
+                  startDate: task.start_date,
+                  dueDate: task.deadline
                 });
                 
                 console.log(`✅ Task 생성 (TaskMaster Subtask): ${jiraTaskIssue.key} - ${subtask.title}`);

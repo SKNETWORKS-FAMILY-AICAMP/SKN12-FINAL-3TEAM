@@ -6,12 +6,14 @@ import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
+import LoginSuccess from './pages/LoginSuccess';
 import MeetingAnalysis from './pages/MeetingAnalysis';
 import TaskManagement from './pages/TaskManagement';
 import Settings from './pages/Settings';
 import IntegrationSuccess from './pages/JiraSuccess';
 import NotionSuccess from './pages/NotionSuccess';
 import Integration from './pages/Integration';
+import ProtectedRoute from './components/ProtectedRoute';
 import { connectSocket, disconnectSocket } from './services/api';
 import './App.css';
 
@@ -57,15 +59,16 @@ function App() {
       <Router>
         <div className="App min-h-screen bg-neutral-50 font-sans antialiased">
           <Routes>
-            <Route path="/" element={<Layout />}>
+            <Route path="/" element={<Landing />} />
+            <Route path="/dashboard" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
               <Route index element={<Dashboard />} />
               <Route path="meeting" element={<MeetingAnalysis />} />
               <Route path="task" element={<TaskManagement />} />
               <Route path="integration" element={<Integration />} />
               <Route path="settings" element={<Settings />} />
             </Route>
-            <Route path="/landing" element={<Landing />} />
             <Route path="/login" element={<Login />} />
+            <Route path="/login/success" element={<LoginSuccess />} />
             <Route path="/integration-success" element={<IntegrationSuccess />} />
             <Route path="/notion-success" element={<NotionSuccess />} />
 
