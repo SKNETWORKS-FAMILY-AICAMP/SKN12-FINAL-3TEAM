@@ -101,3 +101,7 @@ test-*.js
 "\343\204\264\343\204\264.md" 
 
 *.pt*.pt
+*.pt
+*.bin
+*.safetensors
+ai-engine-dev/**/checkpoint-*/
