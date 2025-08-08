@@ -59,6 +59,9 @@ qwen_tokenizer = None
 triplet_processor = None
 bert_classifier = None
 
+# BERT 모델 경로 설정
+BERT_MODEL_PATH = r"C:\Users\SH\Desktop\TtalKkac\Bert모델\Ttalkkak_model_v2\Ttalkkak_model_v3.pt"
+
 # 결과 저장 디렉토리
 RESULT_DIR = Path("pipeline_results")
 RESULT_DIR.mkdir(exist_ok=True)
@@ -99,6 +102,43 @@ def load_whisperx():
     
     return whisper_model
 
+def load_bert_model():
+    """BERT 분류 모델 로딩"""
+    global bert_classifier, triplet_processor
+    
+    if bert_classifier is None:
+        logger.info("🔬 Loading BERT classifier...")
+        try:
+            # TripletProcessor와 BertClassifier 임포트 시도
+            try:
+                from triplet_processor import TripletProcessor
+                from bert_classifier import TtalkkakBERTClassifier
+                
+                # 모델 초기화
+                triplet_processor = TripletProcessor()
+                bert_classifier = TtalkkakBERTClassifier()
+                bert_classifier.load_model()
+                
+                logger.info("✅ BERT model loaded successfully")
+            except Exception as e:
+                logger.warning(f"⚠️ 전체 BERT 모듈 로드 실패: {e}")
+                logger.info("🔄 간단한 필터로 대체")
+                
+                # 간단한 필터 사용
+                from simple_bert_filter import SimpleTripletProcessor, SimpleBertClassifier
+                
+                triplet_processor = SimpleTripletProcessor()
+                bert_classifier = SimpleBertClassifier()
+                bert_classifier.load_model()
+                
+                logger.info("✅ Simple BERT filter loaded successfully")
+                
+        except Exception as e:
+            logger.error(f"❌ All BERT loading failed: {e}")
+            # 모든 로드 실패시 None 유지
+    
+    return bert_classifier, triplet_processor
+
 def load_qwen3():
     """Qwen3-32B-AWQ 모델 로딩"""
     global qwen_model, qwen_tokenizer
@@ -114,7 +154,7 @@ def load_qwen3():
                     from vllm import LLM, SamplingParams
                     from transformers import AutoTokenizer
                     
-                    model_name = "Qwen/Qwen2.5-32B-Instruct-AWQ"
+                    model_name = "Qwen/Qwen3-32B-AWQ"
                     
                     qwen_model = LLM(
                         model=model_name,
@@ -122,7 +162,7 @@ def load_qwen3():
                         gpu_memory_utilization=0.8,
                         trust_remote_code=True,
                         quantization="awq",
-                        max_model_len=16384,
+                        max_model_len=20000,
                         enforce_eager=True,
                         swap_space=4
                     )
@@ -130,9 +170,9 @@ def load_qwen3():
                     qwen_tokenizer = AutoTokenizer.from_pretrained(
                         model_name, trust_remote_code=True
                     )
-                    
+
                     logger.info("✅ VLLM Qwen3-32B-AWQ loaded successfully")
-                    
+
                 except Exception as e:
                     logger.warning(f"⚠️ VLLM failed: {e}, falling back to Transformers")
                     use_vllm = False
@@ -140,7 +180,7 @@ def load_qwen3():
             if not use_vllm:
                 from transformers import AutoTokenizer, AutoModelForCausalLM
                 
-                model_name = "Qwen/Qwen2.5-32B-Instruct-AWQ"
+                model_name = "Qwen/Qwen3-32B-AWQ"
                 
                 qwen_tokenizer = AutoTokenizer.from_pretrained(
                     model_name, trust_remote_code=True
@@ -182,12 +222,28 @@ def generate_with_qwen(prompt: str, max_tokens: int = 2048, temperature: float =
     """Qwen 모델로 텍스트 생성"""
     global qwen_model, qwen_tokenizer
     
-    if not qwen_model or not qwen_tokenizer:
+    if not qwen_model:
         raise RuntimeError("Qwen model not loaded")
     
-    # VLLM 사용 여부 확인
-    if hasattr(qwen_model, 'generate'):
+    # VLLM 사용 여부 확인 (VLLM은 LLM 클래스)
+    if type(qwen_model).__name__ == 'LLM':
+        # VLLM 방식
+        from vllm import SamplingParams
+        
+        sampling_params = SamplingParams(
+            temperature=temperature,
+            max_tokens=max_tokens,
+            top_p=0.95
+        )
+        
+        # VLLM의 generate 메서드는 프롬프트 리스트를 받음
+        outputs = qwen_model.generate([prompt], sampling_params)
+        response = outputs[0].outputs[0].text
+    else:
         # Transformers 방식
+        if not qwen_tokenizer:
+            raise RuntimeError("Qwen tokenizer not loaded")
+            
         messages = [{"role": "user", "content": prompt}]
         text = qwen_tokenizer.apply_chat_template(
             messages, tokenize=False, add_generation_prompt=True
@@ -210,18 +266,6 @@ def generate_with_qwen(prompt: str, max_tokens: int = 2048, temperature: float =
             outputs[0][len(inputs["input_ids"][0]):], 
             skip_special_tokens=True
         )
-    else:
-        # VLLM 방식
-        from vllm import SamplingParams
-        
-        sampling_params = SamplingParams(
-            temperature=temperature,
-            max_tokens=max_tokens,
-            top_p=0.95
-        )
-        
-        outputs = qwen_model.generate([prompt], sampling_params)
-        response = outputs[0].outputs[0].text
     
     return response
 
@@ -236,6 +280,82 @@ async def process_audio_file(audio_path: str, session_dir: Path) -> Dict[str, An
         
         logger.info(f"📝 Transcribing: {audio_path}")
         result = model.transcribe(audio_path, batch_size=16)
+        
+        # 화자 구분 (Diarization) 추가
+        try:
+            logger.info("👥 Adding speaker diarization...")
+            import whisperx
+            
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            
+            # Alignment 먼저 수행 (diarization 전 필수)
+            model_a, metadata = whisperx.load_align_model(
+                language_code=result.get("language", "ko"), 
+                device=device
+            )
+            result = whisperx.align(
+                result["segments"], 
+                model_a, 
+                metadata, 
+                audio_path, 
+                device,
+                return_char_alignments=False
+            )
+            
+            # Diarization 수행
+            hf_token = os.getenv("HF_TOKEN") or os.getenv("HUGGING_FACE_HUB_TOKEN") or os.getenv("HF_ACCESS_TOKEN")
+            
+            # 디버깅: 토큰 상태 확인
+            if not hf_token:
+                logger.warning("⚠️ No HF_TOKEN found in environment variables")
+                logger.info("Please set one of: HF_TOKEN, HUGGING_FACE_HUB_TOKEN, or HF_ACCESS_TOKEN")
+                logger.info("Example: export HF_TOKEN='hf_xxxxxxxxxxxxxxxxxxxxx'")
+            
+            if hf_token:
+                logger.info(f"🔑 HF Token found: {hf_token[:10]}...")
+                # pyannote 직접 사용 (간단한 방법)
+                from pyannote.audio import Pipeline
+                
+                # 파이프라인 로드
+                pipeline = Pipeline.from_pretrained(
+                    "pyannote/speaker-diarization-3.1",
+                    use_auth_token=hf_token
+                )
+                
+                # GPU 사용 가능하면 GPU로
+                if torch.cuda.is_available():
+                    pipeline.to(torch.device("cuda"))
+                
+                # 화자 구분 실행 (원본 파일 직접 사용)
+                logger.info("🎯 Running speaker diarization on audio file...")
+                diarization = pipeline(audio_path)
+                
+                # WhisperX에 화자 정보 할당
+                result = whisperx.assign_word_speakers(
+                    diarization, 
+                    result
+                )
+                
+                # 화자 정보 요약
+                speakers = set()
+                for seg in result.get("segments", []):
+                    if "speaker" in seg:
+                        speakers.add(seg["speaker"])
+                
+                logger.info(f"✅ Speaker diarization completed - Found {len(speakers)} speakers: {', '.join(sorted(speakers))}")
+            else:
+                logger.warning("⚠️ No HF_TOKEN found, skipping speaker diarization")
+                logger.info("Set HF_TOKEN environment variable to enable speaker detection")
+                logger.info("Get token from: https://huggingface.co/pyannote/speaker-diarization-3.1")
+            
+        except ImportError as e:
+            logger.warning(f"⚠️ Diarization module not found: {e}")
+            logger.info("Install with: pip install pyannote.audio")
+        except Exception as e:
+            import traceback
+            logger.warning(f"⚠️ Speaker diarization failed: {str(e)}")
+            logger.debug(f"Full error trace: {traceback.format_exc()}")
+            logger.info("Continuing without speaker information...")
         
         segments = result.get("segments", [])
         full_text = " ".join([seg.get("text", "") for seg in segments])
@@ -260,62 +380,99 @@ async def process_audio_file(audio_path: str, session_dir: Path) -> Dict[str, An
         raise
 
 async def process_bert_filtering(transcription_data: Dict, session_dir: Path) -> str:
-    """Step 2-3: BERT 필터링"""
+    """Step 2-3-4: Triplet 변환 → BERT 분류 → 필터링"""
     logger.info(f"\n{'='*60}")
-    logger.info("STEP 2-3: BERT Filtering")
+    logger.info("STEP 2-3-4: Triplet Processing & BERT Filtering")
     logger.info(f"{'='*60}")
     
     full_text = transcription_data["full_text"]
     
+    # BERT 모델 로드 시도
+    load_bert_model()
+    
     try:
         if triplet_processor and bert_classifier:
-            logger.info("🔬 Applying Triplet + BERT filtering...")
+            logger.info("🔬 Starting Triplet + BERT processing...")
             
-            # Triplet 처리
-            enhanced_result = triplet_processor.process_whisperx_result(
-                whisperx_result=transcription_data,
-                enable_bert_filtering=True,
+            # Step 2: WhisperX → Triplet 변환 (whisperX_parser.py + create_triplets.py)
+            logger.info("📝 Step 2: Creating triplets...")
+            triplets = triplet_processor.whisperx_to_triplets(transcription_data)
+            
+            # Step 2 저장: Triplet 구조
+            step2_data = {
+                "original_text": full_text,
+                "triplets_count": len(triplets),
+                "triplets": triplets,  # 전체 triplets 저장
+                "segments_count": len(transcription_data.get("segments", []))
+            }
+            save_result("step2_triplet_creation.json", step2_data, session_dir)
+            logger.info(f"✅ Step 2 완료: {len(transcription_data.get('segments', []))} segments → {len(triplets)} triplets")
+            
+            # Step 3: BERT 분류 (각 triplet에 label 부여)
+            logger.info("🧠 Step 3: BERT classification...")
+            classified_triplets = triplet_processor.classify_triplets(triplets)
+            
+            # 라벨별 분리
+            label_0_triplets = [t for t in classified_triplets if t.get("label") == 0]  # 유효
+            label_1_triplets = [t for t in classified_triplets if t.get("label") == 1]  # 노이즈
+            
+            # Step 3 저장: BERT 분류 결과
+            step3_data = {
+                "total_triplets": len(classified_triplets),
+                "valid_count": len(label_0_triplets),
+                "noise_count": len(label_1_triplets),
+                "noise_ratio": len(label_1_triplets) / len(classified_triplets) if classified_triplets else 0,
+                "valid_triplets": label_0_triplets,  # 전체 유효 triplets
+                "noise_triplets": label_1_triplets   # 전체 노이즈 triplets
+            }
+            save_result("step3_bert_classification.json", step3_data, session_dir)
+            
+            # 라벨 1 (노이즈) 전체 저장
+            save_result("step3_noise_triplets.json", label_1_triplets, session_dir)
+            logger.info(f"✅ Step 3 완료: {len(label_0_triplets)} 유효, {len(label_1_triplets)} 노이즈")
+            
+            # Step 4: 필터링 (triplet_preprocessor.py - label 0만 추출)
+            logger.info("🧹 Step 4: Filtering with triplet_preprocessor...")
+            filtered_triplets = triplet_processor.filter_important_triplets(
+                classified_triplets, 
                 save_noise_log=True
             )
             
-            if enhanced_result.get("success"):
-                # Step 2: 전처리 결과
-                preprocessing_data = {
-                    "original_text": full_text,
-                    "triplet_data": enhanced_result.get("triplet_data", {}),
-                    "segments": transcription_data.get("segments", [])
-                }
-                save_result("step2_bert_preprocessing.json", preprocessing_data, session_dir)
-                
-                # Step 3: 분류 결과
-                filtered_text = enhanced_result.get("filtered_transcript", full_text)
-                classification_data = {
-                    "filtered_transcript": filtered_text,
-                    "noise_segments": enhanced_result.get("triplet_data", {}).get("noise_segments", []),
-                    "valid_segments": enhanced_result.get("triplet_data", {}).get("valid_segments", []),
-                    "filtering_ratio": 1 - (len(filtered_text) / len(full_text)) if full_text else 0,
-                    "stats": enhanced_result.get("processing_stats", {})
-                }
-                save_result("step3_bert_classification.json", classification_data, session_dir)
-                save_result("step3_bert_classification.txt", filtered_text, session_dir)
-                
-                logger.info(f"✅ BERT filtering: {len(full_text)} → {len(filtered_text)} chars")
-                return filtered_text
-            else:
-                logger.warning("⚠️ BERT filtering failed, using original text")
-                return full_text
+            # 필터링된 텍스트 재구성
+            filtered_text = " ".join([
+                t.get("text", t.get("target", "").replace("[TGT]", "").replace("[/TGT]", "").strip())
+                for t in filtered_triplets
+            ])
+            
+            # Step 4 저장: 최종 필터링 결과
+            step4_data = {
+                "filtered_text": filtered_text,
+                "filtered_triplets_count": len(filtered_triplets),
+                "original_length": len(full_text),
+                "filtered_length": len(filtered_text),
+                "reduction_ratio": 1 - (len(filtered_text) / len(full_text)) if full_text else 0,
+                "filtered_triplets": filtered_triplets  # 전체 필터링된 triplets
+            }
+            save_result("step4_filtered_result.json", step4_data, session_dir)
+            save_result("step4_filtered_text.txt", filtered_text, session_dir)
+            
+            logger.info(f"✅ BERT filtering complete: {len(full_text)} → {len(filtered_text)} chars ({100*(1-len(filtered_text)/len(full_text)):.1f}% 감소)")
+            return filtered_text
+            
         else:
             logger.warning("⚠️ BERT module not available, using original text")
             return full_text
             
     except Exception as e:
         logger.error(f"❌ BERT filtering error: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         return full_text
 
 async def process_llm_postprocessing(filtered_text: str, session_dir: Path) -> str:
-    """Step 4: LLM 후처리"""
+    """Step 5: LLM 후처리"""
     logger.info(f"\n{'='*60}")
-    logger.info("STEP 4: LLM Post-processing")
+    logger.info("STEP 5: LLM Post-processing")
     logger.info(f"{'='*60}")
     
     try:
@@ -349,19 +506,21 @@ async def process_llm_postprocessing(filtered_text: str, session_dir: Path) -> s
         estimated_tokens = int(len(refined_text) * 1.5)
         
         postprocessing_data = {
-            "original_filtered_text": filtered_text[:1000] + "..." if len(filtered_text) > 1000 else filtered_text,
-            "refined_text": refined_text[:1000] + "..." if len(refined_text) > 1000 else refined_text,
+            "original_filtered_text": filtered_text,  # 전체 필터링된 텍스트
+            "refined_text": refined_text,  # 전체 정제된 텍스트
             "stats": {
                 "original_length": len(filtered_text),
                 "refined_length": len(refined_text),
                 "sentence_count": len(cleaned_sentences),
                 "paragraph_count": len(paragraphs),
                 "estimated_tokens": estimated_tokens
-            }
+            },
+            "cleaned_sentences": cleaned_sentences,  # 전체 문장 리스트
+            "paragraphs": paragraphs  # 전체 단락 리스트
         }
         
-        save_result("step4_llm_postprocessing.json", postprocessing_data, session_dir)
-        save_result("step4_llm_postprocessing.txt", refined_text, session_dir)
+        save_result("step5_llm_postprocessing.json", postprocessing_data, session_dir)
+        save_result("step5_llm_postprocessing.txt", refined_text, session_dir)
         
         logger.info(f"✅ Post-processing: {len(filtered_text)} → {len(refined_text)} chars")
         
@@ -372,9 +531,9 @@ async def process_llm_postprocessing(filtered_text: str, session_dir: Path) -> s
         return filtered_text
 
 async def generate_notion_project(transcript: str, session_dir: Path) -> Dict:
-    """Step 5: 노션 기획안 생성"""
+    """Step 6: 노션 기획안 생성"""
     logger.info(f"\n{'='*60}")
-    logger.info("STEP 5: Generating Notion Project")
+    logger.info("STEP 6: Generating Notion Project")
     logger.info(f"{'='*60}")
     
     try:
@@ -424,8 +583,8 @@ async def generate_notion_project(transcript: str, session_dir: Path) -> Dict:
             "formatted_notion": formatted
         }
         
-        save_result("step5_notion_project.json", result, session_dir)
-        save_result("step5_notion_project_formatted.md", formatted, session_dir)
+        save_result("step6_notion_project.json", result, session_dir)
+        save_result("step6_notion_project_formatted.md", formatted, session_dir)
         
         logger.info(f"✅ Notion project generated: {validated.get('projectName', 'Unknown')}")
         
@@ -436,9 +595,9 @@ async def generate_notion_project(transcript: str, session_dir: Path) -> Dict:
         return {}
 
 async def generate_tasks(notion_project: Dict, session_dir: Path) -> List[Dict]:
-    """Step 6: Task 생성"""
+    """Step 7: Task 생성"""
     logger.info(f"\n{'='*60}")
-    logger.info("STEP 6: Generating Tasks and Subtasks")
+    logger.info("STEP 7: Generating Tasks and Subtasks")
     logger.info(f"{'='*60}")
     
     try:
@@ -506,7 +665,7 @@ async def generate_tasks(notion_project: Dict, session_dir: Path) -> List[Dict]:
             )
         }
         
-        save_result("step6_tasks_and_subtasks.json", tasks_data, session_dir)
+        save_result("step7_tasks_and_subtasks.json", tasks_data, session_dir)
         
         # Task 요약 저장
         task_summary = "\n\n".join([
@@ -517,7 +676,7 @@ async def generate_tasks(notion_project: Dict, session_dir: Path) -> List[Dict]:
             "\n".join([f"  - {st['title']} ({st['estimated_hours']}h)" for st in t['subtasks']])
             for t in tasks
         ])
-        save_result("step6_tasks_summary.md", task_summary, session_dir)
+        save_result("step7_tasks_summary.md", task_summary, session_dir)
         
         logger.info(f"✅ Generated {len(tasks)} tasks with {tasks_data['subtask_count']} subtasks")
         

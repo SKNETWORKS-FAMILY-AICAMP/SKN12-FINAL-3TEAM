@@ -36,27 +36,81 @@ class TtalkkakBERTClassifier:
             self.tokenizer = AutoTokenizer.from_pretrained(self.model_path)
             
             # 모델 로드 (파인튜닝된 모델이 있다면 해당 경로 사용)
-            local_model_path = "./Bert모델/Ttalkkak_model_v2"
-            if os.path.exists(local_model_path):
-                logger.info("🎯 로컬 파인튜닝 모델 사용")
-                from transformers import AutoConfig
+            # RunPod 절대 경로 (최우선)
+            if os.path.exists("/workspace/SKN12-FINAL-3TEAM/Bert모델/Ttalkkak_model_v2/Ttalkkak_model_v3.pt"):
+                pt_file_path = "/workspace/SKN12-FINAL-3TEAM/Bert모델/Ttalkkak_model_v2/Ttalkkak_model_v3.pt"
+                logger.info("🎯 RunPod 경로에서 BERT 모델 발견")
+            # Windows 경로
+            elif os.path.exists(r"C:\Users\SH\Desktop\TtalKkac\Bert모델\Ttalkkak_model_v2\Ttalkkak_model_v3.pt"):
+                pt_file_path = r"C:\Users\SH\Desktop\TtalKkac\Bert모델\Ttalkkak_model_v2\Ttalkkak_model_v3.pt"
+            # Linux/RunPod 상대 경로
+            elif os.path.exists("./Bert모델/Ttalkkak_model_v2/Ttalkkak_model_v3.pt"):
+                pt_file_path = "./Bert모델/Ttalkkak_model_v2/Ttalkkak_model_v3.pt"
+            else:
+                pt_file_path = None
+            
+            if pt_file_path and os.path.exists(pt_file_path):
+                logger.info(f"🎯 로컬 파인튜닝 모델 사용: {pt_file_path}")
                 
-                # config 로드 (num_labels=2 확인)
-                config = AutoConfig.from_pretrained(local_model_path, num_labels=2)
-                
-                # 모델 아키텍처 생성
-                self.model = AutoModelForSequenceClassification.from_config(config)
-                
-                # .pt 파일 로드 (사용자가 업로드할 예정)
-                pt_file_path = os.path.join(local_model_path, "Ttalkkak_model_v2.pt")
-                if os.path.exists(pt_file_path):
-                    state_dict = torch.load(pt_file_path, map_location=self.device)
-                    self.model.load_state_dict(state_dict)
-                    logger.info("✅ 파인튜닝된 모델 로드 완료")
-                else:
-                    logger.warning("⚠️ .pt 파일 없음, 기본 BERT 모델 사용")
+                try:
+                    # 모델 디렉토리 경로 추출
+                    model_dir = os.path.dirname(pt_file_path)
+                    config_path = os.path.join(model_dir, "config.json")
+                    
+                    # config.json이 있으면 사용
+                    if os.path.exists(config_path):
+                        logger.info(f"📄 Config 파일 사용: {config_path}")
+                        from transformers import BertConfig
+                        config = BertConfig.from_json_file(config_path)
+                        
+                        # tokenizer도 같은 디렉토리에서 로드
+                        tokenizer_path = model_dir
+                        if os.path.exists(os.path.join(model_dir, "tokenizer_config.json")):
+                            logger.info(f"📝 Tokenizer 로드: {tokenizer_path}")
+                            self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
+                        
+                        # 모델 생성
+                        self.model = AutoModelForSequenceClassification.from_config(config)
+                        
+                        # state_dict 로드
+                        state_dict = torch.load(pt_file_path, map_location=self.device)
+                        self.model.load_state_dict(state_dict, strict=False)
+                        logger.info("✅ 파인튜닝된 모델 로드 완료")
+                    else:
+                        # config.json이 없으면 직접 생성
+                        logger.info("📝 Config 파일이 없어 직접 생성")
+                        from transformers import BertConfig
+                        
+                        # state_dict 먼저 로드해서 vocab_size 확인
+                        state_dict = torch.load(pt_file_path, map_location=self.device)
+                        vocab_size = 32002  # 기본값
+                        
+                        if 'bert.embeddings.word_embeddings.weight' in state_dict:
+                            vocab_size = state_dict['bert.embeddings.word_embeddings.weight'].shape[0]
+                            logger.info(f"📊 모델 vocabulary 크기: {vocab_size}")
+                        
+                        # Config 생성
+                        config = BertConfig(
+                            vocab_size=vocab_size,
+                            hidden_size=768,
+                            num_hidden_layers=12,
+                            num_attention_heads=12,
+                            intermediate_size=3072,
+                            num_labels=2,
+                            hidden_dropout_prob=0.3,
+                            attention_probs_dropout_prob=0.3
+                        )
+                        
+                        # 모델 생성 및 로드
+                        self.model = AutoModelForSequenceClassification.from_config(config)
+                        self.model.load_state_dict(state_dict, strict=False)
+                        logger.info("✅ 모델 로드 완료 (Config 자동 생성)")
+                            
+                except Exception as e:
+                    logger.error(f"❌ 모델 로드 중 오류: {e}")
+                    logger.info("🔄 기본 BERT 모델로 대체")
                     self.model = AutoModelForSequenceClassification.from_pretrained(
-                        self.model_path, num_labels=2
+                        "klue/bert-base", num_labels=2
                     )
             else:
                 # 기본 BERT 모델 사용

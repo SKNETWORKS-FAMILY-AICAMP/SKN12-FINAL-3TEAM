@@ -9,17 +9,31 @@ import json
 import logging
 from typing import List, Dict, Any, Optional
 import tempfile
+from datetime import timedelta
+import re
 
-# 프로젝트 루트의 triplet 모듈들 임포트
-sys.path.append('..')
-
+# 원본 triplet 모듈들 임포트 (필수)
 try:
-    from whisperX_parser import parse_whisperx_json
+    # 먼저 현재 디렉토리에서 찾기
+    from whisperX_parser import parse_whisperx_json, seconds_to_timestamp, split_sentences
     from create_triplets import create_structured_triplets
     from triplet_preprocessor import preprocess_triplets
+    logger = logging.getLogger(__name__)
+    logger.info("✅ Triplet 모듈 임포트 성공")
 except ImportError as e:
-    logging.warning(f"⚠️ Triplet 모듈 임포트 실패: {e}")
-    logging.info("💡 루트 디렉토리의 triplet 파일들을 확인해주세요")
+    # 상위 디렉토리에서 찾기
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    try:
+        from whisperX_parser import parse_whisperx_json, seconds_to_timestamp, split_sentences
+        from create_triplets import create_structured_triplets
+        from triplet_preprocessor import preprocess_triplets
+        logger = logging.getLogger(__name__)
+        logger.info("✅ 상위 디렉토리에서 Triplet 모듈 임포트 성공")
+    except ImportError as e:
+        logger = logging.getLogger(__name__)
+        logger.error(f"❌ Triplet 모듈 임포트 실패: {e}")
+        logger.error("필수 파일들이 없습니다: whisperX_parser.py, create_triplets.py, triplet_preprocessor.py")
+        raise ImportError("Triplet 처리 모듈을 찾을 수 없습니다. 필수 파일들을 확인해주세요.")
 
 from bert_classifier import get_bert_classifier
 
@@ -42,67 +56,47 @@ class TripletProcessor:
     def whisperx_to_triplets(self, whisperx_result: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
         WhisperX 결과를 Triplet 구조로 변환
+        원본 파일들의 함수를 사용
         """
         try:
             logger.info("🔄 WhisperX 결과를 Triplet으로 변환 중...")
             
-            # WhisperX 세그먼트를 구조화된 데이터로 변환
+            # WhisperX 세그먼트를 원본 parse 함수 형식에 맞게 변환
             segments = whisperx_result.get("segments", [])
-            
-            # parse_whisperx_json 대신 직접 변환 (메모리 상의 데이터 처리)
             structured_data = []
             
             for i, segment in enumerate(segments):
-                # 화자 정보가 있으면 사용, 없으면 기본값
+                # 화자 정보
                 speaker = segment.get("speaker", f"SPEAKER_{i%3:02d}")
                 text = segment.get("text", "").strip()
                 start_time = segment.get("start", 0.0)
                 
-                # 시간 변환 (초 → HH:MM:SS)
-                hours = int(start_time // 3600)
-                minutes = int((start_time % 3600) // 60)
-                seconds = int(start_time % 60)
-                timestamp = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+                # seconds_to_timestamp 함수 사용 (원본 whisperX_parser.py)
+                timestamp = seconds_to_timestamp(start_time)
                 
-                structured_data.append({
-                    "timestamp": timestamp,
-                    "timestamp_order": f"{i+1}-1",
-                    "speaker": speaker,
-                    "text": text
-                })
+                # split_sentences 함수 사용 (원본 whisperX_parser.py)
+                sentences = split_sentences(text) if text else [text]
+                
+                for j, sentence in enumerate(sentences):
+                    if sentence:
+                        structured_data.append({
+                            "timestamp": timestamp,
+                            "timestamp_order": f"{i+1}-{j+1}",
+                            "speaker": speaker,
+                            "text": sentence
+                        })
             
-            # Triplet 구조 생성
+            # create_structured_triplets 함수 사용 (원본 create_triplets.py)
             triplets = create_structured_triplets(structured_data)
             
-            logger.info(f"✅ Triplet 변환 완료: {len(structured_data)} → {len(triplets)}개 Triplet")
+            logger.info(f"✅ Triplet 변환 완료: {len(segments)} segments → {len(triplets)}개 Triplet")
             
             return triplets
             
         except Exception as e:
             logger.error(f"❌ Triplet 변환 실패: {e}")
-            # 기본 구조로 대체
-            return self._create_fallback_triplets(whisperx_result)
+            raise  # 자체 구현 대신 에러 발생
     
-    def _create_fallback_triplets(self, whisperx_result: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Triplet 변환 실패시 기본 구조 생성"""
-        logger.warning("⚠️ 기본 Triplet 구조로 대체")
-        
-        segments = whisperx_result.get("segments", [])
-        triplets = []
-        
-        for i, segment in enumerate(segments):
-            triplet = {
-                "timestamp": f"00:00:{i:02d}",
-                "timestamp_order": f"{i+1}-1",
-                "speaker": segment.get("speaker", "UNKNOWN"),
-                "prev": "",
-                "target": f"[TGT] {segment.get('text', '')} [/TGT]",
-                "next": "",
-                "label": None
-            }
-            triplets.append(triplet)
-        
-        return triplets
     
     def classify_triplets(self, triplets: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
@@ -117,18 +111,14 @@ class TripletProcessor:
             # BERT 분류기 로딩
             self._ensure_bert_classifier()
             
-            # 배치 분류 수행
+            # 배치 분류 수행 (label 0 또는 1 부여)
             classified_triplets = self.bert_classifier.classify_triplets_batch(triplets)
             
             return classified_triplets
             
         except Exception as e:
             logger.error(f"❌ BERT 분류 실패: {e}")
-            # 실패시 모든 발화를 중요한 것으로 분류
-            for triplet in triplets:
-                triplet["label"] = 0  # 중요한 발화
-                triplet["confidence"] = 0.5
-            return triplets
+            raise  # 자체 처리 대신 에러 발생
     
     def filter_important_triplets(
         self, 
@@ -148,15 +138,11 @@ class TripletProcessor:
                 os.makedirs(log_dir, exist_ok=True)
                 log_file_path = os.path.join(log_dir, "noise_triplets.jsonl")
             
-            # triplet_preprocessor 사용 (사용 가능한 경우)
-            try:
-                filtered_triplets = preprocess_triplets(classified_triplets, log_file_path)
-                logger.info(f"✅ 필터링 완료: {len(classified_triplets)} → {len(filtered_triplets)}개 유지")
-                return filtered_triplets
-                
-            except Exception as e:
-                logger.warning(f"⚠️ triplet_preprocessor 사용 실패: {e}")
-                return self._manual_filter(classified_triplets, log_file_path)
+            # preprocess_triplets 함수 사용 (원본 triplet_preprocessor.py)
+            # label 0(유효)만 추출, label 1(노이즈)은 로그 파일로
+            filtered_triplets = preprocess_triplets(classified_triplets, log_file_path)
+            logger.info(f"✅ 필터링 완료: {len(classified_triplets)} → {len(filtered_triplets)}개 유지")
+            return filtered_triplets
                 
         except Exception as e:
             logger.error(f"❌ 필터링 실패: {e}")
