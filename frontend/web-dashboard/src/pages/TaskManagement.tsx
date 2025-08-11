@@ -42,12 +42,6 @@ const TaskManagement = () => {
 
   // ✅ 새로운 버전 (교체)
   const addNewTask = (taskData: any) => {
-    // 프로젝트가 없으면 생성 불가
-    if (!projects || projects.length === 0) {
-      toast.error('먼저 프로젝트를 생성해주세요.');
-      return;
-    }
-    
     const newTask = {
       title: taskData.title,
       description: taskData.description || '',
@@ -57,9 +51,10 @@ const TaskManagement = () => {
                 taskData.priority === '하' ? 'LOW' : 'MEDIUM',
       dueDate: taskData.dueDate || undefined,
       assigneeId: taskData.assignee || undefined,
-      projectId: projects[0].id // 첫 번째 프로젝트 사용
+      projectId: projects && projects.length > 0 ? projects[0].id : undefined // 프로젝트가 있으면 사용, 없으면 백엔드에서 자동 생성
     };
     
+    console.log('🆕 새 업무 생성 요청:', newTask);
     createTaskMutation.mutate(newTask);
   };
 
@@ -98,13 +93,16 @@ const TaskManagement = () => {
 
   const createTaskMutation = useMutation({
     mutationFn: (newTask: any) => taskAPI.createTask(newTask),
-    onSuccess: () => {
+    onSuccess: (data) => {
+      console.log('✅ 업무 생성 성공:', data);
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       toast.success('새 업무가 추가되었습니다! ✨');
+      setShowModal(false); // 모달 닫기
     },
-    onError: (error) => {
-      console.error('Task creation failed:', error);
-      toast.error('업무 생성에 실패했습니다.');
+    onError: (error: any) => {
+      console.error('❌ Task creation failed:', error);
+      const errorMessage = error?.response?.data?.details || error?.response?.data?.error || '업무 생성에 실패했습니다.';
+      toast.error(errorMessage);
     }
   });
 

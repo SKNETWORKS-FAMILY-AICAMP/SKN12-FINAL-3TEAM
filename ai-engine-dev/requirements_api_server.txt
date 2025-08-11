@@ -1,0 +1,48 @@
+# Core Dependencies for ai_server_final_with_triplets.py
+# PyTorch 2.1.0 (RunPod 기본 버전)
+torch==2.1.0
+torchvision==0.16.0
+torchaudio==2.1.0
+
+# FastAPI 웹 서버
+fastapi==0.104.1
+uvicorn==0.24.0
+python-multipart==0.0.6
+
+# AI/ML 핵심 패키지
+transformers==4.35.2
+accelerate==0.24.1
+safetensors==0.4.1
+tokenizers==0.15.0
+sentencepiece==0.1.99
+
+# 음성 처리 (WhisperX)
+faster-whisper==1.0.0
+whisperx @ git+https://github.com/m-bain/whisperx.git@v3.1.1
+pyannote.audio==3.1.1
+
+# 오디오 처리
+librosa==0.10.1
+soundfile==0.12.1
+pydub==0.25.1
+ffmpeg-python==0.2.0
+
+# 데이터 처리
+numpy==1.24.4
+pandas==2.1.4
+scipy==1.11.4
+
+# LLM 관련
+bitsandbytes==0.41.3
+einops==0.7.0
+xformers==0.0.22
+
+# 유틸리티
+python-dotenv==1.0.0
+tqdm==4.66.1
+colorama==0.4.6
+requests==2.31.0
+aiofiles==23.2.1
+
+# 선택적 (VLLM - GPU 메모리 많이 필요)
+# vllm==0.2.7  # 주석 처리 - 필요시 별도 설치

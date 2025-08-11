@@ -282,80 +282,142 @@ async def process_audio_file(audio_path: str, session_dir: Path) -> Dict[str, An
         result = model.transcribe(audio_path, batch_size=16)
         
         # 화자 구분 (Diarization) 추가
-        try:
-            logger.info("👥 Adding speaker diarization...")
-            import whisperx
-            
-            device = "cuda" if torch.cuda.is_available() else "cpu"
-            
-            # Alignment 먼저 수행 (diarization 전 필수)
-            model_a, metadata = whisperx.load_align_model(
-                language_code=result.get("language", "ko"), 
-                device=device
-            )
-            result = whisperx.align(
-                result["segments"], 
-                model_a, 
-                metadata, 
-                audio_path, 
-                device,
-                return_char_alignments=False
-            )
-            
-            # Diarization 수행
-            hf_token = os.getenv("HF_TOKEN") or os.getenv("HUGGING_FACE_HUB_TOKEN") or os.getenv("HF_ACCESS_TOKEN")
-            
-            # 디버깅: 토큰 상태 확인
-            if not hf_token:
-                logger.warning("⚠️ No HF_TOKEN found in environment variables")
-                logger.info("Please set one of: HF_TOKEN, HUGGING_FACE_HUB_TOKEN, or HF_ACCESS_TOKEN")
-                logger.info("Example: export HF_TOKEN='hf_xxxxxxxxxxxxxxxxxxxxx'")
-            
-            if hf_token:
-                logger.info(f"🔑 HF Token found: {hf_token[:10]}...")
-                # pyannote 직접 사용 (간단한 방법)
-                from pyannote.audio import Pipeline
+        use_diarization = os.getenv("USE_DIARIZATION", "false").lower() == "true"
+        
+        if use_diarization:
+            try:
+                logger.info("👥 Adding speaker diarization...")
+                import whisperx
                 
-                # 파이프라인 로드
-                pipeline = Pipeline.from_pretrained(
-                    "pyannote/speaker-diarization-3.1",
-                    use_auth_token=hf_token
+                device = "cuda" if torch.cuda.is_available() else "cpu"
+                
+                # Alignment 먼저 수행 (diarization 전 필수)
+                model_a, metadata = whisperx.load_align_model(
+                    language_code=result.get("language", "ko"), 
+                    device=device
                 )
                 
-                # GPU 사용 가능하면 GPU로
-                if torch.cuda.is_available():
-                    pipeline.to(torch.device("cuda"))
+                # 오디오를 whisperx 방식으로 로드
+                audio = whisperx.load_audio(audio_path)
                 
-                # 화자 구분 실행 (원본 파일 직접 사용)
-                logger.info("🎯 Running speaker diarization on audio file...")
-                diarization = pipeline(audio_path)
-                
-                # WhisperX에 화자 정보 할당
-                result = whisperx.assign_word_speakers(
-                    diarization, 
-                    result
+                result = whisperx.align(
+                    result["segments"], 
+                    model_a, 
+                    metadata, 
+                    audio,  # 파일 경로 대신 로드된 오디오 사용
+                    device,
+                    return_char_alignments=False
                 )
                 
-                # 화자 정보 요약
-                speakers = set()
-                for seg in result.get("segments", []):
-                    if "speaker" in seg:
-                        speakers.add(seg["speaker"])
+                # Diarization 수행
+                hf_token = os.getenv("HF_TOKEN") or os.getenv("HUGGING_FACE_HUB_TOKEN") or os.getenv("HF_ACCESS_TOKEN")
                 
-                logger.info(f"✅ Speaker diarization completed - Found {len(speakers)} speakers: {', '.join(sorted(speakers))}")
-            else:
-                logger.warning("⚠️ No HF_TOKEN found, skipping speaker diarization")
-                logger.info("Set HF_TOKEN environment variable to enable speaker detection")
-                logger.info("Get token from: https://huggingface.co/pyannote/speaker-diarization-3.1")
-            
-        except ImportError as e:
-            logger.warning(f"⚠️ Diarization module not found: {e}")
-            logger.info("Install with: pip install pyannote.audio")
-        except Exception as e:
-            import traceback
-            logger.warning(f"⚠️ Speaker diarization failed: {str(e)}")
-            logger.debug(f"Full error trace: {traceback.format_exc()}")
-            logger.info("Continuing without speaker information...")
+                # 디버깅: 토큰 상태 확인
+                if not hf_token:
+                    logger.warning("⚠️ No HF_TOKEN found in environment variables")
+                    logger.info("Please set one of: HF_TOKEN, HUGGING_FACE_HUB_TOKEN, or HF_ACCESS_TOKEN")
+                    logger.info("Example: export HF_TOKEN='hf_xxxxxxxxxxxxxxxxxxxxx'")
+                
+                if hf_token:
+                    logger.info(f"🔑 HF Token found: {hf_token[:10]}...")
+                    # pyannote 직접 사용 (간단한 방법)
+                    from pyannote.audio import Pipeline
+                    
+                    # 파이프라인 로드
+                    pipeline = Pipeline.from_pretrained(
+                        "pyannote/speaker-diarization-3.1",
+                        use_auth_token=hf_token
+                    )
+                    
+                    # GPU 사용 가능하면 GPU로
+                    if torch.cuda.is_available():
+                        pipeline.to(torch.device("cuda"))
+                    
+                    # 화자 구분 실행 (원본 파일 직접 사용)
+                    logger.info("🎯 Running speaker diarization on audio file...")
+                    
+                    # 오디오 길이 조정을 위한 파라미터 설정
+                    try:
+                        # WAV 파일로 변환하여 호환성 향상
+                        import tempfile
+                        import subprocess
+                        
+                        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp_wav:
+                            tmp_wav_path = tmp_wav.name
+                        
+                        # ffmpeg로 WAV 변환 (16kHz, mono)
+                        subprocess.run([
+                            'ffmpeg', '-i', audio_path, 
+                            '-ar', '16000',  # 16kHz 샘플레이트
+                            '-ac', '1',      # 모노
+                            '-y', tmp_wav_path
+                        ], check=True, capture_output=True)
+                        
+                        logger.info("🔄 Converted to WAV format for diarization")
+                        diarization = pipeline(tmp_wav_path)
+                        
+                        # 임시 파일 삭제
+                        os.unlink(tmp_wav_path)
+                        
+                    except Exception as e:
+                        # 오류 발생시 원본 파일로 재시도
+                        logger.warning(f"Retrying with original file due to: {e}")
+                        diarization = pipeline(audio_path)
+                    
+                    # WhisperX에 화자 정보 할당
+                    try:
+                        result = whisperx.assign_word_speakers(
+                            diarization, 
+                            result
+                        )
+                        logger.info("✅ Speaker assignment successful")
+                    except (KeyError, TypeError, AttributeError) as e:
+                        logger.warning(f"Could not assign speakers with whisperx: {e}")
+                        
+                        # 수동으로 화자 정보 매핑
+                        try:
+                            logger.info("🔄 Manually mapping speakers to segments...")
+                            segments = result.get("segments", [])
+                            
+                            for segment in segments:
+                                start = segment.get("start", 0)
+                                end = segment.get("end", 0)
+                                
+                                # diarization에서 해당 시간대의 화자 찾기
+                                for turn, _, speaker in diarization.itertracks(yield_label=True):
+                                    if turn.start <= start <= turn.end or turn.start <= end <= turn.end:
+                                        segment["speaker"] = speaker
+                                        break
+                                else:
+                                    segment["speaker"] = "SPEAKER_00"
+                            
+                            logger.info(f"✅ Manual speaker mapping completed")
+                        except Exception as manual_e:
+                            logger.warning(f"Manual mapping also failed: {manual_e}")
+                            # 화자 할당 실패해도 계속 진행
+                    
+                    # 화자 정보 요약
+                    speakers = set()
+                    for seg in result.get("segments", []):
+                        if "speaker" in seg:
+                            speakers.add(seg["speaker"])
+                    
+                    logger.info(f"✅ Speaker diarization completed - Found {len(speakers)} speakers: {', '.join(sorted(speakers))}")
+                else:
+                    logger.warning("⚠️ No HF_TOKEN found, skipping speaker diarization")
+                    logger.info("Set HF_TOKEN environment variable to enable speaker detection")
+                    logger.info("Get token from: https://huggingface.co/pyannote/speaker-diarization-3.1")
+                
+            except ImportError as e:
+                logger.warning(f"⚠️ Diarization module not found: {e}")
+                logger.info("Install with: pip install pyannote.audio")
+            except Exception as e:
+                import traceback
+                logger.warning(f"⚠️ Speaker diarization failed: {str(e)}")
+                logger.debug(f"Full error trace: {traceback.format_exc()}")
+                logger.info("Continuing without speaker information...")
+        else:
+            logger.info("ℹ️ Speaker diarization is disabled (USE_DIARIZATION=false)")
         
         segments = result.get("segments", [])
         full_text = " ".join([seg.get("text", "") for seg in segments])
@@ -628,28 +690,113 @@ async def generate_tasks(notion_project: Dict, session_dir: Path) -> List[Dict]:
         else:
             json_content = response.strip()
         
-        prd_data = json.loads(json_content)
+        try:
+            prd_data = json.loads(json_content)
+            logger.info(f"PRD parsed successfully with keys: {list(prd_data.keys())}")
+        except json.JSONDecodeError as e:
+            logger.warning(f"JSON 파싱 실패: {e}")
+            logger.debug(f"Response: {json_content[:500]}")
+            prd_data = {}
         
-        # PRD에서 태스크 생성
+        # PRD에서 태스크 생성 (여러 가능한 키 체크)
         tasks = []
-        for i, section in enumerate(prd_data.get("coreFunctionalities", [])):
+        
+        # 가능한 모든 키 체크
+        possible_keys = [
+            "coreFunctionalities", "core_functionalities",
+            "tasks", "features", "functionalities",
+            "주요기능", "핵심기능", "기능목록"
+        ]
+        
+        core_funcs = []
+        for key in possible_keys:
+            if key in prd_data and isinstance(prd_data[key], list):
+                core_funcs = prd_data[key]
+                logger.info(f"Using key '{key}' for tasks")
+                break
+        
+        # 만약 찾지 못했다면 첫 번째 리스트 찾기
+        if not core_funcs:
+            for key, value in prd_data.items():
+                if isinstance(value, list) and len(value) > 0:
+                    core_funcs = value
+                    logger.info(f"Using fallback key '{key}' for tasks")
+                    break
+        
+        logger.info(f"Found {len(core_funcs)} core functionalities/tasks")
+        
+        for i, section in enumerate(core_funcs):
+            # section이 dict가 아닌 경우 처리
+            if isinstance(section, str):
+                section = {"title": section, "description": ""}
+            elif not isinstance(section, dict):
+                continue
+                
+            # Complexity 계산 (1-10)
+            desc_length = len(section.get("description", ""))
+            complexity = min(10, max(1, 3 + desc_length // 100))  # 설명 길이 기반
+            if section.get("complexity"):
+                complexity = section.get("complexity")
+            elif section.get("priority") == "high":
+                complexity = min(10, complexity + 2)
+            elif section.get("priority") == "low":
+                complexity = max(1, complexity - 1)
+            
             task = {
                 "id": i + 1,
                 "title": section.get("title", f"Task {i+1}"),
                 "description": section.get("description", ""),
                 "priority": section.get("priority", "medium"),
-                "complexity_score": section.get("complexity", 5),
+                "complexity_score": complexity,
                 "subtasks": []
             }
             
-            # 서브태스크 생성
-            for j, req in enumerate(section.get("requirements", [])[:3]):
+            # 서브태스크 생성 (여러 가능한 키 체크)
+            subtask_sources = (
+                section.get("requirements") or 
+                section.get("subtasks") or 
+                section.get("steps") or 
+                section.get("details") or 
+                []
+            )
+            
+            # subtask_sources가 리스트가 아닌 경우 처리
+            if isinstance(subtask_sources, str):
+                subtask_sources = [subtask_sources]
+            elif not isinstance(subtask_sources, list):
+                subtask_sources = []
+            
+            # 서브태스크가 없으면 자동 생성
+            if not subtask_sources and task["description"]:
+                # 설명에서 자동으로 서브태스크 생성
+                subtask_sources = [
+                    f"설계 및 구조 정의",
+                    f"구현 및 개발",
+                    f"테스트 및 검증"
+                ]
+            
+            for j, req in enumerate(subtask_sources[:5]):  # 최대 5개
+                if isinstance(req, dict):
+                    subtask_title = req.get("title", req.get("name", str(req)))
+                    hours = req.get("estimated_hours", req.get("hours", 4))
+                else:
+                    subtask_title = str(req)
+                    hours = 2 + (complexity // 3)  # complexity 기반 시간 계산
+                
                 subtask = {
                     "id": j + 1,
-                    "title": req,
-                    "estimated_hours": 4
+                    "title": subtask_title,
+                    "estimated_hours": hours
                 }
                 task["subtasks"].append(subtask)
+            
+            # 서브태스크가 하나도 없으면 기본 추가
+            if not task["subtasks"]:
+                task["subtasks"].append({
+                    "id": 1,
+                    "title": "작업 수행",
+                    "estimated_hours": 4
+                })
             
             tasks.append(task)
         

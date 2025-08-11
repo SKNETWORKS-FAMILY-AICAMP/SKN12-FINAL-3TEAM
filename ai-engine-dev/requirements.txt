@@ -1,27 +1,163 @@
-# AI 모델
-torch>=2.0.0
-transformers>=4.36.0
-accelerate>=0.24.0
-bitsandbytes>=0.41.0
-autoawq>=0.1.8
-whisperx
-vllm>=0.3.0  # Ultra-fast LLM inference engine
+# ===================================
+# TtalKkac AI Engine Dependencies
+# Python 3.8+ | CUDA 11.8+ Required
+# ===================================
 
-# 웹 서버
-fastapi>=0.104.0
-uvicorn[standard]>=0.24.0
-python-multipart>=0.0.6
+# ===== PyTorch & GPU 관련 =====
+# RunPod/로컬 환경에 따라 적절한 버전 설치
+# pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+torch==2.1.0
+torchvision==0.16.0
+torchaudio==2.1.0
 
-# 오디오 처리
-librosa>=0.10.0
-soundfile>=0.12.0
-pydub>=0.25.0
+# ===== FastAPI 웹 서버 =====
+fastapi==0.110.0
+uvicorn[standard]==0.24.0.post1
+python-multipart==0.0.6
+pydantic==2.5.0
+pydantic-settings==2.1.0
+aiofiles==23.2.1
+httpx==0.25.2
 
-# 유틸리티
-numpy>=1.24.0
-scipy>=1.11.0
-requests>=2.31.0
-pydantic>=2.4.0
-aiofiles>=23.2.0
-python-dotenv>=1.0.0
-natsort>=8.4.0
+# ===== Transformers & LLM 핵심 =====
+transformers==4.36.2
+tokenizers==0.15.0
+sentencepiece==0.1.99
+safetensors==0.4.1
+datasets==2.16.1
+evaluate==0.4.1
+
+# ===== PEFT & LoRA =====
+peft==0.7.1
+loralib==0.1.2
+
+# ===== 양자화 & 최적화 =====
+accelerate==0.25.0
+bitsandbytes==0.41.3.post2
+optimum==1.16.1
+auto-gptq==0.5.1
+# autoawq==0.1.8  # AWQ 사용시 주석 해제
+einops==0.7.0
+
+# ===== WhisperX & 음성처리 =====
+# WhisperX는 별도 설치 필요
+# pip install git+https://github.com/m-bain/whisperx.git
+openai-whisper==20231117
+faster-whisper==1.0.0
+pyannote.audio==3.1.1
+speechbrain==0.5.16
+webrtcvad==2.0.10
+pytorch-lightning==2.1.3
+omegaconf==2.3.0
+pytorch-metric-learning==2.3.0
+primePy==1.3
+torchmetrics==1.2.1
+asteroid-filterbanks==0.4.0
+julius==0.2.7
+
+# ===== 오디오 처리 =====
+librosa==0.10.1
+soundfile==0.12.1
+pydub==0.25.1
+ffmpeg-python==0.2.0
+audioread==3.0.1
+moviepy==1.0.3
+wave
+pyaudio==0.2.14  # 마이크 입력 필요시
+
+# ===== 데이터 처리 =====
+numpy==1.24.4
+pandas==2.1.4
+scipy==1.11.4
+scikit-learn==1.3.2
+matplotlib==3.8.2
+seaborn==0.13.0
+plotly==5.18.0
+
+# ===== NLP & 텍스트 처리 =====
+nltk==3.8.1
+konlpy==0.6.0  # 한국어 처리
+kss==6.0.1  # 한국어 문장 분리
+soynlp==0.0.493  # 한국어 토크나이저
+kiwipiepy==0.17.1  # 한국어 형태소 분석
+
+# ===== 유틸리티 =====
+python-dotenv==1.0.0
+tqdm==4.66.1
+colorama==0.4.6
+requests==2.31.0
+urllib3==2.1.0
+natsort==8.4.0
+psutil==5.9.6
+python-dateutil==2.8.2
+pytz==2023.3
+typing-extensions==4.9.0
+packaging==23.2
+filelock==3.13.1
+huggingface-hub==0.20.1
+regex==2023.12.25
+click==8.1.7
+rich==13.7.0  # 향상된 터미널 출력
+
+# ===== 로깅 & 모니터링 =====
+loguru==0.7.2
+tensorboard==2.15.1
+wandb==0.16.1  # 실험 추적 (선택)
+
+# ===== 파일 처리 =====
+python-magic==0.4.27  # 파일 타입 검증
+chardet==5.2.0  # 인코딩 감지
+openpyxl==3.1.2  # Excel 파일 처리
+PyPDF2==3.0.1  # PDF 처리 (선택)
+
+# ===== 네트워킹 =====
+websockets==12.0
+asyncio==3.4.3
+aiohttp==3.9.1
+
+# ===== CORS & 보안 =====
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+bcrypt==4.1.2
+
+# ===== 개발 도구 (선택) =====
+ipython==8.18.1
+jupyter==1.0.0
+notebook==7.0.6
+ipywidgets==8.1.1
+
+# ===== VLLM (고성능 추론 - 선택) =====
+# 24GB+ VRAM 필요, CUDA 11.8/12.1 호환
+# pip install vllm==0.2.7
+
+# ===== 추가 의존성 (특정 기능) =====
+# flash-attn==2.3.6  # Flash Attention (A100/H100)
+# deepspeed==0.12.6  # 분산 학습
+# triton==2.1.0  # GPU 커널 최적화
+
+# ===== 시스템 의존성 (apt-get) =====
+# Ubuntu/Debian 기준 시스템 패키지:
+# sudo apt-get update && sudo apt-get install -y \
+#   ffmpeg \
+#   libsndfile1 \
+#   libportaudio2 \
+#   libasound2-dev \
+#   git \
+#   git-lfs \
+#   build-essential \
+#   python3-dev
+
+# ===== 설치 순서 =====
+# 1. CUDA 툴킷 설치 (11.8 또는 12.1)
+# 2. PyTorch 설치: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+# 3. 이 requirements.txt 설치: pip install -r requirements.txt
+# 4. WhisperX 설치: pip install git+https://github.com/m-bain/whisperx.git
+# 5. (선택) VLLM 설치: pip install vllm==0.2.7
+# 6. (선택) Flash Attention: pip install flash-attn --no-build-isolation
+
+# ===== 버전 호환성 주의사항 =====
+# - transformers 4.36+: Qwen 모델 지원
+# - torch 2.1.0: CUDA 11.8/12.1 호환
+# - peft 0.7+: LoRA v2 지원
+# - faster-whisper 1.0+: WhisperX 호환
+# - pyannote.audio 3.1+: 화자 분리 개선

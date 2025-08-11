@@ -1,31 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, User, Tenant } from '@prisma/client';
 import jwt from 'jsonwebtoken';
 
 const prisma = new PrismaClient();
 
 // JWT Secret (실제로는 환경변수 사용)
 const JWT_SECRET = process.env.JWT_SECRET || 'ddalkkak_super_secret_jwt_key_production_2024';
-
-// Request 타입 확장
-declare global {
-  namespace Express {
-    interface Request {
-      user?: {
-        id: string;
-        email: string;
-        name: string;
-        slackUserId?: string;
-        tenantId: string;
-        role: string;
-      };
-      tenant?: {
-        id: string;
-        slug: string;
-      };
-    }
-  }
-}
 
 // JWT 토큰 생성
 export const generateToken = (user: any) => {
@@ -36,7 +16,8 @@ export const generateToken = (user: any) => {
       name: user.name,
       slackUserId: user.slackUserId,
       tenantId: user.tenantId,
-      role: user.role
+      role: user.role,
+      avatar: user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || '')}&background=0D8ABC&color=fff`
     },
     JWT_SECRET,
     { expiresIn: '24h' }
@@ -44,7 +25,7 @@ export const generateToken = (user: any) => {
 };
 
 // JWT 토큰 검증 미들웨어
-export const authenticateUser = async (req: Request, res: Response, next: NextFunction) => {
+export const authenticateUser = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
   try {
     // Authorization 헤더에서 토큰 추출
     const authHeader = req.headers.authorization;
@@ -77,20 +58,11 @@ export const authenticateUser = async (req: Request, res: Response, next: NextFu
       });
     }
     
-    // Request에 사용자 정보 추가
-    req.user = {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      slackUserId: user.slackUserId || undefined,
-      tenantId: user.tenantId,
-      role: user.role
-    };
+    // Request에 사용자 정보 추가 (전체 User 객체)
+    req.user = user;
     
-    req.tenant = {
-      id: user.tenant.id,
-      slug: user.tenant.slug
-    };
+    // Request에 tenant 정보 추가 (전체 Tenant 객체)
+    req.tenant = user.tenant;
     
     next();
   } catch (error) {

@@ -43,6 +43,12 @@ from prd_generation_prompts import (
     TASK_MASTER_PRD_SCHEMA
 )
 
+import uvicorn
+
+# 로깅 설정 (모듈 임포트 전에 설정)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 # Triplet + BERT 모듈 임포트
 try:
     from triplet_processor import get_triplet_processor
@@ -52,12 +58,6 @@ try:
 except ImportError as e:
     logger.warning(f"⚠️ Triplet + BERT 모듈 로드 실패: {e}")
     TRIPLET_AVAILABLE = False
-
-import uvicorn
-
-# 로깅 설정
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 # 글로벌 모델 변수
 whisper_model = None
@@ -576,7 +576,11 @@ def load_qwen3():
                     use_vllm = False
                 
             if use_vllm:
-                model_name = "Qwen/Qwen3-32B-AWQ"
+                # RunPod에서 사용할 경로 설정
+                if os.path.exists("/workspace"):
+                    model_name = "/workspace/TtalKkac/ai-engine-dev/qwen3_lora_ttalkkac_4b"
+                else:
+                    model_name = "C:/Users/SH/Desktop/TtalKkac/ai-engine-dev/qwen3_lora_ttalkkac_4b"
                 
                 try:
                     # VLLM 모델 로딩
@@ -613,18 +617,34 @@ def load_qwen3():
                     logger.error(f"❌ Transformers import failed: {e}")
                     raise RuntimeError("Both VLLM and Transformers unavailable!")
                 
-                model_name = "Qwen/Qwen3-32B-AWQ"
+                # RunPod에서 사용할 경로 설정
+                if os.path.exists("/workspace"):
+                    model_name = "/workspace/TtalKkac/ai-engine-dev/qwen3_lora_ttalkkac_4b"
+                else:
+                    model_name = "C:/Users/SH/Desktop/TtalKkac/ai-engine-dev/qwen3_lora_ttalkkac_4b"
                 
                 qwen_tokenizer = AutoTokenizer.from_pretrained(
                     model_name, trust_remote_code=True
                 )
                 
-                qwen_model = AutoModelForCausalLM.from_pretrained(
-                    model_name,
-                    device_map="auto",
-                    torch_dtype=torch.float16,
-                    trust_remote_code=True
-                )
+                # device_map 사용 시 accelerate 필요
+                try:
+                    import accelerate
+                    qwen_model = AutoModelForCausalLM.from_pretrained(
+                        model_name,
+                        device_map="auto",
+                        torch_dtype=torch.float16,
+                        trust_remote_code=True
+                    )
+                except ImportError:
+                    logger.warning("⚠️ Accelerate not available, loading without device_map")
+                    qwen_model = AutoModelForCausalLM.from_pretrained(
+                        model_name,
+                        torch_dtype=torch.float16,
+                        trust_remote_code=True
+                    )
+                    if torch.cuda.is_available():
+                        qwen_model = qwen_model.cuda()
                 
                 logger.info("✅ Transformers Qwen3-32B-AWQ loaded successfully")
             

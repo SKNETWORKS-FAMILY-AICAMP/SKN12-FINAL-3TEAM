@@ -34,8 +34,10 @@ const Sidebar = ({ setActiveMenu }: SidebarProps) => {
     refetchInterval: 30000 // 30초마다 갱신
   });
 
-  // 진행 중인 작업 개수 계산
-  const inProgressTasksCount = tasks.filter(task => task.status === 'IN_PROGRESS').length;
+  // 진행 중인 작업 개수 계산 (tasks가 배열인지 확인)
+  const inProgressTasksCount = Array.isArray(tasks) 
+    ? tasks.filter(task => task.status === 'IN_PROGRESS').length 
+    : 0;
   
   const menuItems: MenuItemType[] = [
     { 

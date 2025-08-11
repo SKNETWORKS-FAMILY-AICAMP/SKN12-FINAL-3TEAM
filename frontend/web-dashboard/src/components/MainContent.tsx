@@ -8,7 +8,10 @@ import {
   Plus,
   RefreshCw,
   Edit3,
-  ExternalLink
+  ExternalLink,
+  User,
+  LogOut,
+  ChevronDown
 } from 'lucide-react';
 import {
   DndContext,
@@ -285,9 +288,58 @@ const MainContent = () => {
     done: { name: '완료', items: [] }
   });
 
+  // 사용자 정보 가져오기
+  const [userInfo, setUserInfo] = useState<any>(null);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+
+  useEffect(() => {
+    const fetchUserInfo = async () => {
+      try {
+        // 먼저 localStorage에서 기본 정보 로드
+        const storedUser = localStorage.getItem('user');
+        if (storedUser) {
+          const user = JSON.parse(storedUser);
+          setUserInfo(user);
+        }
+        
+        // API에서 최신 사용자 정보 가져오기
+        const token = localStorage.getItem('token');
+        if (token) {
+          const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/user/me`, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'X-Tenant-Slug': 'default',
+              'ngrok-skip-browser-warning': 'true'
+            }
+          });
+          
+          if (response.ok) {
+            const userData = await response.json();
+            console.log('✅ 서버에서 받은 사용자 정보:', userData);
+            setUserInfo(userData);
+            // localStorage도 업데이트
+            localStorage.setItem('user', JSON.stringify(userData));
+          }
+        }
+      } catch (e) {
+        console.error('사용자 정보 가져오기 실패:', e);
+      }
+    };
+    
+    fetchUserInfo();
+  }, []);
+
+  // 로그아웃 처리
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    localStorage.removeItem('isLoggedIn');
+    window.location.href = '/login';
+  };
+
   // API 데이터를 칸반보드에 매핑하는 useEffect 추가
   useEffect(() => {
-    if (tasks && tasks.length > 0) {
+    if (Array.isArray(tasks) && tasks.length > 0) {
       console.log('🔄 업무 데이터를 칸반보드에 매핑 중...', tasks);
       
       const newColumns: KanbanColumns = {
@@ -489,25 +541,35 @@ const MainContent = () => {
 
 
   // 업무 추가 함수
-  const addNewTask = (taskData: any) => {
-    const newTask = {
-      id: Date.now().toString(),
-      content: taskData.title,
-      date: taskData.dueDate,
-      assignee: taskData.assignee,
-      priority: taskData.priority
-    };
-
-    // 선택된 상태에 따라 해당 컬럼에 추가
-    const targetColumn = taskData.status || 'todo'; // 기본값은 'todo'
-
-    setColumns((prev: any) => ({
-      ...prev,
-      [targetColumn]: {
-        ...prev[targetColumn],
-        items: [newTask, ...prev[targetColumn].items] // 새 업무를 맨 위에 추가하여 기존 업무들이 아래로 밀려남
-      }
-    }));
+  const addNewTask = async (taskData: any) => {
+    try {
+      // API로 업무 생성
+      const newTaskData = {
+        title: taskData.title,
+        description: taskData.description || '',
+        status: taskData.status === 'todo' ? 'TODO' : 
+                taskData.status === 'progress' ? 'IN_PROGRESS' : 
+                taskData.status === 'done' ? 'DONE' : 'TODO',
+        priority: taskData.priority === '상' ? 'HIGH' : 
+                  taskData.priority === '하' ? 'LOW' : 'MEDIUM',
+        dueDate: taskData.dueDate || undefined,
+        assigneeId: taskData.assignee && taskData.assignee !== '' ? taskData.assignee : undefined
+      };
+      
+      console.log('📝 새 업무 생성 요청:', newTaskData);
+      
+      const createdTask = await taskAPI.createTask(newTaskData);
+      console.log('✅ 업무 생성 성공:', createdTask);
+      
+      // 업무 목록 새로고침
+      refetchTasks();
+      
+      return createdTask;
+    } catch (error) {
+      console.error('❌ 업무 생성 실패:', error);
+      toast.error('업무 생성에 실패했습니다.');
+      throw error;
+    }
   };
 
   // 업무 삭제 함수
@@ -689,7 +751,7 @@ const MainContent = () => {
             <p className="text-neutral-600 dark:text-gray-300 mt-1">AI 기반 실시간 업무 관리 대시보드</p>
           </div>
           
-          {/* 뷰 모드 전환 및 랜딩페이지 버튼 */}
+          {/* 뷰 모드 전환, 랜딩페이지 버튼, 사용자 정보 */}
           <div className="flex items-center space-x-4">
             <div className="flex bg-neutral-100 rounded-2xl p-1">
               <motion.button
@@ -711,12 +773,65 @@ const MainContent = () => {
             <motion.button
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
-              onClick={() => window.location.href = '/landing'}
+              onClick={() => window.location.href = '/'}
               className="flex items-center px-4 py-2 bg-brand-600 text-white rounded-xl hover:bg-brand-700 transition-all duration-200 shadow-soft"
             >
               <ExternalLink className="w-4 h-4 mr-2" />
               랜딩페이지
             </motion.button>
+
+            {/* 사용자 프로필 드롭다운 */}
+            {userInfo && (
+              <div className="relative">
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => setShowUserMenu(!showUserMenu)}
+                  className="flex items-center space-x-3 px-4 py-2 bg-white border border-neutral-200 rounded-xl hover:bg-neutral-50 transition-all duration-200"
+                >
+                  <div className="w-8 h-8 bg-gradient-to-r from-indigo-500 to-blue-600 rounded-full flex items-center justify-center text-white font-bold">
+                    {userInfo.name?.charAt(0).toUpperCase() || 'U'}
+                  </div>
+                  <div className="text-left">
+                    <p className="text-sm font-semibold text-neutral-900">{userInfo.name || '사용자'}</p>
+                    <p className="text-xs text-neutral-500">{userInfo.email}</p>
+                  </div>
+                  <ChevronDown className={`w-4 h-4 text-neutral-400 transition-transform ${showUserMenu ? 'rotate-180' : ''}`} />
+                </motion.button>
+
+                {/* 드롭다운 메뉴 */}
+                {showUserMenu && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    className="absolute right-0 mt-2 w-64 bg-white rounded-xl shadow-lg border border-neutral-200 overflow-hidden z-50"
+                  >
+                    <div className="px-4 py-3 border-b border-neutral-100">
+                      <p className="text-sm font-semibold text-neutral-900">{userInfo.name}</p>
+                      <p className="text-xs text-neutral-500">{userInfo.email}</p>
+                      <p className="text-xs text-neutral-400 mt-1">역할: {userInfo.role || 'MEMBER'}</p>
+                    </div>
+                    <div className="py-2">
+                      <button
+                        onClick={() => window.location.href = '/dashboard/settings'}
+                        className="w-full px-4 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50 flex items-center space-x-2"
+                      >
+                        <User className="w-4 h-4" />
+                        <span>프로필 설정</span>
+                      </button>
+                      <button
+                        onClick={handleLogout}
+                        className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center space-x-2"
+                      >
+                        <LogOut className="w-4 h-4" />
+                        <span>로그아웃</span>
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -880,7 +995,7 @@ const MainContent = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-96 max-w-[90vw]">
             <h3 className="text-lg font-semibold mb-4">새 업무 추가</h3>
-            <form onSubmit={(e) => {
+            <form onSubmit={async (e) => {
               e.preventDefault();
               const formData = new FormData(e.target as HTMLFormElement);
               const taskData = {
@@ -891,9 +1006,14 @@ const MainContent = () => {
                 description: formData.get('description') as string,
                 status: formData.get('status') as string
               };
-              addNewTask(taskData);
-              setShowNewTaskModal(false);
-              toast.success('새 업무가 추가되었습니다! ✨');
+              
+              try {
+                await addNewTask(taskData);
+                setShowNewTaskModal(false);
+                toast.success('새 업무가 추가되었습니다! ✨');
+              } catch (error) {
+                // 에러는 addNewTask에서 처리됨
+              }
             }}>
               <div className="space-y-4">
                 <div>
@@ -908,12 +1028,14 @@ const MainContent = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1">담당자</label>
-                  <input
-                    name="assignee"
-                    type="text"
-                    placeholder="담당자를 입력하세요"
-                    className="w-full p-2 border border-gray-300 rounded-lg"
-                  />
+                  <select name="assignee" className="w-full p-2 border border-gray-300 rounded-lg">
+                    <option value="">미지정</option>
+                    {users?.map((user: any) => (
+                      <option key={user.id} value={user.id}>
+                        {user.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1">마감일</label>
@@ -929,6 +1051,14 @@ const MainContent = () => {
                     <option value="todo">해야할 일</option>
                     <option value="progress">진행중</option>
                     <option value="done">완료</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">우선순위</label>
+                  <select name="priority" className="w-full p-2 border border-gray-300 rounded-lg">
+                    <option value="중">중간</option>
+                    <option value="상">높음</option>
+                    <option value="하">낮음</option>
                   </select>
                 </div>
                 <div>

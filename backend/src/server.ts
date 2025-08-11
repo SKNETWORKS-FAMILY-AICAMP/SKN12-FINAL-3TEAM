@@ -12,6 +12,7 @@ import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import { PrismaClient } from '@prisma/client';
 import * as dotenv from 'dotenv';
+import * as jsonwebtoken from 'jsonwebtoken';
 
 import { SimpleTenantMiddleware } from './middleware/tenant';
 import { AIService } from './services/ai-service';
@@ -109,9 +110,14 @@ app.use((req, res, next) => {
   next();
 });
 
-// Slack 경로는 body parser를 건너뛰기
+// Slack 경로는 body parser를 건너뛰기 (Slack Bolt가 자체 처리)
 app.use((req, res, next) => {
   if (req.path.startsWith('/slack')) {
+    // /slack/events는 우리가 직접 처리하므로 제외
+    if (req.path === '/slack/events') {
+      return next();
+    }
+    // 나머지 /slack 경로는 Slack Bolt가 처리하도록 건너뛰기
     return next();
   }
   express.json({ limit: '50mb' })(req, res, next);
@@ -122,6 +128,74 @@ app.use((req, res, next) => {
     return next();
   }
   express.urlencoded({ extended: true, limit: '50mb' })(req, res, next);
+});
+
+// 간단한 테스트 라우트
+app.get('/slack/test', (req, res) => {
+  console.log('✅ Slack 테스트 GET 요청 수신');
+  res.json({ status: 'ok', message: 'Slack endpoint working' });
+});
+
+// Slack 슬래시 커맨드는 Bolt 앱에서 처리하도록 전달
+// 이 라우트를 제거하고 Bolt 앱이 직접 처리하도록 함
+
+// Slack Challenge 처리 및 버튼 액션 처리
+// Slack은 application/x-www-form-urlencoded와 application/json 둘 다 사용
+app.post('/slack/events', express.raw({ type: ['application/x-www-form-urlencoded', 'application/json'] }), async (req: any, res: any, next: any) => {
+  console.log('🔍 Slack POST 요청 수신');
+  console.log('Headers:', req.headers);
+  console.log('Content-Type:', req.headers['content-type']);
+  
+  const contentType = req.headers['content-type'] || '';
+  let body;
+  
+  // raw body를 문자열로 변환
+  const rawBody = req.body.toString();
+  
+  // JSON 요청 처리 (URL verification 등)
+  if (contentType.includes('application/json')) {
+    try {
+      body = JSON.parse(rawBody);
+      console.log('📦 JSON Body 파싱:', body);
+      
+      // Slack Challenge 응답
+      if (body.type === 'url_verification') {
+        console.log('✅ URL Verification Challenge:', body.challenge);
+        // 텍스트로 응답
+        res.setHeader('Content-Type', 'text/plain');
+        return res.status(200).send(body.challenge);
+      }
+      
+      // 일반 이벤트 처리
+      if (body.type === 'event_callback') {
+        console.log('📨 이벤트:', body.event);
+        return res.status(200).send('OK');
+      }
+    } catch (e) {
+      console.error('❌ JSON 파싱 실패:', e);
+      return res.status(400).send('Bad Request');
+    }
+  }
+  
+  // URL-encoded 요청 처리 (버튼 액션 등)
+  if (contentType.includes('application/x-www-form-urlencoded')) {
+    const params = new URLSearchParams(rawBody);
+    
+    // payload가 있으면 버튼 액션
+    if (params.has('payload')) {
+      console.log('🎯 버튼 액션 감지 - Slack Bolt로 전달');
+      // rawBody를 req에 추가하고 Slack Bolt로 전달
+      req.rawBody = rawBody;
+      // body 파싱
+      req.body = Object.fromEntries(params);
+      
+      if (slackApp && slackApp.receiver && slackApp.receiver.app) {
+        return slackApp.receiver.app(req, res, next);
+      }
+    }
+  }
+  
+  return res.status(200).send('OK');
 });
 
 // 헬스 체크 엔드포인트
@@ -145,7 +219,9 @@ app.get('/health', async (req, res) => {
   }
 });
 
-// Slack OAuth 콜백 (최우선 순위로 처리)
+// Slack OAuth 콜백 (테스트용 - 비활성화)
+// 아래의 실제 OAuth 핸들러 사용을 위해 주석 처리
+/*
 app.get('/auth/slack/callback', (req: Request, res: Response) => {
   console.log('✅✅✅ /auth/slack/callback 라우트 직접 호출됨!');
   console.log('Query params:', req.query);
@@ -157,19 +233,24 @@ app.get('/auth/slack/callback', (req: Request, res: Response) => {
     return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3002'}/login?error=slack_auth_failed`);
   }
   
-  // 임시 테스트 응답
+  // 임시로 테스트 사용자 사용
   const testUser = {
+    id: 'test-user-id-123',
     slackUserId: 'U123456',
-    name: '테스트 사용자',
+    name: 'Test User',
     email: 'test@example.com',
     avatar: '',
     teamId: 'T123456',
-    teamName: 'Test Team'
+    teamName: 'Test Team',
+    tenantId: 'default-tenant-id',
+    role: 'MEMBER'
   };
-  const userToken = Buffer.from(JSON.stringify(testUser)).toString('base64');
-  console.log('🔄 리다이렉트 중...');
-  return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3002'}/login/success?token=${userToken}`);
+  
+  const userToken = generateToken(testUser);
+  const redirectUrl = `${process.env.FRONTEND_URL || 'http://localhost:3002'}/login/success?token=${encodeURIComponent(userToken)}`;
+  return res.redirect(redirectUrl);
 });
+*/
 
 // ===== OAuth 연동 엔드포인트 =====
 
@@ -285,33 +366,12 @@ app.get('/auth/notion/callback', async (req, res) => {
     
     console.log('✅ Notion 연동 저장 완료');
     
-    // 성공 페이지로 리다이렉트 (임시로 간단한 HTML)
-    res.send(`
-      <html>
-        <head>
-          <title>Notion 연동 완료</title>
-          <style>
-            body { font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; text-align: center; }
-            .success { color: #28a745; font-size: 24px; margin-bottom: 20px; }
-            .info { background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0; }
-          </style>
-        </head>
-        <body>
-          <div class="success">✅ Notion 연동이 완료되었습니다!</div>
-          <div class="info">
-            <h3>연동된 워크스페이스</h3>
-            <p><strong>${tokens.workspace_name}</strong></p>
-            <p>이제 TtalKkak에서 회의록을 생성하면 자동으로 Notion 페이지가 만들어집니다.</p>
-          </div>
-          <p>이 창을 닫고 Slack으로 돌아가세요.</p>
-          <script>
-            setTimeout(() => {
-              window.close();
-            }, 3000);
-          </script>
-        </body>
-      </html>
-    `);
+    // Frontend의 NotionSuccess 페이지로 리다이렉트
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3002';
+    const successUrl = `${frontendUrl}/notion-success?user=${encodeURIComponent(tokens.workspace_name || 'Notion User')}`;
+    
+    console.log('🎯 Notion 연동 성공, Frontend로 리다이렉트:', successUrl);
+    return res.redirect(successUrl);
     
   } catch (error) {
     console.error('❌ Notion OAuth 콜백 처리 오류:', error);
@@ -520,33 +580,12 @@ app.get('/auth/jira/callback', async (req, res) => {
     
     console.log('✅ JIRA 연동 저장 완료');
     
-    // 성공 페이지
-    res.send(`
-      <html>
-        <head>
-          <title>JIRA 연동 완료</title>
-          <style>
-            body { font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; text-align: center; }
-            .success { color: #28a745; font-size: 24px; margin-bottom: 20px; }
-            .info { background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0; }
-          </style>
-        </head>
-        <body>
-          <div class="success">✅ JIRA 연동이 완료되었습니다!</div>
-          <div class="info">
-            <h3>연동된 사이트</h3>
-            <p><strong>${resources[0]?.name || 'JIRA 사이트'}</strong></p>
-            <p>이제 TtalKkak에서 생성한 업무가 자동으로 JIRA 이슈로 만들어집니다.</p>
-          </div>
-          <p>이 창을 닫고 Slack으로 돌아가세요.</p>
-          <script>
-            setTimeout(() => {
-              window.close();
-            }, 3000);
-          </script>
-        </body>
-      </html>
-    `);
+    // Frontend의 JiraSuccess 페이지로 리다이렉트
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3002';
+    const successUrl = `${frontendUrl}/jira-success?user=${encodeURIComponent(resources[0]?.name || 'JIRA User')}`;
+    
+    console.log('🎯 JIRA 연동 성공, Frontend로 리다이렉트:', successUrl);
+    return res.redirect(successUrl);
     
   } catch (error) {
     console.error('❌ JIRA OAuth 콜백 처리 오류:', error);
@@ -657,7 +696,7 @@ app.get('/api/dashboard/stats',
         where: { tenantId, status: 'TODO' } 
       });
 
-      res.json({
+      return res.json({
         totalMeetings,
         averageProcessingTime: 20, // 임시값
         accuracy: 95, // 임시값
@@ -667,7 +706,7 @@ app.get('/api/dashboard/stats',
       });
     } catch (error) {
       console.error('Dashboard stats error:', error);
-      res.status(500).json({ error: 'Failed to fetch dashboard stats' });
+      return res.status(500).json({ error: 'Failed to fetch dashboard stats' });
     }
   }
 );
@@ -694,10 +733,10 @@ app.get('/api/dashboard/recent-activities',
         take: 10
       });
 
-      res.json(activities);
+      return res.json(activities);
     } catch (error) {
       console.error('Recent activities error:', error);
-      res.status(500).json({ error: 'Failed to fetch recent activities' });
+      return res.status(500).json({ error: 'Failed to fetch recent activities' });
     }
   }
 );
@@ -794,19 +833,71 @@ app.get('/api/projects/:id',
   }
 );
 
+// 현재 사용자 정보 조회 API
+app.get('/api/user/me', 
+  authenticateUser,
+  async (req, res) => {
+    try {
+      const userId = req.user?.id;
+      
+      if (!userId) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+      
+      // 데이터베이스에서 최신 사용자 정보 조회
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          slackUserId: true,
+          role: true,
+          tenantId: true
+        }
+      });
+      
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      
+      // avatar 필드 추가 (이니셜 기반 기본 아바타)
+      const userWithAvatar = {
+        ...user,
+        avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || '')}&background=0D8ABC&color=fff`
+      };
+      
+      console.log('✅ 사용자 정보 조회:', userWithAvatar);
+      return res.json(userWithAvatar);
+    } catch (error) {
+      console.error('User fetch error:', error);
+      return res.status(500).json({ error: 'Failed to fetch user information' });
+    }
+  }
+);
+
 // 업무 목록 조회 API (인증 필요)
 app.get('/api/tasks', 
   authenticateUser,
   async (req, res) => {
     try {
       const tenantId = req.user?.tenantId;
+      const userId = req.user?.id; // 로그인한 사용자 ID
       
-      if (!tenantId) {
+      if (!tenantId || !userId) {
         return res.status(401).json({ error: 'Unauthorized' });
       }
       const { status, assigneeId, priority } = req.query;
       
-      const where: any = { tenantId };
+      // 로그인한 사용자와 관련된 작업만 필터링
+      const where: any = {
+        tenantId,
+        OR: [
+          { assigneeId: userId },        // 나에게 할당된 작업
+          { assigneeId: null }            // 미할당 작업
+        ]
+      };
+      
       if (status) where.status = status;
       if (assigneeId) where.assigneeId = assigneeId;
       if (priority) where.priority = priority;
@@ -837,6 +928,7 @@ app.get('/api/tasks',
         orderBy: { createdAt: 'desc' }
       });
 
+      console.log(`📋 사용자 ${userId}의 작업 ${tasks.length}개 조회됨`);
       return res.json(tasks);
     } catch (error) {
       console.error('Tasks fetch error:', error);
@@ -954,7 +1046,13 @@ app.post('/api/tasks',
   authenticateUser,
   async (req, res) => {
     try {
+      console.log('📝 POST /api/tasks 요청 받음');
+      console.log('📦 요청 본문:', req.body);
+      
       const tenantId = req.user?.tenantId;
+      const userId = req.user?.id;
+      
+      console.log('👤 사용자 정보:', { tenantId, userId });
       
       if (!tenantId) {
         return res.status(401).json({ error: 'Unauthorized' });
@@ -965,22 +1063,72 @@ app.post('/api/tasks',
         status = 'TODO', 
         priority = 'MEDIUM',
         dueDate,
-        assigneeId,
-        projectId 
+        assigneeId
       } = req.body;
+      
+      let { projectId } = req.body;
 
-      // 프로젝트 ID 확인 (필수)
+      // 프로젝트 ID가 없거나 잘못된 경우 기본 프로젝트 사용
+      console.log('🔍 프로젝트 ID 확인:', { projectId, tenantId });
+      
       if (!projectId) {
-        return res.status(400).json({ error: 'Project ID is required' });
-      }
+        console.log('📁 프로젝트 ID가 없음, 기본 프로젝트 찾기...');
+        // 기본 프로젝트 찾기 또는 생성
+        let defaultProject = await prisma.project.findFirst({
+          where: { tenantId },
+          orderBy: { createdAt: 'asc' }
+        });
+        
+        if (!defaultProject) {
+          console.log('🆕 기본 프로젝트가 없음, 새로 생성...');
+          // SlackInput 생성 (프로젝트 생성에 필요)
+          const slackInput = await prisma.slackInput.create({
+            data: {
+              tenantId,
+              slackChannelId: 'C000000',
+              slackUserId: req.user?.slackUserId || 'U000000',
+              inputType: 'TEXT',
+              content: '기본 프로젝트',
+              status: 'COMPLETED'
+            }
+          });
+          
+          console.log('✅ SlackInput 생성 완료:', slackInput.id);
+          
+          // 기본 프로젝트 생성
+          defaultProject = await prisma.project.create({
+            data: {
+              tenantId,
+              slackInputId: slackInput.id,
+              title: '기본 프로젝트',
+              overview: '자동 생성된 기본 프로젝트입니다',
+              content: {}
+            }
+          });
+          console.log('✅ 기본 프로젝트 생성 완료:', defaultProject.id);
+        }
+        
+        projectId = defaultProject.id;
+        console.log('📌 사용할 프로젝트 ID:', projectId);
+      } else {
+        // 프로젝트 존재 확인
+        const project = await prisma.project.findFirst({
+          where: { id: projectId, tenantId }
+        });
 
-      // 프로젝트 존재 확인
-      const project = await prisma.project.findFirst({
-        where: { id: projectId, tenantId }
-      });
-
-      if (!project) {
-        return res.status(404).json({ error: 'Project not found' });
+        if (!project) {
+          // 프로젝트가 없으면 기본 프로젝트 사용
+          const defaultProject = await prisma.project.findFirst({
+            where: { tenantId },
+            orderBy: { createdAt: 'asc' }
+          });
+          
+          if (defaultProject) {
+            projectId = defaultProject.id;
+          } else {
+            return res.status(404).json({ error: 'Project not found' });
+          }
+        }
       }
 
       // 태스크 번호 생성
@@ -990,6 +1138,15 @@ app.post('/api/tasks',
       const taskNumber = `TASK-${taskCount + 1}`;
 
       // 새 업무 생성
+      console.log('🔨 업무 생성 시작:', { 
+        title, 
+        projectId, 
+        taskNumber,
+        status,
+        priority,
+        assigneeId 
+      });
+      
       const newTask = await prisma.task.create({
         data: {
           tenantId,
@@ -1009,10 +1166,20 @@ app.post('/api/tasks',
         }
       });
 
+      console.log('✅ 업무 생성 완료:', {
+        id: newTask.id,
+        title: newTask.title,
+        taskNumber: newTask.taskNumber,
+        projectId: newTask.projectId
+      });
+
       return res.status(201).json(newTask);
     } catch (error) {
-      console.error('Task creation error:', error);
-      return res.status(500).json({ error: 'Failed to create task' });
+      console.error('❌ Task creation error:', error);
+      return res.status(500).json({ 
+        error: 'Failed to create task',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      });
     }
   }
 );
@@ -1457,21 +1624,35 @@ app.delete('/api/integrations/:service',
 // Slack OAuth 시작 (로그인 버튼 클릭 시)
 app.get('/api/auth/slack', (req: Request, res: Response) => {
   const slackClientId = process.env.SLACK_CLIENT_ID || '9123205664802.9178095689748';
-  const redirectUri = process.env.SLACK_REDIRECT_URI || 'https://640f2e6aa521.ngrok-free.app/auth/slack/callback';
+  const redirectUri = process.env.SLACK_REDIRECT_URI || 'https://07e05725ca63.ngrok-free.app/auth/slack/callback';
   
-  const slackAuthUrl = `https://slack.com/oauth/v2/authorize?` +
-    `client_id=${slackClientId}&` +
-    `scope=channels:read,chat:write,users:read,users:read.email&` +
-    `redirect_uri=${encodeURIComponent(redirectUri)}`;
+  console.log('🔍 환경변수 SLACK_REDIRECT_URI:', process.env.SLACK_REDIRECT_URI);
+  console.log('🔍 사용할 redirectUri:', redirectUri);
   
-  console.log('🔐 Slack OAuth 시작:', slackAuthUrl);
+  // Sign in with Slack - OpenID Connect 사용
+  // team 파라미터를 추가하거나 OAuth v2를 사용
+  const useOAuthV2 = true; // OpenID 대신 OAuth v2 사용
+  
+  const slackAuthUrl = useOAuthV2 
+    ? `https://slack.com/oauth/v2/authorize?` +
+      `client_id=${slackClientId}&` +
+      `scope=users:read,users:read.email&` +  // 기본 사용자 정보만
+      `redirect_uri=${encodeURIComponent(redirectUri)}`
+    : `https://slack.com/openid/connect/authorize?` +
+      `response_type=code&` +
+      `client_id=${slackClientId}&` +
+      `scope=openid%20profile%20email&` +  // OpenID Connect scopes
+      `redirect_uri=${encodeURIComponent(redirectUri)}&` +
+      `nonce=${Date.now()}`;
+  
+  console.log('🔐 Slack 로그인 시작 (Sign in with Slack):', slackAuthUrl);
   res.redirect(slackAuthUrl);
 });
 
 // Slack 앱 설치 (OAuth + 채널 초대) - Go to Market 버튼
 app.get('/api/auth/slack/install', (req: Request, res: Response) => {
   const slackClientId = process.env.SLACK_CLIENT_ID || '9123205664802.9178095689748';
-  const redirectUri = process.env.SLACK_REDIRECT_URI || 'https://640f2e6aa521.ngrok-free.app/auth/slack/callback';
+  const redirectUri = process.env.SLACK_REDIRECT_URI || 'https://07e05725ca63.ngrok-free.app/auth/slack/callback';
   
   // Slack OAuth URL에 채널 초대 권한 추가
   const scopes = [
@@ -1542,18 +1723,8 @@ app.get('/api/auth/check-session', (req: Request, res: Response) => {
   }
 });
 
-// Slack OAuth 인증 (tenant 버전 - 기존 호환성 유지)
-app.get('/auth/slack/:tenant', (req: Request, res: Response) => {
-  const { tenant } = req.params;
-  
-  // 실제 Slack OAuth URL로 리다이렉트 (임시로 성공 페이지로)
-  const redirectUrl = `${process.env.FRONTEND_URL || 'http://localhost:3002'}/integration?slack=connected&tenant=${tenant}`;
-  
-  // 임시로 바로 성공 상태로 리다이렉트 (실제로는 Slack OAuth 플로우)
-  res.redirect(redirectUrl);
-});
-
-// Slack OAuth 콜백 처리
+// Slack OAuth 콜백 처리 (실제 구현 - 활성화)
+// 주의: 이 라우트는 /auth/slack/:tenant 보다 먼저 정의되어야 함
 app.get('/auth/slack/callback', async (req: Request, res: Response) => {
   const { code, error } = req.query;
   
@@ -1574,35 +1745,41 @@ app.get('/auth/slack/callback', async (req: Request, res: Response) => {
     console.log('📝 환경변수 확인:', {
       clientId: process.env.SLACK_CLIENT_ID ? '존재' : '없음',
       clientSecret: process.env.SLACK_CLIENT_SECRET ? '존재' : '없음',
-      redirectUri: process.env.SLACK_REDIRECT_URI || 'https://640f2e6aa521.ngrok-free.app/auth/slack/callback'
+      redirectUri: process.env.SLACK_REDIRECT_URI || 'https://07e05725ca63.ngrok-free.app/auth/slack/callback'
     });
     
-    // 임시 테스트: DB에 사용자 생성 및 JWT 토큰 발급
-    const testUser = {
-      slackUserId: 'U123456',
-      name: '테스트 사용자',
-      email: 'test@example.com',
-      avatar: '',
-      teamId: 'T123456',
-      teamName: 'Test Team'
-    };
+    // 테스트 모드: 실제 API 호출 대신 테스트 데이터 사용
+    const USE_TEST_MODE = false;
     
-    // DB에 사용자 생성 또는 업데이트
-    const dbUser = await createOrUpdateUser(testUser);
+    if (USE_TEST_MODE) {
+      // 테스트 사용자 정보
+      const testUser = {
+        slackUserId: 'U123456',
+        name: '테스트 사용자',
+        email: 'test@example.com',
+        avatar: '',
+        teamId: 'T123456',
+        teamName: 'Test Team'
+      };
+      
+      // generateToken 함수 사용하여 제대로 된 JWT 토큰 생성
+      const userForToken = {
+        id: testUser.slackUserId,
+        name: testUser.name,
+        email: testUser.email,
+        slackUserId: testUser.slackUserId,
+        tenantId: 'default-tenant-id',
+        role: 'MEMBER'
+      };
+      const userToken = generateToken(userForToken);
+      
+      console.log('🔑 생성된 토큰:', userToken);
+      const redirectUrl = `${process.env.FRONTEND_URL || 'http://localhost:3002'}/login/success?token=${encodeURIComponent(userToken)}`;
+      console.log('🔄 리다이렉트 URL:', redirectUrl);
+      return res.redirect(redirectUrl);
+    }
     
-    // JWT 토큰 생성 (실제 JWT 라이브러리 사용)
-    const userToken = generateToken(dbUser);
-    
-    console.log('✅ 임시 테스트 - 바로 리다이렉트');
-    
-    // Go to Market으로 접근한 경우 채널 초대 메시지 표시
-    const isInstall = req.path.includes('/install');
-    const message = isInstall ? '&install=true' : '';
-    
-    return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3002'}/login/success?token=${userToken}${message}`);
-    
-    // 실제 Slack OAuth 토큰 교환 (현재 비활성화 - 필요시 활성화)
-    /*
+    // OAuth v2 토큰 교환 (OpenID 대신)
     const tokenResponse = await fetch('https://slack.com/api/oauth.v2.access', {
       method: 'POST',
       headers: {
@@ -1612,7 +1789,7 @@ app.get('/auth/slack/callback', async (req: Request, res: Response) => {
         client_id: process.env.SLACK_CLIENT_ID || '9123205664802.9178095689748',
         client_secret: process.env.SLACK_CLIENT_SECRET || '943bff5c993ed1609923e84b7a5e4365',
         code: code as string,
-        redirect_uri: process.env.SLACK_REDIRECT_URI || 'https://640f2e6aa521.ngrok-free.app/auth/slack/callback'
+        redirect_uri: process.env.SLACK_REDIRECT_URI || 'https://07e05725ca63.ngrok-free.app/auth/slack/callback'
       })
     });
     
@@ -1640,10 +1817,10 @@ app.get('/auth/slack/callback', async (req: Request, res: Response) => {
       return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3002'}/login?error=token_exchange_failed`);
     }
     
-    // 사용자 정보 가져오기
+    // OAuth v2 사용자 정보 가져오기
     const userResponse = await fetch('https://slack.com/api/users.info', {
       headers: {
-        'Authorization': `Bearer ${tokenData.authed_user?.access_token}`,
+        'Authorization': `Bearer ${tokenData.authed_user?.access_token || tokenData.access_token}`,
         'Content-Type': 'application/x-www-form-urlencoded'
       },
       method: 'POST',
@@ -1672,25 +1849,55 @@ app.get('/auth/slack/callback', async (req: Request, res: Response) => {
       return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3002'}/login?error=user_info_failed`);
     }
     
-    // 사용자 정보를 JWT 토큰으로 생성
-    const userInfo = {
-      slackUserId: userData.user.id,
-      name: userData.user.real_name || userData.user.name,
-      email: userData.user.profile.email,
-      avatar: userData.user.profile.image_72,
-      teamId: tokenData.team?.id,
-      teamName: tokenData.team?.name
-    };
+    // 사용자를 데이터베이스에 저장 또는 업데이트
+    let tenant = await prisma.tenant.findFirst({
+      where: { slug: 'default' }
+    });
     
-    // JWT 형식의 토큰 생성
-    const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64');
-    const payload = Buffer.from(JSON.stringify({
-      ...userInfo,
-      iat: Math.floor(Date.now() / 1000),
-      exp: Math.floor(Date.now() / 1000) + (24 * 60 * 60) // 24시간
-    })).toString('base64');
-    const signature = 'real_signature'; // 실제로는 HMAC SHA256 사용
-    const userToken = `${header}.${payload}.${signature}`;
+    if (!tenant) {
+      tenant = await prisma.tenant.create({
+        data: {
+          id: 'default-tenant-id',
+          name: 'Default Tenant',
+          slug: 'default'
+        }
+      });
+    }
+    
+    // 사용자 찾기 또는 생성
+    let user = await prisma.user.findFirst({
+      where: { 
+        slackUserId: userData.user.id 
+      }
+    });
+    
+    if (user) {
+      // 기존 사용자 업데이트
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          name: userData.user.real_name || userData.user.name,
+          email: userData.user.profile.email
+        }
+      });
+    } else {
+      // 새 사용자 생성
+      user = await prisma.user.create({
+        data: {
+          id: `slack-${userData.user.id}`,
+          slackUserId: userData.user.id,
+          name: userData.user.real_name || userData.user.name,
+          email: userData.user.profile.email,
+          tenantId: tenant.id,
+          role: 'MEMBER'
+        }
+      });
+    }
+    
+    console.log('✅ 사용자 정보 저장 완료:', user);
+    
+    // JWT 토큰 생성
+    const userToken = generateToken(user);
     
     // 채널에 앱 초대 (추가 기능)
     if (tokenData.access_token) {
@@ -1701,22 +1908,30 @@ app.get('/auth/slack/callback', async (req: Request, res: Response) => {
           method: 'GET'
         });
         
-        const channelsData = await channelsResponse.json();
+        const channelsData = await channelsResponse.json() as {
+          ok: boolean;
+          channels?: Array<{
+            id: string;
+            name: string;
+          }>;
+        };
         
         if (channelsData.ok && channelsData.channels && channelsData.channels.length > 0) {
           const firstChannel = channelsData.channels[0];
           
-          // 채널에 앱 초대
-          await fetch('https://slack.com/api/conversations.join', {
-            method: 'POST',
-            headers: { 
-              'Authorization': `Bearer ${tokenData.access_token}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ channel: firstChannel.id })
-          });
-          
-          console.log(`✅ TtalKkak 앱이 #${firstChannel.name} 채널에 초대되었습니다.`);
+          if (firstChannel) {
+            // 채널에 앱 초대
+            await fetch('https://slack.com/api/conversations.join', {
+              method: 'POST',
+              headers: { 
+                'Authorization': `Bearer ${tokenData.access_token}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({ channel: firstChannel.id })
+            });
+            
+            console.log(`✅ TtalKkak 앱이 #${firstChannel.name} 채널에 초대되었습니다.`);
+          }
         }
       } catch (channelError) {
         console.error('⚠️ 채널 초대 실패:', channelError);
@@ -1729,7 +1944,6 @@ app.get('/auth/slack/callback', async (req: Request, res: Response) => {
     
     // 프론트엔드로 리다이렉트
     return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3002'}/login/success?token=${userToken}${message}`);
-        */
     
   } catch (error) {
     console.error('❌ Slack OAuth 처리 중 오류:', error);
@@ -2879,12 +3093,13 @@ io.on('connection', (socket) => {
 });
 
 // ===== Slack 연동 =====
-// Slack 이벤트 및 명령어 처리
+// Slack URL Verification (Challenge) 처리
+// 중복 라우트 제거 - 128번 줄에 이미 정의됨
+
+// Slack 명령어 처리
+// ExpressReceiver의 기본 라우트를 그대로 사용
 if (slackApp && slackApp.receiver && slackApp.receiver.app) {
-  // ExpressReceiver의 app을 직접 사용 (body parser 충돌 방지)
-  // /slack/events 와 /slack/commands 만 처리
-  app.use('/slack/events', slackApp.receiver.app);
-  app.use('/slack/commands', slackApp.receiver.app);
+  app.use(slackApp.receiver.app);
   console.log('✅ Slack Express 앱 등록 완료');
 } else {
   console.warn('⚠️ Slack 앱이 초기화되지 않아 라우터를 건너뜁니다.');
@@ -2927,17 +3142,137 @@ process.on('SIGTERM', async () => {
   process.exit(0);
 });
 
-//테스트
+//테스트 - 로그인한 사용자의 태스크만 반환
 app.get('/tasks', async (req, res) => {
   try {
+    console.log('📋 /tasks API 호출됨');
+    
+    // Authorization 헤더에서 토큰 추출
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.split(' ')[1];
+    
+    let userId = null;
+    if (token) {
+      try {
+        const decoded = jsonwebtoken.verify(token, process.env.JWT_SECRET || 'ddalkkak_super_secret_jwt_key_production_2024') as any;
+        userId = decoded.id;
+        console.log('🔑 토큰에서 추출한 사용자 ID:', userId);
+      } catch (err) {
+        console.log('⚠️ 토큰 검증 실패, 전체 태스크 반환');
+      }
+    }
+    
+    // Prisma 연결 테스트
+    await prisma.$connect();
+    console.log('✅ DB 연결 성공');
+    
+    // 사용자 ID가 있으면 해당 사용자의 태스크만, 없으면 전체 태스크
+    const whereClause = userId ? {
+      OR: [
+        { assigneeId: userId },        // 담당자인 태스크
+        { assigneeId: null }           // 미할당 태스크도 포함
+      ]
+    } : {};
+    
     const tasks = await prisma.task.findMany({
+      where: whereClause,
+      include: {
+        assignee: {
+          select: { id: true, name: true, email: true, role: true }
+        },
+        metadata: {
+          select: {
+            estimatedHours: true,
+            actualHours: true,
+            requiredSkills: true,
+            taskType: true,
+            jiraIssueKey: true
+          }
+        },
+        children: {
+          include: {
+            assignee: {
+              select: { id: true, name: true, email: true }
+            }
+          }
+        }
+      },
       orderBy: {
         createdAt: 'desc',
       },
     });
+    
+    console.log(`✅ ${tasks.length}개의 태스크 조회 성공 (사용자: ${userId || '전체'})`);
     res.json(tasks);
   } catch (error) {
-    console.error('❌ /tasks API 오류:', error);
-    res.status(500).json({ error: '서버 내부 오류' });
+    console.error('❌ /tasks API 오류 상세:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+      error
+    });
+    res.status(500).json({ 
+      error: '서버 내부 오류', 
+      detail: error instanceof Error ? error.message : 'Unknown error',
+      type: error instanceof Error ? error.constructor.name : 'Unknown'
+    });
   }
 });
+
+// 개발용 테스트 API - 유저 목록 (인증 없이)
+app.get('/test/users', async (req, res) => {
+  try {
+    const users = await prisma.user.findMany({
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        tenantId: true
+      }
+    });
+    console.log(`✅ ${users.length}개의 유저 조회 성공`);
+    res.json(users);
+  } catch (error) {
+    console.error('❌ /test/users API 오류:', error);
+    res.status(500).json({ 
+      error: '서버 내부 오류', 
+      detail: error instanceof Error ? error.message : 'Unknown error' 
+    });
+  }
+});
+
+// 개발용 테스트 API - 대시보드 통계 (인증 없이)
+app.get('/test/stats', async (req, res) => {
+  try {
+    const [totalTasks, todoTasks, inProgressTasks, doneTasks, totalUsers] = await Promise.all([
+      prisma.task.count(),
+      prisma.task.count({ where: { status: 'TODO' } }),
+      prisma.task.count({ where: { status: 'IN_PROGRESS' } }),
+      prisma.task.count({ where: { status: 'DONE' } }),
+      prisma.user.count()
+    ]);
+    
+    const stats = {
+      totalTasks,
+      tasksByStatus: {
+        todo: todoTasks,
+        inProgress: inProgressTasks,
+        done: doneTasks
+      },
+      totalUsers,
+      activeProjects: 1,
+      completionRate: totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0
+    };
+    
+    console.log('✅ 통계 조회 성공:', stats);
+    res.json(stats);
+  } catch (error) {
+    console.error('❌ /test/stats API 오류:', error);
+    res.status(500).json({ 
+      error: '서버 내부 오류', 
+      detail: error instanceof Error ? error.message : 'Unknown error' 
+    });
+  }
+});
+
+// restart trigger

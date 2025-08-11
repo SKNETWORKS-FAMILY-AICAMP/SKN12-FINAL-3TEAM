@@ -23,6 +23,9 @@ const Landing = () => {
   const [currentReview, setCurrentReview] = useState(0);
   const [isTtalKkakHovered, setIsTtalKkakHovered] = useState(false);
   const [isDashboardHovered, setIsDashboardHovered] = useState(false);
+  
+  // Slack URL 정의
+  const slackUrl = getSlackInstallUrl();
 
   return (
     <div className="min-h-screen bg-white">

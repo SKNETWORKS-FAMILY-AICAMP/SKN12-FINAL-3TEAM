@@ -10,6 +10,18 @@ try {
   console.error('❌ AI 서비스 초기화 실패:', error);
 }
 
+// 진행률 바 생성 함수
+function generateProgressBar(completed, total) {
+  if (total === 0) return '⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ 0%';
+  
+  const percentage = Math.round((completed / total) * 100);
+  const filledBars = Math.round((completed / total) * 10);
+  const emptyBars = 10 - filledBars;
+  
+  const bar = '🟩'.repeat(filledBars) + '⬜'.repeat(emptyBars);
+  return `${bar} ${percentage}%`;
+}
+
 // 환경 변수 디버깅
 console.log('🔍 Slack 환경 변수 확인:');
 console.log('BOT_TOKEN:', process.env.SLACK_BOT_TOKEN ? '✅ 존재' : '❌ 없음');
@@ -29,9 +41,15 @@ console.log('🚀 Slack 앱 초기화 시작...');
 let app;
 try {
   // Express Receiver 명시적 생성
+  // processBeforeResponse를 false로 설정하여 응답 처리 개선
   const receiver = new ExpressReceiver({
     signingSecret: process.env.SLACK_SIGNING_SECRET,
-    endpoints: '/events'  // 기본 엔드포인트 명시
+    processBeforeResponse: false,
+    endpoints: {
+      events: '/slack/events',
+      commands: '/slack/commands',
+      interactive: '/slack/events'  // 버튼 액션도 /slack/events로
+    }
   });
 
   app = new App({
@@ -46,6 +64,9 @@ try {
   
   // 디버깅: receiver의 실제 구조 확인
   console.log('🔍 Receiver 속성들:', Object.keys(app.receiver));
+  
+  // Slack 앱 초기화 (ExpressReceiver 사용 시 start() 호출 불필요)
+  console.log('✅ Slack 앱 준비 완료');
   
 } catch (error) {
   console.error('❌ Slack 앱 초기화 실패:', error);
@@ -179,7 +200,13 @@ app.event('message', async ({ event, message, say, client }) => {
 
 // 모든 명령어 디버깅  
 app.command(/.*/, async ({ command, ack, respond, client }) => {
-  console.log('🔍 수신된 명령어:', command.command, command);
+  console.log('🔍 수신된 명령어:', command.command);
+  console.log('📦 명령어 상세:', {
+    text: command.text,
+    user_id: command.user_id,
+    channel_id: command.channel_id,
+    team_id: command.team_id
+  });
   
   try {
     await ack();
@@ -316,49 +343,447 @@ async function handleTkCommand(text, respond, client, channelId, userId) {
         }
       ]
     });
-  } else if (text === 'start') {
+  } else if (text === 'team') {
+    // /tk team - 프로젝트 팀원 정보 조회 (DB 기반)
+    try {
+      // DB에서 프로젝트 팀원 조회
+      const { PrismaClient } = require('@prisma/client');
+      const prismaClient = new PrismaClient();
+      
+      // 현재 사용자 찾기 (Slack ID로)
+      const currentUser = await prismaClient.user.findFirst({
+        where: {
+          slackUserId: userId
+        },
+        include: {
+          tenant: true
+        }
+      });
+      
+      if (!currentUser) {
+        await respond({
+          text: '❌ 사용자 정보를 찾을 수 없습니다.',
+          blocks: [
+            {
+              type: 'section',
+              text: {
+                type: 'mrkdwn',
+                text: '❌ 사용자 정보를 찾을 수 없습니다.\n먼저 웹 대시보드에서 로그인해주세요.'
+              }
+            }
+          ]
+        });
+        await prismaClient.$disconnect();
+        return;
+      }
+      
+      // 같은 tenant의 모든 사용자 조회
+      const teamMembers = await prismaClient.user.findMany({
+        where: {
+          tenantId: currentUser.tenantId
+        },
+        include: {
+          assignedTasks: {
+            where: {
+              status: {
+                in: ['TODO', 'IN_PROGRESS']
+              }
+            }
+          }
+        }
+      });
+      
+      // 각 팀원의 상세 정보 포맷팅
+      const teamBlocks = [];
+      
+      // 헤더
+      teamBlocks.push({
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `*👥 프로젝트 팀원 (${teamMembers.length}명)*\n_${currentUser.tenant.name} 팀_`
+        }
+      });
+      
+      teamBlocks.push({ type: 'divider' });
+      
+      // 각 팀원별 상세 정보 블록
+      for (const member of teamMembers) {
+        const activeTaskCount = member.assignedTasks.length;
+        const statusEmoji = activeTaskCount > 3 ? '🔥' : activeTaskCount > 0 ? '💼' : '✅';
+        const statusText = activeTaskCount > 3 ? '바쁨' : activeTaskCount > 0 ? '작업중' : '여유';
+        const isCurrentUser = member.id === currentUser.id;
+        const currentUserMark = isCurrentUser ? ' (나)' : '';
+        
+        // 역할 아이콘
+        const roleIcon = member.role === 'OWNER' ? '👑' : member.role === 'ADMIN' ? '⚡' : '👤';
+        const roleText = member.role === 'OWNER' ? '오너' : member.role === 'ADMIN' ? '관리자' : '멤버';
+        
+        // 경험 수준 아이콘
+        const expIcon = member.experienceLevel === 'senior' ? '🎖️' : 
+                       member.experienceLevel === 'mid' ? '💪' : '🌱';
+        const expText = member.experienceLevel || 'junior';
+        
+        // 스킬 파싱
+        let skillsText = '미설정';
+        if (member.skills) {
+          try {
+            const skills = typeof member.skills === 'string' ? JSON.parse(member.skills) : member.skills;
+            skillsText = Array.isArray(skills) ? skills.join(', ') : '미설정';
+          } catch (e) {
+            skillsText = '미설정';
+          }
+        }
+        
+        // 선호 작업 유형 파싱
+        let preferredText = '미설정';
+        if (member.preferredTypes) {
+          try {
+            const preferred = typeof member.preferredTypes === 'string' ? JSON.parse(member.preferredTypes) : member.preferredTypes;
+            preferredText = Array.isArray(preferred) ? preferred.join(', ') : '미설정';
+          } catch (e) {
+            preferredText = '미설정';
+          }
+        }
+        
+        // 마지막 할당 시간
+        const lastAssignedText = member.lastAssignedAt ? 
+          new Date(member.lastAssignedAt).toLocaleString('ko-KR') : '없음';
+        
+        // 팀원 정보 섹션
+        teamBlocks.push({
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `${statusEmoji} *${member.name}${currentUserMark}*\n` +
+                  `📧 ${member.email}\n` +
+                  `${roleIcon} *권한:* ${roleText} | ${expIcon} *경험:* ${expText}\n` +
+                  `⏰ *주간 가능시간:* ${member.availableHours || 40}시간 | 📋 *진행중 작업:* ${activeTaskCount}개\n` +
+                  `💻 *기술:* ${skillsText}\n` +
+                  `🎯 *선호 작업:* ${preferredText}\n` +
+                  `🕐 *마지막 할당:* ${lastAssignedText}`
+          },
+          accessory: {
+            type: 'button',
+            text: {
+              type: 'plain_text',
+              text: '✏️ 수정',
+              emoji: true
+            },
+            action_id: 'edit_member_info',
+            value: JSON.stringify({ memberId: member.id })
+          }
+        });
+        
+        teamBlocks.push({ type: 'divider' });
+      }
+      
+      // 통계 섹션
+      const busyCount = teamMembers.filter(m => m.assignedTasks.length > 3).length;
+      const workingCount = teamMembers.filter(m => m.assignedTasks.length > 0).length;
+      const availableCount = teamMembers.filter(m => m.assignedTasks.length === 0).length;
+      
+      teamBlocks.push({
+        type: 'section',
+        fields: [
+          {
+            type: 'mrkdwn',
+            text: `*🔥 바쁨*\n${busyCount}명`
+          },
+          {
+            type: 'mrkdwn',
+            text: `*💼 작업중*\n${workingCount}명`
+          },
+          {
+            type: 'mrkdwn',
+            text: `*✅ 여유*\n${availableCount}명`
+          },
+          {
+            type: 'mrkdwn',
+            text: `*👥 전체*\n${teamMembers.length}명`
+          }
+        ]
+      });
+      
+      teamBlocks.push({ type: 'divider' });
+      
+      // 액션 버튼들
+      teamBlocks.push({
+        type: 'actions',
+        elements: [
+          {
+            type: 'button',
+            text: {
+              type: 'plain_text',
+              text: '📊 대시보드 보기',
+              emoji: true
+            },
+            url: `${process.env.FRONTEND_URL || 'http://localhost:3002'}/dashboard`,
+            action_id: 'view_team_dashboard'
+          },
+          {
+            type: 'button',
+            text: {
+              type: 'plain_text',
+              text: '🔄 새로고침',
+              emoji: true
+            },
+            value: 'refresh_team',
+            action_id: 'refresh_team'
+          },
+          {
+            type: 'button',
+            text: {
+              type: 'plain_text',
+              text: '➕ 팀원 추가',
+              emoji: true
+            },
+            action_id: 'add_team_member',
+            style: 'primary'
+          }
+        ]
+      });
+      
+      // 타임스탬프
+      teamBlocks.push({
+        type: 'context',
+        elements: [
+          {
+            type: 'mrkdwn',
+            text: `🕐 업데이트: ${new Date().toLocaleString('ko-KR')}`
+          }
+        ]
+      });
+      
       await respond({
-        text: '🎯 새 프로젝트 시작',
+        text: '👥 프로젝트 팀원 정보',
+        blocks: teamBlocks
+      });
+      
+      await prismaClient.$disconnect();
+    } catch (error) {
+      console.error('팀원 정보 조회 오류:', error);
+      await respond({
+        text: '❌ 팀원 정보를 가져오는데 실패했습니다.',
         blocks: [
           {
             type: 'section',
             text: {
               type: 'mrkdwn',
-              text: '*🚀 새 프로젝트를 시작합니다!*\n\n다음 중 하나를 선택하세요:'
+              text: `❌ 팀원 정보를 가져오는데 실패했습니다.\n\n오류: ${error.message}`
+            }
+          }
+        ]
+      });
+    }
+  } else if (text === 'status') {
+    // /tk status - 프로젝트 현황 조회
+    try {
+      // DB에서 프로젝트 현황 조회
+      const prisma = require('@prisma/client').PrismaClient;
+      const prismaClient = new prisma();
+      
+      // 현재 채널의 프로젝트 현황 조회
+      const tasks = await prismaClient.task.findMany({
+        where: {
+          // 채널 ID나 사용자 ID로 필터링 필요
+        },
+        include: {
+          assignee: true
+        }
+      });
+      
+      // 상태별 집계
+      const todoCount = tasks.filter(t => t.status === 'TODO').length;
+      const inProgressCount = tasks.filter(t => t.status === 'IN_PROGRESS').length;
+      const doneCount = tasks.filter(t => t.status === 'DONE').length;
+      const totalCount = tasks.length;
+      
+      // 담당자별 집계
+      const assigneeStats = {};
+      tasks.forEach(task => {
+        const assigneeName = task.assignee?.name || '미할당';
+        if (!assigneeStats[assigneeName]) {
+          assigneeStats[assigneeName] = 0;
+        }
+        assigneeStats[assigneeName]++;
+      });
+      
+      const assigneeList = Object.entries(assigneeStats)
+        .map(([name, count]) => `• ${name}: ${count}개`)
+        .join('\n');
+      
+      // 진행률 바 생성
+      const progressBar = generateProgressBar(doneCount, totalCount);
+      
+      await respond({
+        text: '📊 프로젝트 현황',
+        blocks: [
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: '*📊 프로젝트 현황*'
             }
           },
-        {
+          {
+            type: 'divider'
+          },
+          {
+            type: 'section',
+            fields: [
+              {
+                type: 'mrkdwn',
+                text: `*📝 전체 업무*\n${totalCount}개`
+              },
+              {
+                type: 'mrkdwn',
+                text: `*✅ 완료율*\n${totalCount > 0 ? Math.round(doneCount / totalCount * 100) : 0}%`
+              },
+              {
+                type: 'mrkdwn',
+                text: `*📋 해야할 일*\n${todoCount}개`
+              },
+              {
+                type: 'mrkdwn',
+                text: `*🔄 진행중*\n${inProgressCount}개`
+              },
+              {
+                type: 'mrkdwn',
+                text: `*✅ 완료*\n${doneCount}개`
+              },
+              {
+                type: 'mrkdwn',
+                text: `*📈 진행률*\n${progressBar}`
+              }
+            ]
+          },
+          {
+            type: 'divider'
+          },
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: `*👥 담당자별 현황*\n${assigneeList || '• 할당된 업무 없음'}`
+            }
+          },
+          {
+            type: 'divider'
+          },
+          {
             type: 'actions',
             elements: [
               {
                 type: 'button',
                 text: {
                   type: 'plain_text',
-                  text: '🎤 음성 업로드'
+                  text: '📊 대시보드 보기',
+                  emoji: true
                 },
-                value: JSON.stringify({ action: 'upload_voice', channelId: channelId }),
-                action_id: 'upload_voice_button'
+                url: `${process.env.FRONTEND_URL || 'http://localhost:3002'}/dashboard`,
+                action_id: 'view_dashboard'
               },
               {
                 type: 'button',
                 text: {
                   type: 'plain_text',
-                  text: '📝 회의록 등록'
+                  text: '🔄 새로고침',
+                  emoji: true
                 },
-                value: 'input_transcript',
-                action_id: 'input_transcript_button'
-              },
-              {
-                type: 'button',
-                text: {
-                  type: 'plain_text',
-                  text: '🐛 디버깅'
-                },
-                value: 'debugging_mode',
-                action_id: 'debugging_button'  // ⭐ 새로 추가
+                value: 'refresh_status',
+                action_id: 'refresh_status'
               }
             ]
+          },
+          {
+            type: 'context',
+            elements: [
+              {
+                type: 'mrkdwn',
+                text: `🕐 업데이트: ${new Date().toLocaleString('ko-KR')}`
+              }
+            ]
+          }
+        ]
+      });
+      
+      await prismaClient.$disconnect();
+    } catch (error) {
+      console.error('프로젝트 현황 조회 오류:', error);
+      await respond({
+        text: '❌ 프로젝트 현황을 가져오는데 실패했습니다.',
+        blocks: [
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: `❌ 프로젝트 현황을 가져오는데 실패했습니다.\n\n오류: ${error.message}`
+            }
+          }
+        ]
+      });
+    }
+  } else if (text === 'start') {
+    try {
+      // DB에서 현재 채널의 프로젝트 확인
+      const { PrismaClient } = require('@prisma/client');
+      const prismaClient = new PrismaClient();
+      
+      // 현재 사용자가 이미 등록되어 있는지 확인
+      const existingUser = await prismaClient.user.findFirst({
+        where: {
+          slackUserId: userId
         },
+        include: {
+          tenant: true
+        }
+      });
+      
+      // 이미 설정이 완료된 경우 기존 프로젝트 시작 화면 표시
+      if (existingUser) {
+        await respond({
+          text: '🎯 새 프로젝트 시작',
+          blocks: [
+            {
+              type: 'section',
+              text: {
+                type: 'mrkdwn',
+                text: '*🚀 새 프로젝트를 시작합니다!*\n\n다음 중 하나를 선택하세요:'
+              }
+            },
+            {
+              type: 'actions',
+              elements: [
+                {
+                  type: 'button',
+                  text: {
+                    type: 'plain_text',
+                    text: '🎤 음성 업로드'
+                  },
+                  value: JSON.stringify({ action: 'upload_voice', channelId: channelId }),
+                  action_id: 'upload_voice_button'
+                },
+                {
+                  type: 'button',
+                  text: {
+                    type: 'plain_text',
+                    text: '📝 회의록 등록'
+                  },
+                  value: 'input_transcript',
+                  action_id: 'input_transcript_button'
+                },
+                {
+                  type: 'button',
+                  text: {
+                    type: 'plain_text',
+                    text: '🐛 디버깅'
+                  },
+                  value: 'debugging_mode',
+                  action_id: 'debugging_button'
+                }
+              ]
+            },
         {
           type: 'divider'
         },
@@ -423,26 +848,87 @@ async function handleTkCommand(text, respond, client, channelId, userId) {
         }
       ]
     });
-  } else if (text === 'status') {
-    await respond({
-      text: '📊 프로젝트 현황',
-      blocks: [
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: '*📊 프로젝트 현황 확인*\n\n현재 진행 중인 프로젝트와 업무 상태를 확인합니다.'
+        await prismaClient.$disconnect();
+        return;
+      }
+      
+      // 처음 사용하는 경우 - 채널 멤버 조회
+      const channelMembers = await client.conversations.members({
+        channel: channelId
+      });
+      
+      // 각 멤버의 상세 정보 가져오기
+      const memberPromises = channelMembers.members.map(memberId => 
+        client.users.info({ user: memberId })
+      );
+      const memberInfos = await Promise.all(memberPromises);
+      
+      // 봇 제외한 실제 사용자만 필터링
+      const realMembers = memberInfos
+        .filter(info => !info.user.is_bot)
+        .map(info => ({
+          id: info.user.id,
+          name: info.user.real_name || info.user.name,
+          email: info.user.profile.email || `${info.user.name}@team.slack`
+        }));
+      
+      // 팀 초기 설정 안내
+      await respond({
+        text: '👋 팀 초기 설정',
+        blocks: [
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: `*👋 안녕하세요! TtalKkak AI 프로젝트 관리를 시작합니다.*\n\n이 채널에 *${realMembers.length}명*의 팀원을 발견했습니다.\n팀원 정보를 설정하려면 아래 버튼을 클릭하세요.`
+            }
+          },
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: `*발견된 팀원:*\n${realMembers.map(m => `• ${m.name}`).join('\n')}`
+            }
+          },
+          {
+            type: 'actions',
+            elements: [
+              {
+                type: 'button',
+                text: {
+                  type: 'plain_text',
+                  text: '⚙️ 팀 설정 시작',
+                  emoji: true
+                },
+                value: JSON.stringify({ 
+                  members: realMembers,
+                  currentUserId: userId,
+                  channelId: channelId
+                }),
+                action_id: 'setup_team_initial',
+                style: 'primary'
+              }
+            ]
           }
-        },
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: '🔧 *준비 중인 기능:*\n• 진행 중인 프로젝트 목록\n• 팀원별 업무 현황\n• 완료율 및 통계'
+        ]
+      });
+      
+      await prismaClient.$disconnect();
+    } catch (error) {
+      console.error('/tk start 오류:', error);
+      await respond({
+        text: '❌ 프로젝트 시작 중 오류가 발생했습니다.',
+        blocks: [
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: `❌ 프로젝트 시작 중 오류가 발생했습니다.\n\n오류: ${error.message}`
+            }
           }
-        }
-      ]
-    });
+        ]
+      });
+    }
   } else {
     await respond({
       text: '❓ 알 수 없는 명령어',
@@ -739,6 +1225,1458 @@ app.action('jira_oauth_redirect', async ({ ack, body, respond }) => {
     await respond({
       text: '❌ 연동 처리 중 오류가 발생했습니다.'
     });
+  }
+});
+
+// 팀 정보 새로고침 버튼
+app.action('refresh_team', async ({ ack, body, client }) => {
+  await ack();
+  
+  try {
+    // DB에서 팀원 정보 재조회
+    const { PrismaClient } = require('@prisma/client');
+    const prismaClient = new PrismaClient();
+    
+    // 현재 사용자 찾기
+    const currentUser = await prismaClient.user.findFirst({
+      where: {
+        slackUserId: body.user.id
+      },
+      include: {
+        tenant: true
+      }
+    });
+    
+    if (!currentUser) {
+      await client.chat.update({
+        channel: body.channel.id,
+        ts: body.message.ts,
+        text: '❌ 사용자 정보를 찾을 수 없습니다.',
+        blocks: [
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: '❌ 사용자 정보를 찾을 수 없습니다.\n먼저 웹 대시보드에서 로그인해주세요.'
+            }
+          }
+        ]
+      });
+      await prismaClient.$disconnect();
+      return;
+    }
+    
+    // 같은 tenant의 모든 사용자 조회
+    const teamMembers = await prismaClient.user.findMany({
+      where: {
+        tenantId: currentUser.tenantId
+      },
+      include: {
+        assignedTasks: {
+          where: {
+            status: {
+              in: ['TODO', 'IN_PROGRESS']
+            }
+          }
+        }
+      }
+    });
+    
+    // 각 팀원의 상세 정보 포맷팅
+    const teamBlocks = [];
+    
+    // 헤더
+    teamBlocks.push({
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `*👥 프로젝트 팀원 (${teamMembers.length}명)*\n_${currentUser.tenant.name} 팀_`
+      }
+    });
+    
+    teamBlocks.push({ type: 'divider' });
+    
+    // 각 팀원별 상세 정보 블록
+    for (const member of teamMembers) {
+      const activeTaskCount = member.assignedTasks.length;
+      const statusEmoji = activeTaskCount > 3 ? '🔥' : activeTaskCount > 0 ? '💼' : '✅';
+      const statusText = activeTaskCount > 3 ? '바쁨' : activeTaskCount > 0 ? '작업중' : '여유';
+      const isCurrentUser = member.id === currentUser.id;
+      const currentUserMark = isCurrentUser ? ' (나)' : '';
+      
+      // 역할 아이콘
+      const roleIcon = member.role === 'OWNER' ? '👑' : member.role === 'ADMIN' ? '⚡' : '👤';
+      const roleText = member.role === 'OWNER' ? '오너' : member.role === 'ADMIN' ? '관리자' : '멤버';
+      
+      // 경험 수준 아이콘
+      const expIcon = member.experienceLevel === 'senior' ? '🎖️' : 
+                     member.experienceLevel === 'mid' ? '💪' : '🌱';
+      const expText = member.experienceLevel || 'junior';
+      
+      // 스킬 파싱
+      let skillsText = '미설정';
+      if (member.skills) {
+        try {
+          const skills = typeof member.skills === 'string' ? JSON.parse(member.skills) : member.skills;
+          skillsText = Array.isArray(skills) ? skills.join(', ') : '미설정';
+        } catch (e) {
+          skillsText = '미설정';
+        }
+      }
+      
+      // 선호 작업 유형 파싱
+      let preferredText = '미설정';
+      if (member.preferredTypes) {
+        try {
+          const preferred = typeof member.preferredTypes === 'string' ? JSON.parse(member.preferredTypes) : member.preferredTypes;
+          preferredText = Array.isArray(preferred) ? preferred.join(', ') : '미설정';
+        } catch (e) {
+          preferredText = '미설정';
+        }
+      }
+      
+      // 마지막 할당 시간
+      const lastAssignedText = member.lastAssignedAt ? 
+        new Date(member.lastAssignedAt).toLocaleString('ko-KR') : '없음';
+      
+      // 팀원 정보 섹션
+      teamBlocks.push({
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `${statusEmoji} *${member.name}${currentUserMark}*\n` +
+                `📧 ${member.email}\n` +
+                `${roleIcon} *권한:* ${roleText} | ${expIcon} *경험:* ${expText}\n` +
+                `⏰ *주간 가능시간:* ${member.availableHours || 40}시간 | 📋 *진행중 작업:* ${activeTaskCount}개\n` +
+                `💻 *기술:* ${skillsText}\n` +
+                `🎯 *선호 작업:* ${preferredText}\n` +
+                `🕐 *마지막 할당:* ${lastAssignedText}`
+        },
+        accessory: {
+          type: 'button',
+          text: {
+            type: 'plain_text',
+            text: '✏️ 수정',
+            emoji: true
+          },
+          action_id: 'edit_member_info',
+          value: JSON.stringify({ memberId: member.id })
+        }
+      });
+      
+      teamBlocks.push({ type: 'divider' });
+    }
+    
+    // 통계 섹션
+    const busyCount = teamMembers.filter(m => m.assignedTasks.length > 3).length;
+    const workingCount = teamMembers.filter(m => m.assignedTasks.length > 0).length;
+    const availableCount = teamMembers.filter(m => m.assignedTasks.length === 0).length;
+    
+    teamBlocks.push({
+      type: 'section',
+      fields: [
+        {
+          type: 'mrkdwn',
+          text: `*🔥 바쁨*\n${busyCount}명`
+        },
+        {
+          type: 'mrkdwn',
+          text: `*💼 작업중*\n${workingCount}명`
+        },
+        {
+          type: 'mrkdwn',
+          text: `*✅ 여유*\n${availableCount}명`
+        },
+        {
+          type: 'mrkdwn',
+          text: `*👥 전체*\n${teamMembers.length}명`
+        }
+      ]
+    });
+    
+    teamBlocks.push({ type: 'divider' });
+    
+    // 액션 버튼들
+    teamBlocks.push({
+      type: 'actions',
+      elements: [
+        {
+          type: 'button',
+          text: {
+            type: 'plain_text',
+            text: '📊 대시보드 보기',
+            emoji: true
+          },
+          url: `${process.env.FRONTEND_URL || 'http://localhost:3002'}/dashboard`,
+          action_id: 'view_team_dashboard'
+        },
+        {
+          type: 'button',
+          text: {
+            type: 'plain_text',
+            text: '🔄 새로고침',
+            emoji: true
+          },
+          value: 'refresh_team',
+          action_id: 'refresh_team'
+        },
+        {
+          type: 'button',
+          text: {
+            type: 'plain_text',
+            text: '➕ 팀원 추가',
+            emoji: true
+          },
+          action_id: 'add_team_member',
+          style: 'primary'
+        }
+      ]
+    });
+    
+    // 타임스탬프
+    teamBlocks.push({
+      type: 'context',
+      elements: [
+        {
+          type: 'mrkdwn',
+          text: `🕐 업데이트: ${new Date().toLocaleString('ko-KR')}`
+        }
+      ]
+    });
+    
+    // 메시지 업데이트
+    await client.chat.update({
+      channel: body.channel.id,
+      ts: body.message.ts,
+      text: '👥 프로젝트 팀원 정보',
+      blocks: teamBlocks
+    });
+    
+    await prismaClient.$disconnect();
+  } catch (error) {
+    console.error('팀 정보 새로고침 오류:', error);
+    await client.chat.update({
+      channel: body.channel.id,
+      ts: body.message.ts,
+      text: '❌ 팀 정보를 새로고침하는데 실패했습니다.',
+      blocks: [
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `❌ 팀 정보를 새로고침하는데 실패했습니다.\n\n오류: ${error.message}`
+          }
+        }
+      ]
+    });
+  }
+});
+
+// 상태 새로고침 버튼
+app.action('refresh_status', async ({ ack, body, respond, client }) => {
+  await ack();
+  
+  try {
+    // DB에서 프로젝트 현황 조회
+    const { PrismaClient } = require('@prisma/client');
+    const prismaClient = new PrismaClient();
+    
+    const tasks = await prismaClient.task.findMany({
+      where: {
+        // 채널 ID나 사용자 ID로 필터링 필요
+      },
+      include: {
+        assignee: true
+      }
+    });
+    
+    // 상태별 집계
+    const todoCount = tasks.filter(t => t.status === 'TODO').length;
+    const inProgressCount = tasks.filter(t => t.status === 'IN_PROGRESS').length;
+    const doneCount = tasks.filter(t => t.status === 'DONE').length;
+    const totalCount = tasks.length;
+    
+    // 담당자별 집계
+    const assigneeStats = {};
+    tasks.forEach(task => {
+      const assigneeName = task.assignee?.name || '미할당';
+      if (!assigneeStats[assigneeName]) {
+        assigneeStats[assigneeName] = 0;
+      }
+      assigneeStats[assigneeName]++;
+    });
+    
+    const assigneeList = Object.entries(assigneeStats)
+      .map(([name, count]) => `• ${name}: ${count}개`)
+      .join('\n');
+    
+    // 진행률 바 생성
+    const progressBar = generateProgressBar(doneCount, totalCount);
+    
+    // 메시지 업데이트
+    await client.chat.update({
+      channel: body.channel.id,
+      ts: body.message.ts,
+      text: '📊 프로젝트 현황',
+      blocks: [
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: '*📊 프로젝트 현황*'
+          }
+        },
+        {
+          type: 'divider'
+        },
+        {
+          type: 'section',
+          fields: [
+            {
+              type: 'mrkdwn',
+              text: `*📝 전체 업무*\n${totalCount}개`
+            },
+            {
+              type: 'mrkdwn',
+              text: `*✅ 완료율*\n${totalCount > 0 ? Math.round(doneCount / totalCount * 100) : 0}%`
+            },
+            {
+              type: 'mrkdwn',
+              text: `*📋 해야할 일*\n${todoCount}개`
+            },
+            {
+              type: 'mrkdwn',
+              text: `*🔄 진행중*\n${inProgressCount}개`
+            },
+            {
+              type: 'mrkdwn',
+              text: `*✅ 완료*\n${doneCount}개`
+            },
+            {
+              type: 'mrkdwn',
+              text: `*📈 진행률*\n${progressBar}`
+            }
+          ]
+        },
+        {
+          type: 'divider'
+        },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `*👥 담당자별 현황*\n${assigneeList || '• 할당된 업무 없음'}`
+          }
+        },
+        {
+          type: 'divider'
+        },
+        {
+          type: 'actions',
+          elements: [
+            {
+              type: 'button',
+              text: {
+                type: 'plain_text',
+                text: '📊 대시보드 보기',
+                emoji: true
+              },
+              url: `${process.env.FRONTEND_URL || 'http://localhost:3002'}/dashboard`,
+              action_id: 'view_dashboard'
+            },
+            {
+              type: 'button',
+              text: {
+                type: 'plain_text',
+                text: '🔄 새로고침',
+                emoji: true
+              },
+              value: 'refresh_status',
+              action_id: 'refresh_status'
+            }
+          ]
+        },
+        {
+          type: 'context',
+          elements: [
+            {
+              type: 'mrkdwn',
+              text: `🕐 업데이트: ${new Date().toLocaleString('ko-KR')}`
+            }
+          ]
+        }
+      ]
+    });
+    
+    await prismaClient.$disconnect();
+  } catch (error) {
+    console.error('상태 새로고침 오류:', error);
+    await respond({
+      text: '❌ 상태를 새로고침하는데 실패했습니다.',
+      blocks: [
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `❌ 상태를 새로고침하는데 실패했습니다.\n\n오류: ${error.message}`
+          }
+        }
+      ]
+    });
+  }
+});
+
+// 팀원 정보 수정 버튼
+app.action('edit_member_info', async ({ ack, body, client }) => {
+  await ack();
+  
+  try {
+    const { memberId } = JSON.parse(body.actions[0].value);
+    
+    // DB에서 멤버 정보 조회
+    const { PrismaClient } = require('@prisma/client');
+    const prismaClient = new PrismaClient();
+    
+    const member = await prismaClient.user.findUnique({
+      where: { id: memberId }
+    });
+    
+    if (!member) {
+      await client.chat.postEphemeral({
+        channel: body.channel.id,
+        user: body.user.id,
+        text: '❌ 팀원 정보를 찾을 수 없습니다.'
+      });
+      await prismaClient.$disconnect();
+      return;
+    }
+    
+    // 스킬과 선호 작업 파싱
+    let skills = [];
+    let preferredTypes = [];
+    
+    try {
+      skills = member.skills ? (typeof member.skills === 'string' ? JSON.parse(member.skills) : member.skills) : [];
+    } catch (e) {
+      skills = [];
+    }
+    
+    try {
+      preferredTypes = member.preferredTypes ? (typeof member.preferredTypes === 'string' ? JSON.parse(member.preferredTypes) : member.preferredTypes) : [];
+    } catch (e) {
+      preferredTypes = [];
+    }
+    
+    // 수정 모달 표시
+    await client.views.open({
+      trigger_id: body.trigger_id,
+      view: {
+        type: 'modal',
+        callback_id: 'edit_member_modal',
+        private_metadata: JSON.stringify({ memberId, channelId: body.channel.id }),
+        title: {
+          type: 'plain_text',
+          text: '팀원 정보 수정'
+        },
+        submit: {
+          type: 'plain_text',
+          text: '저장'
+        },
+        close: {
+          type: 'plain_text',
+          text: '취소'
+        },
+        blocks: [
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: `*${member.name}* 님의 정보를 수정합니다.`
+            }
+          },
+          {
+            type: 'divider'
+          },
+          {
+            type: 'input',
+            block_id: 'role_input',
+            element: {
+              type: 'static_select',
+              action_id: 'role_select',
+              initial_option: {
+                text: {
+                  type: 'plain_text',
+                  text: member.role === 'OWNER' ? '오너' : member.role === 'ADMIN' ? '관리자' : '멤버'
+                },
+                value: member.role || 'MEMBER'
+              },
+              options: [
+                {
+                  text: { type: 'plain_text', text: '오너' },
+                  value: 'OWNER'
+                },
+                {
+                  text: { type: 'plain_text', text: '관리자' },
+                  value: 'ADMIN'
+                },
+                {
+                  text: { type: 'plain_text', text: '멤버' },
+                  value: 'MEMBER'
+                }
+              ]
+            },
+            label: {
+              type: 'plain_text',
+              text: '👤 권한'
+            }
+          },
+          {
+            type: 'input',
+            block_id: 'experience_input',
+            element: {
+              type: 'static_select',
+              action_id: 'experience_select',
+              initial_option: {
+                text: {
+                  type: 'plain_text',
+                  text: member.experienceLevel === 'senior' ? '시니어' : 
+                        member.experienceLevel === 'mid' ? '미드' : '주니어'
+                },
+                value: member.experienceLevel || 'junior'
+              },
+              options: [
+                {
+                  text: { type: 'plain_text', text: '주니어' },
+                  value: 'junior'
+                },
+                {
+                  text: { type: 'plain_text', text: '미드' },
+                  value: 'mid'
+                },
+                {
+                  text: { type: 'plain_text', text: '시니어' },
+                  value: 'senior'
+                }
+              ]
+            },
+            label: {
+              type: 'plain_text',
+              text: '🎖️ 경험 수준'
+            }
+          },
+          {
+            type: 'input',
+            block_id: 'hours_input',
+            element: {
+              type: 'number_input',
+              action_id: 'hours_number',
+              is_decimal_allowed: true,
+              initial_value: String(member.availableHours || 40),
+              min_value: '0',
+              max_value: '168'
+            },
+            label: {
+              type: 'plain_text',
+              text: '⏰ 주간 가능 시간'
+            }
+          },
+          {
+            type: 'input',
+            block_id: 'skills_input',
+            element: {
+              type: 'plain_text_input',
+              action_id: 'skills_text',
+              initial_value: Array.isArray(skills) ? skills.join(', ') : '',
+              placeholder: {
+                type: 'plain_text',
+                text: '예: React, Node.js, Python'
+              }
+            },
+            label: {
+              type: 'plain_text',
+              text: '💻 보유 기술 (쉼표로 구분)'
+            },
+            optional: true
+          },
+          {
+            type: 'input',
+            block_id: 'preferred_input',
+            element: {
+              type: 'plain_text_input',
+              action_id: 'preferred_text',
+              initial_value: Array.isArray(preferredTypes) ? preferredTypes.join(', ') : '',
+              placeholder: {
+                type: 'plain_text',
+                text: '예: 프론트엔드, 백엔드, 데이터분석'
+              }
+            },
+            label: {
+              type: 'plain_text',
+              text: '🎯 선호 작업 유형 (쉼표로 구분)'
+            },
+            optional: true
+          }
+        ]
+      }
+    });
+    
+    await prismaClient.$disconnect();
+  } catch (error) {
+    console.error('팀원 정보 수정 모달 오류:', error);
+    await client.chat.postEphemeral({
+      channel: body.channel.id,
+      user: body.user.id,
+      text: `❌ 모달을 열 수 없습니다: ${error.message}`
+    });
+  }
+});
+
+// 팀원 정보 수정 모달 제출
+app.view('edit_member_modal', async ({ ack, body, view, client }) => {
+  await ack();
+  
+  try {
+    const { memberId, channelId } = JSON.parse(view.private_metadata);
+    
+    // 입력값 추출
+    const role = view.state.values.role_input.role_select.selected_option.value;
+    const experienceLevel = view.state.values.experience_input.experience_select.selected_option.value;
+    const availableHours = parseFloat(view.state.values.hours_input.hours_number.value);
+    const skillsText = view.state.values.skills_input.skills_text.value || '';
+    const preferredText = view.state.values.preferred_input.preferred_text.value || '';
+    
+    // 스킬과 선호 작업 배열로 변환
+    const skills = skillsText ? skillsText.split(',').map(s => s.trim()).filter(s => s) : [];
+    const preferredTypes = preferredText ? preferredText.split(',').map(s => s.trim()).filter(s => s) : [];
+    
+    // DB 업데이트
+    const { PrismaClient } = require('@prisma/client');
+    const prismaClient = new PrismaClient();
+    
+    await prismaClient.user.update({
+      where: { id: memberId },
+      data: {
+        role,
+        experienceLevel,
+        availableHours,
+        skills: skills.length > 0 ? skills : null,
+        preferredTypes: preferredTypes.length > 0 ? preferredTypes : null
+      }
+    });
+    
+    await prismaClient.$disconnect();
+    
+    // 성공 메시지
+    await client.chat.postMessage({
+      channel: channelId,
+      text: `✅ 팀원 정보가 성공적으로 업데이트되었습니다.`,
+      blocks: [
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `✅ 팀원 정보가 성공적으로 업데이트되었습니다.\n\n*/tk team* 명령어로 변경사항을 확인할 수 있습니다.`
+          }
+        }
+      ]
+    });
+  } catch (error) {
+    console.error('팀원 정보 수정 오류:', error);
+    await client.chat.postMessage({
+      channel: body.user.id,
+      text: `❌ 팀원 정보 수정 중 오류가 발생했습니다: ${error.message}`
+    });
+  }
+});
+
+// 팀원 추가 버튼
+app.action('add_team_member', async ({ ack, body, client }) => {
+  await ack();
+  
+  try {
+    // 팀원 추가 모달 표시
+    await client.views.open({
+      trigger_id: body.trigger_id,
+      view: {
+        type: 'modal',
+        callback_id: 'add_member_modal',
+        private_metadata: JSON.stringify({ channelId: body.channel.id }),
+        title: {
+          type: 'plain_text',
+          text: '팀원 추가'
+        },
+        submit: {
+          type: 'plain_text',
+          text: '추가'
+        },
+        close: {
+          type: 'plain_text',
+          text: '취소'
+        },
+        blocks: [
+          {
+            type: 'input',
+            block_id: 'name_input',
+            element: {
+              type: 'plain_text_input',
+              action_id: 'name_text',
+              placeholder: {
+                type: 'plain_text',
+                text: '홍길동'
+              }
+            },
+            label: {
+              type: 'plain_text',
+              text: '👤 이름'
+            }
+          },
+          {
+            type: 'input',
+            block_id: 'email_input',
+            element: {
+              type: 'email_text_input',
+              action_id: 'email_text',
+              placeholder: {
+                type: 'plain_text',
+                text: 'hong@example.com'
+              }
+            },
+            label: {
+              type: 'plain_text',
+              text: '📧 이메일'
+            }
+          },
+          {
+            type: 'input',
+            block_id: 'role_input',
+            element: {
+              type: 'static_select',
+              action_id: 'role_select',
+              initial_option: {
+                text: { type: 'plain_text', text: '멤버' },
+                value: 'MEMBER'
+              },
+              options: [
+                {
+                  text: { type: 'plain_text', text: '관리자' },
+                  value: 'ADMIN'
+                },
+                {
+                  text: { type: 'plain_text', text: '멤버' },
+                  value: 'MEMBER'
+                }
+              ]
+            },
+            label: {
+              type: 'plain_text',
+              text: '👤 권한'
+            }
+          },
+          {
+            type: 'input',
+            block_id: 'experience_input',
+            element: {
+              type: 'static_select',
+              action_id: 'experience_select',
+              initial_option: {
+                text: { type: 'plain_text', text: '주니어' },
+                value: 'junior'
+              },
+              options: [
+                {
+                  text: { type: 'plain_text', text: '주니어' },
+                  value: 'junior'
+                },
+                {
+                  text: { type: 'plain_text', text: '미드' },
+                  value: 'mid'
+                },
+                {
+                  text: { type: 'plain_text', text: '시니어' },
+                  value: 'senior'
+                }
+              ]
+            },
+            label: {
+              type: 'plain_text',
+              text: '🎖️ 경험 수준'
+            }
+          }
+        ]
+      }
+    });
+  } catch (error) {
+    console.error('팀원 추가 모달 오류:', error);
+    await client.chat.postEphemeral({
+      channel: body.channel.id,
+      user: body.user.id,
+      text: `❌ 모달을 열 수 없습니다: ${error.message}`
+    });
+  }
+});
+
+// 팀원 추가 모달 제출
+app.view('add_member_modal', async ({ ack, body, view, client }) => {
+  await ack();
+  
+  try {
+    const { channelId } = JSON.parse(view.private_metadata);
+    
+    // 입력값 추출
+    const name = view.state.values.name_input.name_text.value;
+    const email = view.state.values.email_input.email_text.value;
+    const role = view.state.values.role_input.role_select.selected_option.value;
+    const experienceLevel = view.state.values.experience_input.experience_select.selected_option.value;
+    
+    // 현재 사용자의 tenant 찾기
+    const { PrismaClient } = require('@prisma/client');
+    const prismaClient = new PrismaClient();
+    
+    const currentUser = await prismaClient.user.findFirst({
+      where: {
+        slackUserId: body.user.id
+      }
+    });
+    
+    if (!currentUser) {
+      throw new Error('현재 사용자를 찾을 수 없습니다.');
+    }
+    
+    // 새 팀원 추가
+    await prismaClient.user.create({
+      data: {
+        tenantId: currentUser.tenantId,
+        name,
+        email,
+        role,
+        experienceLevel,
+        availableHours: 40
+      }
+    });
+    
+    await prismaClient.$disconnect();
+    
+    // 성공 메시지
+    await client.chat.postMessage({
+      channel: channelId,
+      text: `✅ 새 팀원이 추가되었습니다.`,
+      blocks: [
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `✅ *${name}* 님이 팀에 추가되었습니다.\n\n*/tk team* 명령어로 확인할 수 있습니다.`
+          }
+        }
+      ]
+    });
+  } catch (error) {
+    console.error('팀원 추가 오류:', error);
+    await client.chat.postMessage({
+      channel: body.user.id,
+      text: `❌ 팀원 추가 중 오류가 발생했습니다: ${error.message}`
+    });
+  }
+});
+
+// 팀 초기 설정 버튼
+app.action('setup_team_initial', async ({ ack, body, client }) => {
+  await ack();
+  
+  try {
+    const { members, currentUserId, channelId } = JSON.parse(body.actions[0].value);
+    
+    // 팀 설정 모달 표시
+    await client.views.open({
+      trigger_id: body.trigger_id,
+      view: {
+        type: 'modal',
+        callback_id: 'setup_team_modal',
+        private_metadata: JSON.stringify({ 
+          members, 
+          currentUserId, 
+          channelId,
+          currentIndex: 0 
+        }),
+        title: {
+          type: 'plain_text',
+          text: '팀 초기 설정'
+        },
+        submit: {
+          type: 'plain_text',
+          text: '다음'
+        },
+        close: {
+          type: 'plain_text',
+          text: '취소'
+        },
+        blocks: [
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: `*팀 정보 설정 (1/${members.length + 1})*\n\n먼저 팀(조직) 정보를 입력해주세요.`
+            }
+          },
+          {
+            type: 'divider'
+          },
+          {
+            type: 'input',
+            block_id: 'team_name_input',
+            element: {
+              type: 'plain_text_input',
+              action_id: 'team_name',
+              placeholder: {
+                type: 'plain_text',
+                text: '예: 개발팀, 마케팅팀'
+              }
+            },
+            label: {
+              type: 'plain_text',
+              text: '🏢 팀 이름'
+            }
+          },
+          {
+            type: 'input',
+            block_id: 'team_slug_input',
+            element: {
+              type: 'plain_text_input',
+              action_id: 'team_slug',
+              placeholder: {
+                type: 'plain_text',
+                text: '예: dev-team (영문, 숫자, 하이픈만)'
+              }
+            },
+            label: {
+              type: 'plain_text',
+              text: '🔤 팀 식별자 (URL용)'
+            },
+            hint: {
+              type: 'plain_text',
+              text: '영문 소문자, 숫자, 하이픈(-)만 사용 가능'
+            }
+          }
+        ]
+      }
+    });
+  } catch (error) {
+    console.error('팀 설정 모달 오류:', error);
+    await client.chat.postEphemeral({
+      channel: body.channel.id,
+      user: body.user.id,
+      text: `❌ 팀 설정을 시작할 수 없습니다: ${error.message}`
+    });
+  }
+});
+
+// 팀 설정 모달 제출 처리
+app.view('setup_team_modal', async ({ ack, body, view, client }) => {
+  const metadata = JSON.parse(view.private_metadata);
+  const { members, currentUserId, channelId, currentIndex } = metadata;
+  
+  if (currentIndex === 0) {
+    // 팀 정보 저장 후 첫 번째 멤버 정보 입력으로 이동
+    const teamName = view.state.values.team_name_input.team_name.value;
+    const teamSlug = view.state.values.team_slug_input.team_slug.value;
+    
+    // slug 유효성 검사
+    if (!/^[a-z0-9-]+$/.test(teamSlug)) {
+      await ack({
+        response_action: 'errors',
+        errors: {
+          team_slug_input: '팀 식별자는 영문 소문자, 숫자, 하이픈(-)만 사용 가능합니다.'
+        }
+      });
+      return;
+    }
+    
+    metadata.teamName = teamName;
+    metadata.teamSlug = teamSlug;
+    metadata.currentIndex = 1;
+    metadata.memberData = [];
+    
+    // 첫 번째 멤버 정보 입력 모달로 업데이트
+    const firstMember = members[0];
+    const isAdmin = firstMember.id === currentUserId;
+    
+    await ack({
+      response_action: 'update',
+      view: {
+        type: 'modal',
+        callback_id: 'setup_team_modal',
+        private_metadata: JSON.stringify(metadata),
+        title: {
+          type: 'plain_text',
+          text: '팀원 정보 설정'
+        },
+        submit: {
+          type: 'plain_text',
+          text: members.length > 1 ? '다음' : '완료'
+        },
+        close: {
+          type: 'plain_text',
+          text: '취소'
+        },
+        blocks: [
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: `*팀원 정보 설정 (${currentIndex + 1}/${members.length + 1})*\n\n*${firstMember.name}* ${isAdmin ? '(관리자)' : ''}`
+            }
+          },
+          {
+            type: 'divider'
+          },
+          {
+            type: 'input',
+            block_id: 'member_role_input',
+            element: {
+              type: 'static_select',
+              action_id: 'member_role',
+              initial_option: {
+                text: { type: 'plain_text', text: isAdmin ? '관리자' : '멤버' },
+                value: isAdmin ? 'ADMIN' : 'MEMBER'
+              },
+              options: [
+                {
+                  text: { type: 'plain_text', text: '관리자' },
+                  value: 'ADMIN'
+                },
+                {
+                  text: { type: 'plain_text', text: '멤버' },
+                  value: 'MEMBER'
+                }
+              ]
+            },
+            label: {
+              type: 'plain_text',
+              text: '👤 권한'
+            }
+          },
+          {
+            type: 'input',
+            block_id: 'member_exp_input',
+            element: {
+              type: 'static_select',
+              action_id: 'member_exp',
+              initial_option: {
+                text: { type: 'plain_text', text: '주니어' },
+                value: 'junior'
+              },
+              options: [
+                {
+                  text: { type: 'plain_text', text: '주니어 (0-3년)' },
+                  value: 'junior'
+                },
+                {
+                  text: { type: 'plain_text', text: '미드 (3-7년)' },
+                  value: 'mid'
+                },
+                {
+                  text: { type: 'plain_text', text: '시니어 (7년+)' },
+                  value: 'senior'
+                }
+              ]
+            },
+            label: {
+              type: 'plain_text',
+              text: '🎖️ 경험 수준'
+            }
+          },
+          {
+            type: 'input',
+            block_id: 'member_hours_input',
+            element: {
+              type: 'number_input',
+              action_id: 'member_hours',
+              is_decimal_allowed: true,
+              initial_value: '40',
+              min_value: '0',
+              max_value: '168'
+            },
+            label: {
+              type: 'plain_text',
+              text: '⏰ 주간 가능 시간'
+            }
+          },
+          {
+            type: 'input',
+            block_id: 'member_skills_input',
+            element: {
+              type: 'plain_text_input',
+              action_id: 'member_skills',
+              placeholder: {
+                type: 'plain_text',
+                text: '예: React, Node.js, Python, AWS'
+              }
+            },
+            label: {
+              type: 'plain_text',
+              text: '💻 보유 기술 (쉼표로 구분)'
+            },
+            optional: true
+          },
+          {
+            type: 'input',
+            block_id: 'member_preferred_input',
+            element: {
+              type: 'plain_text_input',
+              action_id: 'member_preferred',
+              placeholder: {
+                type: 'plain_text',
+                text: '예: 프론트엔드, 백엔드, 인프라, 데이터분석'
+              }
+            },
+            label: {
+              type: 'plain_text',
+              text: '🎯 선호 작업 유형 (쉼표로 구분)'
+            },
+            optional: true
+          }
+        ]
+      }
+    });
+  } else {
+    // 멤버 정보 저장 및 다음 멤버로 이동
+    const memberIndex = currentIndex - 1;
+    const currentMember = members[memberIndex];
+    
+    // 현재 멤버 데이터 저장
+    const memberInfo = {
+      slackUserId: currentMember.id,
+      name: currentMember.name,
+      email: currentMember.email,
+      role: view.state.values.member_role_input.member_role.selected_option.value,
+      experienceLevel: view.state.values.member_exp_input.member_exp.selected_option.value,
+      availableHours: parseFloat(view.state.values.member_hours_input.member_hours.value),
+      skills: view.state.values.member_skills_input.member_skills.value || '',
+      preferredTypes: view.state.values.member_preferred_input.member_preferred.value || ''
+    };
+    
+    metadata.memberData.push(memberInfo);
+    
+    if (currentIndex < members.length) {
+      // 다음 멤버 정보 입력
+      metadata.currentIndex = currentIndex + 1;
+      const nextMember = members[currentIndex];
+      const isAdmin = nextMember.id === currentUserId;
+      
+      await ack({
+        response_action: 'update',
+        view: {
+          type: 'modal',
+          callback_id: 'setup_team_modal',
+          private_metadata: JSON.stringify(metadata),
+          title: {
+            type: 'plain_text',
+            text: '팀원 정보 설정'
+          },
+          submit: {
+            type: 'plain_text',
+            text: currentIndex === members.length - 1 ? '완료' : '다음'
+          },
+          close: {
+            type: 'plain_text',
+            text: '취소'
+          },
+          blocks: [
+            {
+              type: 'section',
+              text: {
+                type: 'mrkdwn',
+                text: `*팀원 정보 설정 (${currentIndex + 2}/${members.length + 1})*\n\n*${nextMember.name}* ${isAdmin ? '(관리자)' : ''}`
+              }
+            },
+            {
+              type: 'divider'
+            },
+            {
+              type: 'input',
+              block_id: 'member_role_input',
+              element: {
+                type: 'static_select',
+                action_id: 'member_role',
+                initial_option: {
+                  text: { type: 'plain_text', text: isAdmin ? '관리자' : '멤버' },
+                  value: isAdmin ? 'ADMIN' : 'MEMBER'
+                },
+                options: [
+                  {
+                    text: { type: 'plain_text', text: '관리자' },
+                    value: 'ADMIN'
+                  },
+                  {
+                    text: { type: 'plain_text', text: '멤버' },
+                    value: 'MEMBER'
+                  }
+                ]
+              },
+              label: {
+                type: 'plain_text',
+                text: '👤 권한'
+              }
+            },
+            {
+              type: 'input',
+              block_id: 'member_exp_input',
+              element: {
+                type: 'static_select',
+                action_id: 'member_exp',
+                initial_option: {
+                  text: { type: 'plain_text', text: '주니어' },
+                  value: 'junior'
+                },
+                options: [
+                  {
+                    text: { type: 'plain_text', text: '주니어 (0-3년)' },
+                    value: 'junior'
+                  },
+                  {
+                    text: { type: 'plain_text', text: '미드 (3-7년)' },
+                    value: 'mid'
+                  },
+                  {
+                    text: { type: 'plain_text', text: '시니어 (7년+)' },
+                    value: 'senior'
+                  }
+                ]
+              },
+              label: {
+                type: 'plain_text',
+                text: '🎖️ 경험 수준'
+              }
+            },
+            {
+              type: 'input',
+              block_id: 'member_hours_input',
+              element: {
+                type: 'number_input',
+                action_id: 'member_hours',
+                is_decimal_allowed: true,
+                initial_value: '40',
+                min_value: '0',
+                max_value: '168'
+              },
+              label: {
+                type: 'plain_text',
+                text: '⏰ 주간 가능 시간'
+              }
+            },
+            {
+              type: 'input',
+              block_id: 'member_skills_input',
+              element: {
+                type: 'plain_text_input',
+                action_id: 'member_skills',
+                placeholder: {
+                  type: 'plain_text',
+                  text: '예: React, Node.js, Python, AWS'
+                }
+              },
+              label: {
+                type: 'plain_text',
+                text: '💻 보유 기술 (쉼표로 구분)'
+              },
+              optional: true
+            },
+            {
+              type: 'input',
+              block_id: 'member_preferred_input',
+              element: {
+                type: 'plain_text_input',
+                action_id: 'member_preferred',
+                placeholder: {
+                  type: 'plain_text',
+                  text: '예: 프론트엔드, 백엔드, 인프라, 데이터분석'
+                }
+              },
+              label: {
+                type: 'plain_text',
+                text: '🎯 선호 작업 유형 (쉼표로 구분)'
+              },
+              optional: true
+            }
+          ]
+        }
+      });
+    } else {
+      // 모든 정보 수집 완료 - DB에 저장
+      await ack();
+      
+      try {
+        const { PrismaClient } = require('@prisma/client');
+        const prismaClient = new PrismaClient();
+        
+        // 1. Tenant 생성
+        const tenant = await prismaClient.tenant.create({
+          data: {
+            name: metadata.teamName,
+            slug: metadata.teamSlug
+          }
+        });
+        
+        // 2. 모든 멤버 생성
+        for (const member of metadata.memberData) {
+          const skills = member.skills ? member.skills.split(',').map(s => s.trim()).filter(s => s) : [];
+          const preferredTypes = member.preferredTypes ? member.preferredTypes.split(',').map(s => s.trim()).filter(s => s) : [];
+          
+          await prismaClient.user.create({
+            data: {
+              tenantId: tenant.id,
+              slackUserId: member.slackUserId,
+              name: member.name,
+              email: member.email,
+              role: member.role,
+              experienceLevel: member.experienceLevel,
+              availableHours: member.availableHours,
+              skills: skills.length > 0 ? skills : null,
+              preferredTypes: preferredTypes.length > 0 ? preferredTypes : null
+            }
+          });
+        }
+        
+        await prismaClient.$disconnect();
+        
+        // 성공 메시지
+        await client.chat.postMessage({
+          channel: channelId,
+          text: '✅ 팀 설정이 완료되었습니다!',
+          blocks: [
+            {
+              type: 'section',
+              text: {
+                type: 'mrkdwn',
+                text: `✅ *팀 설정이 완료되었습니다!*\n\n*팀 이름:* ${metadata.teamName}\n*팀원 수:* ${metadata.memberData.length}명`
+              }
+            },
+            {
+              type: 'divider'
+            },
+            {
+              type: 'section',
+              text: {
+                type: 'mrkdwn',
+                text: '*이제 다음 기능을 사용할 수 있습니다:*\n• `/tk team` - 팀원 정보 확인 및 수정\n• `/tk status` - 프로젝트 현황 확인\n• `/tk start` - 새 프로젝트 시작'
+              }
+            },
+            {
+              type: 'actions',
+              elements: [
+                {
+                  type: 'button',
+                  text: {
+                    type: 'plain_text',
+                    text: '🚀 프로젝트 시작하기',
+                    emoji: true
+                  },
+                  value: 'start_project_after_setup',
+                  action_id: 'start_project_button',
+                  style: 'primary'
+                },
+                {
+                  type: 'button',
+                  text: {
+                    type: 'plain_text',
+                    text: '👥 팀원 정보 보기',
+                    emoji: true
+                  },
+                  value: 'view_team',
+                  action_id: 'view_team_button'
+                }
+              ]
+            }
+          ]
+        });
+      } catch (error) {
+        console.error('팀 설정 저장 오류:', error);
+        await client.chat.postMessage({
+          channel: channelId,
+          text: `❌ 팀 설정 저장 중 오류가 발생했습니다: ${error.message}`
+        });
+      }
+    }
+  }
+});
+
+// 프로젝트 시작 버튼 (팀 설정 완료 후)
+app.action('start_project_button', async ({ ack, body, respond }) => {
+  await ack();
+  
+  await respond({
+    text: '🎯 새 프로젝트 시작',
+    blocks: [
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: '*🚀 새 프로젝트를 시작합니다!*\n\n다음 중 하나를 선택하세요:'
+        }
+      },
+      {
+        type: 'actions',
+        elements: [
+          {
+            type: 'button',
+            text: {
+              type: 'plain_text',
+              text: '🎤 음성 업로드'
+            },
+            value: JSON.stringify({ action: 'upload_voice', channelId: body.channel.id }),
+            action_id: 'upload_voice_button'
+          },
+          {
+            type: 'button',
+            text: {
+              type: 'plain_text',
+              text: '📝 회의록 등록'
+            },
+            value: 'input_transcript',
+            action_id: 'input_transcript_button'
+          }
+        ]
+      }
+    ]
+  });
+});
+
+// 팀 정보 보기 버튼
+app.action('view_team_button', async ({ ack, body, client }) => {
+  await ack();
+  
+  // /tk team 명령어와 동일한 로직 실행
+  const userId = body.user.id;
+  const channelId = body.channel.id;
+  
+  try {
+    const { PrismaClient } = require('@prisma/client');
+    const prismaClient = new PrismaClient();
+    
+    const currentUser = await prismaClient.user.findFirst({
+      where: {
+        slackUserId: userId
+      },
+      include: {
+        tenant: true
+      }
+    });
+    
+    if (!currentUser) {
+      await client.chat.postMessage({
+        channel: channelId,
+        text: '❌ 사용자 정보를 찾을 수 없습니다.'
+      });
+      await prismaClient.$disconnect();
+      return;
+    }
+    
+    // 같은 tenant의 모든 사용자 조회하여 표시 (기존 /tk team 로직 재사용)
+    // ... (팀원 정보 표시 로직)
+    
+    await prismaClient.$disconnect();
+  } catch (error) {
+    console.error('팀 정보 조회 오류:', error);
   }
 });
 
@@ -2278,4 +4216,8 @@ async function checkRecentFiles(client, userId, projectName) {
   }
 }
 
-module.exports = { slackApp: app };
+module.exports = { 
+  slackApp: app,
+  handleTkCommand,
+  handleTkCommandSafe
+};

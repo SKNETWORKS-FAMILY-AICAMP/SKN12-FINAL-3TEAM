@@ -32,8 +32,13 @@ const queryClient = new QueryClient({
 });
 
 function App() {
-  // 앱 시작 시 Socket 연결
+  // 앱 시작 시 Socket 연결 (임시 비활성화 - tenant 문제)
   useEffect(() => {
+    console.log('App 컴포넌트 마운트됨');
+    console.log('현재 경로:', window.location.pathname);
+    // Socket.IO 연결 임시 비활성화
+    // TODO: tenant 미들웨어 문제 해결 후 재활성화
+    /*
     const socket = connectSocket();
     
     socket.on('connect', () => {
@@ -52,6 +57,7 @@ function App() {
     return () => {
       disconnectSocket();
     };
+    */
   }, []);
 
   return (
@@ -60,6 +66,7 @@ function App() {
         <div className="App min-h-screen bg-neutral-50 font-sans antialiased">
           <Routes>
             <Route path="/" element={<Landing />} />
+            <Route path="/test" element={<div>테스트 페이지입니다</div>} />
             <Route path="/dashboard" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
               <Route index element={<Dashboard />} />
               <Route path="meeting" element={<MeetingAnalysis />} />
@@ -70,6 +77,7 @@ function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/login/success" element={<LoginSuccess />} />
             <Route path="/integration-success" element={<IntegrationSuccess />} />
+            <Route path="/jira-success" element={<IntegrationSuccess />} />
             <Route path="/notion-success" element={<NotionSuccess />} />
 
           </Routes>

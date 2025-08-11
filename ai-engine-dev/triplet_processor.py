@@ -66,8 +66,8 @@ class TripletProcessor:
             structured_data = []
             
             for i, segment in enumerate(segments):
-                # 화자 정보
-                speaker = segment.get("speaker", f"SPEAKER_{i%3:02d}")
+                # 화자 정보 (화자 분리가 안 된 경우 기본값)
+                speaker = segment.get("speaker", "SPEAKER_00")
                 text = segment.get("text", "").strip()
                 start_time = segment.get("start", 0.0)
                 
