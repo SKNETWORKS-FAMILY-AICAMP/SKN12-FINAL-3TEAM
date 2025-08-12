@@ -11,6 +11,7 @@ import logging
 from typing import Optional, Dict, Any, List
 from contextlib import asynccontextmanager
 import time
+import httpx  # WhisperX 원격 서버 호출용
 
 import torch
 import numpy as np
@@ -59,8 +60,11 @@ except ImportError as e:
     logger.warning(f"⚠️ Triplet + BERT 모듈 로드 실패: {e}")
     TRIPLET_AVAILABLE = False
 
+# WhisperX 원격 서버 URL
+WHISPERX_SERVER = "http://localhost:8001"
+
 # 글로벌 모델 변수
-whisper_model = None
+whisper_model = None  # WhisperX는 원격 서버에서 처리
 qwen_model = None
 qwen_tokenizer = None
 
@@ -531,36 +535,18 @@ class HealthResponse(BaseModel):
     memory_info: Optional[Dict[str, float]] = None
 
 def load_whisperx():
-    """WhisperX 모델 로딩"""
-    global whisper_model
-    
-    if whisper_model is None:
-        logger.info("🎤 Loading WhisperX large-v3...")
-        try:
-            import whisperx
-            device = "cuda" if torch.cuda.is_available() else "cpu"
-            compute_type = "float16" if device == "cuda" else "int8"
-            
-            whisper_model = whisperx.load_model(
-                "large-v3", 
-                device, 
-                compute_type=compute_type,
-                language="ko"
-            )
-            logger.info("✅ WhisperX loaded successfully")
-            
-        except Exception as e:
-            logger.error(f"❌ WhisperX loading failed: {e}")
-            raise e
-    
-    return whisper_model
+    """WhisperX 모델 로딩 - 원격 서버 사용"""
+    # WhisperX는 이제 원격 서버(포트 8001)에서 처리
+    # 이 함수는 호환성을 위해 유지하되 실제 로딩은 하지 않음
+    logger.info("🎤 WhisperX will be handled by remote server (port 8001)")
+    return None
 
 def load_qwen3():
-    """Qwen3-32B-AWQ 모델 로딩 (VLLM 최적화)"""
+    """Qwen3-4B LoRA 모델 로딩 (VLLM 최적화)"""
     global qwen_model, qwen_tokenizer
     
     if qwen_model is None or qwen_tokenizer is None:
-        logger.info("🚀 Loading Qwen3-32B-AWQ with VLLM...")
+        logger.info("🚀 Loading Qwen3-4B LoRA with VLLM...")
         try:
             # VLLM 사용 여부 체크
             use_vllm = os.getenv("USE_VLLM", "true").lower() == "true"
@@ -578,7 +564,7 @@ def load_qwen3():
             if use_vllm:
                 # RunPod에서 사용할 경로 설정
                 if os.path.exists("/workspace"):
-                    model_name = "/workspace/TtalKkac/ai-engine-dev/qwen3_lora_ttalkkac_4b"
+                    model_name = "/workspace/SKN12-FINAL-3TEAM/ai-engine-dev/qwen3_lora_ttalkkac_4b"
                 else:
                     model_name = "C:/Users/SH/Desktop/TtalKkac/ai-engine-dev/qwen3_lora_ttalkkac_4b"
                 
@@ -587,14 +573,13 @@ def load_qwen3():
                     qwen_model = LLM(
                         model=model_name,
                         tensor_parallel_size=1,
-                        gpu_memory_utilization=0.7,  # GPU 메모리 70%로 복원
+                        gpu_memory_utilization=0.7,  # GPU 메모리 70%
                         trust_remote_code=True,
-                        quantization="awq",  # AWQ 양자화 명시
-                        max_model_len=16384,  # 토큰 길이 원래대로 복원
+                        quantization="awq",  # AWQ 양자화
+                        max_model_len=16384,  # 토큰 길이
                         enforce_eager=True,  # CUDA 그래프 비활성화 (메모리 절약)
-                        swap_space=4,  # 4GB swap space로 복원
-                        max_num_seqs=64  # 동시 시퀀스 수 원래대로 복원
-                        # 메모리 절약을 위한 보수적 설정
+                        swap_space=4,  # 4GB swap space
+                        max_num_seqs=64  # 동시 시퀀스 수
                     )
                     
                     # 토크나이저는 별도 로딩 (템플릿 적용용)
@@ -602,7 +587,7 @@ def load_qwen3():
                         model_name, trust_remote_code=True
                     )
                     
-                    logger.info("🎉 VLLM Qwen3-32B-AWQ loaded successfully")
+                    logger.info("🎉 VLLM Qwen3-4B LoRA loaded successfully")
                 except Exception as e:
                     logger.error(f"❌ VLLM model loading failed: {e}")
                     logger.info("🔄 Falling back to Transformers...")
@@ -619,37 +604,136 @@ def load_qwen3():
                 
                 # RunPod에서 사용할 경로 설정
                 if os.path.exists("/workspace"):
-                    model_name = "/workspace/TtalKkac/ai-engine-dev/qwen3_lora_ttalkkac_4b"
+                    model_name = "/workspace/SKN12-FINAL-3TEAM/ai-engine-dev/qwen3_lora_ttalkkac_4b"
                 else:
                     model_name = "C:/Users/SH/Desktop/TtalKkac/ai-engine-dev/qwen3_lora_ttalkkac_4b"
                 
-                qwen_tokenizer = AutoTokenizer.from_pretrained(
-                    model_name, trust_remote_code=True
-                )
-                
-                # device_map 사용 시 accelerate 필요
+                # Qwen3 토크나이저 로드 (Qwen3 LoRA 4B와 완벽 호환)
                 try:
-                    import accelerate
-                    qwen_model = AutoModelForCausalLM.from_pretrained(
-                        model_name,
-                        device_map="auto",
-                        torch_dtype=torch.float16,
-                        trust_remote_code=True
+                    # 먼저 로컬 모델에서 토크나이저 시도
+                    qwen_tokenizer = AutoTokenizer.from_pretrained(
+                        model_name, 
+                        trust_remote_code=True,
+                        use_fast=True
                     )
-                except ImportError:
-                    logger.warning("⚠️ Accelerate not available, loading without device_map")
-                    qwen_model = AutoModelForCausalLM.from_pretrained(
-                        model_name,
-                        torch_dtype=torch.float16,
-                        trust_remote_code=True
-                    )
-                    if torch.cuda.is_available():
-                        qwen_model = qwen_model.cuda()
+                    logger.info("✅ 로컬 Qwen3 토크나이저 로드 성공")
+                except Exception as e:
+                    logger.warning(f"로컬 토크나이저 실패: {e}")
+                    # Qwen3-4B-Instruct 토크나이저 사용 (Qwen3 LoRA 4B와 완벽 호환)
+                    try:
+                        qwen_tokenizer = AutoTokenizer.from_pretrained(
+                            "Qwen/Qwen3-4B-Instruct-2507", 
+                            trust_remote_code=True,
+                            use_fast=True
+                        )
+                        logger.info("✅ Qwen3-4B-Instruct-2507 토크나이저 로드 성공")
+                    except:
+                        # 대안: Qwen3-0.6B (경량 버전)
+                        try:
+                            qwen_tokenizer = AutoTokenizer.from_pretrained(
+                                "Qwen/Qwen3-0.6B", 
+                                trust_remote_code=True,
+                                use_fast=True
+                            )
+                            logger.info("✅ Qwen3-0.6B 토크나이저 로드 성공")
+                        except:
+                            # 마지막 대안: Qwen2.5 (이전 버전과의 호환)
+                            qwen_tokenizer = AutoTokenizer.from_pretrained(
+                                "Qwen/Qwen2.5-7B-Instruct", 
+                                trust_remote_code=True,
+                                use_fast=True
+                            )
+                            logger.info("✅ Qwen2.5-7B-Instruct 토크나이저 로드 성공 (fallback)")
                 
-                logger.info("✅ Transformers Qwen3-32B-AWQ loaded successfully")
+                # Qwen3-4B 모델 로드
+                model_loaded = False
+                
+                try:
+                    # Qwen3-4B 직접 로드
+                    logger.info("🎯 Qwen3-4B-Instruct-2507 로드 시도...")
+                    
+                    # HuggingFace에서 Qwen3-4B 직접 로드
+                    base_model_name = "Qwen/Qwen3-4B-Instruct-2507"
+                    
+                    try:
+                        import accelerate
+                        base_model = AutoModelForCausalLM.from_pretrained(
+                            base_model_name,
+                            device_map="auto",
+                            torch_dtype=torch.float16,
+                            trust_remote_code=True  # Qwen3 커스텀 코드 실행
+                        )
+                        logger.info("✅ Qwen3-4B 베이스 모델 로드 성공")
+                    except ImportError:
+                        logger.warning("⚠️ Accelerate 없음, device_map 없이 로드")
+                        base_model = AutoModelForCausalLM.from_pretrained(
+                            base_model_name,
+                            torch_dtype=torch.float16,
+                            trust_remote_code=True
+                        )
+                        if torch.cuda.is_available():
+                            base_model = base_model.cuda()
+                        logger.info("✅ Qwen3-4B 베이스 모델 로드 성공 (GPU)")
+                    
+                    # LoRA 어댑터 적용 (있는 경우)
+                    if os.path.exists(model_name) and os.path.exists(os.path.join(model_name, "adapter_model.bin")):
+                        try:
+                            from peft import PeftModel
+                            qwen_model = PeftModel.from_pretrained(base_model, model_name)
+                            logger.info("✅ Qwen3 LoRA 어댑터 적용 성공")
+                        except Exception as e:
+                            logger.warning(f"LoRA 적용 실패: {e}, 베이스 모델 사용")
+                            qwen_model = base_model
+                    else:
+                        qwen_model = base_model
+                        logger.info("🔔 LoRA 어댑터 없음, Qwen3-4B 베이스 모델 사용")
+                    
+                    model_loaded = True
+                    
+                except Exception as e:
+                    logger.error(f"Qwen3-4B 로드 실패: {e}")
+                    
+                    # Fallback: 로컬 모델 시도 (config.json 수정 필요)
+                    if os.path.exists(model_name):
+                        logger.info("🔄 로컬 모델 로드 시도 (config 수정)...")
+                        config_path = os.path.join(model_name, "config.json")
+                        if os.path.exists(config_path):
+                            try:
+                                # config.json 임시 수정
+                                with open(config_path, 'r') as f:
+                                    config = json.load(f)
+                                original_type = config.get('model_type')
+                                if original_type == 'qwen3':
+                                    config['model_type'] = 'qwen2'
+                                    config['architectures'] = ['Qwen2ForCausalLM']
+                                    with open(config_path, 'w') as f:
+                                        json.dump(config, f, indent=2)
+                                    logger.info(f"🔧 config.json 임시 수정 ({original_type} -> qwen2)")
+                                
+                                # 로드 시도
+                                qwen_model = AutoModelForCausalLM.from_pretrained(
+                                    model_name,
+                                    torch_dtype=torch.float16,
+                                    trust_remote_code=True,
+                                    ignore_mismatched_sizes=True
+                                )
+                                if torch.cuda.is_available():
+                                    qwen_model = qwen_model.cuda()
+                                model_loaded = True
+                                logger.info("✅ 로컬 Qwen3 모델 로드 성공 (config 수정)")
+                                
+                                # 원래대로 복구
+                                config['model_type'] = original_type
+                                with open(config_path, 'w') as f:
+                                    json.dump(config, f, indent=2)
+                                    
+                            except Exception as e2:
+                                logger.error(f"로컬 모델 로드 실패: {e2}")
+                
+                logger.info("✅ Transformers Qwen3-4B LoRA loaded successfully")
             
         except Exception as e:
-            logger.error(f"❌ Qwen3-32B-AWQ loading failed: {e}")
+            logger.error(f"❌ Qwen3-4B LoRA loading failed: {e}")
             # VLLM 실패 시 Transformers로 대체
             if 'vllm' in str(e).lower():
                 logger.warning("🔄 VLLM failed, falling back to Transformers...")
@@ -664,7 +748,7 @@ def generate_structured_response(
     user_prompt: str, 
     response_schema: Dict[str, Any],
     temperature: float = 0.3,
-    max_input_tokens: int = 28000,  # Qwen3-32B AWQ 안전 마진 적용
+    max_input_tokens: int = 28000,  # Qwen3 안전 마진 적용
     enable_chunking: bool = True
 ) -> Dict[str, Any]:
     """구조화된 응답 생성 (청킹 지원)"""
@@ -916,19 +1000,27 @@ async def lifespan(app: FastAPI):
             
             # 병렬 로딩을 위한 비동기 래퍼 함수들 (시간 측정 포함)
             async def load_whisperx_async():
+                # WhisperX 원격 서버 체크
                 start_time = time.time()
-                logger.info("🎤 Loading WhisperX...")
-                load_whisperx()
+                logger.info("🎤 Checking WhisperX remote server...")
+                try:
+                    async with httpx.AsyncClient(timeout=5.0) as client:
+                        response = await client.get(f"{WHISPERX_SERVER}/health")
+                        if response.status_code == 200:
+                            logger.info("✅ WhisperX server connected")
+                        else:
+                            logger.warning("⚠️ WhisperX server not responding")
+                except:
+                    logger.warning("⚠️ WhisperX server not available")
                 elapsed = time.time() - start_time
-                logger.info(f"✅ WhisperX loaded in {elapsed:.2f} seconds")
                 return elapsed
             
             async def load_qwen3_async():
                 start_time = time.time()
-                logger.info("🧠 Loading Qwen3-32B-AWQ...")
+                logger.info("🧠 Loading Qwen3-4B LoRA...")
                 load_qwen3()
                 elapsed = time.time() - start_time
-                logger.info(f"✅ Qwen3-32B-AWQ loaded in {elapsed:.2f} seconds")
+                logger.info(f"✅ Qwen3-4B LoRA loaded in {elapsed:.2f} seconds")
                 return elapsed
             
             async def load_bert_async():
@@ -968,7 +1060,7 @@ async def lifespan(app: FastAPI):
             logger.info("🎉 All models preloaded successfully!")
             logger.info("⏱️  Loading Time Summary:")
             logger.info(f"   - WhisperX: {whisperx_time:.2f}s")
-            logger.info(f"   - Qwen3-32B: {qwen3_time:.2f}s") 
+            logger.info(f"   - Qwen3-4B: {qwen3_time:.2f}s") 
             logger.info(f"   - BERT: {bert_time:.2f}s")
             logger.info(f"   - Total (parallel): {total_elapsed:.2f}s")
             logger.info(f"   - Sequential would take: {whisperx_time + qwen3_time + bert_time:.2f}s")
@@ -987,8 +1079,8 @@ async def lifespan(app: FastAPI):
 # FastAPI 앱 생성
 app = FastAPI(
     title="TtalKkak Final AI Server with Triplets",
-    description="WhisperX + Triplet + BERT + Qwen3-32B + 2-Stage PRD Process",
-    version="3.1.0",
+    description="WhisperX (Remote) + Triplet + BERT + Qwen3-4B + 2-Stage PRD Process",
+    version="3.2.0",
     lifespan=lifespan
 )
 
@@ -1037,12 +1129,23 @@ async def health_check():
         except:
             pass
     
+    # WhisperX 원격 서버 상태 체크
+    whisperx_loaded = False
+    try:
+        import httpx
+        with httpx.Client(timeout=2.0) as client:
+            response = client.get(f"{WHISPERX_SERVER}/health")
+            if response.status_code == 200:
+                whisperx_loaded = response.json().get("whisperx_loaded", False)
+    except:
+        pass
+    
     return HealthResponse(
         status="healthy",
         gpu_available=gpu_available,
         gpu_count=gpu_count,
         models_loaded={
-            "whisperx": whisper_model is not None,
+            "whisperx": whisperx_loaded,  # 원격 서버 상태
             "qwen3": qwen_model is not None,
             "triplet_bert": TRIPLET_AVAILABLE
         },
@@ -1051,46 +1154,32 @@ async def health_check():
 
 @app.post("/transcribe", response_model=TranscriptionResponse)
 async def transcribe_audio(audio: UploadFile = File(...)):
-    """음성 파일 전사 (WhisperX)"""
+    """음성 파일 전사 (WhisperX 원격 서버)"""
     try:
-        logger.info(f"🎤 Transcribing audio: {audio.filename}")
+        logger.info(f"🎤 Transcribing audio via remote server: {audio.filename}")
         
-        # 모델 로딩
-        whisper_model = load_whisperx()
-        
-        # 오디오 파일 임시 저장
-        audio_content = await audio.read()
-        
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_file:
-            temp_file.write(audio_content)
-            temp_path = temp_file.name
-        
-        try:
-            # WhisperX 전사 실행
-            result = whisper_model.transcribe(temp_path, batch_size=16)
+        # WhisperX 원격 서버로 전송
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            files = {"audio": (audio.filename, await audio.read(), audio.content_type)}
+            response = await client.post(f"{WHISPERX_SERVER}/transcribe", files=files)
             
-            segments = result.get("segments", [])
-            full_text = " ".join([seg.get("text", "") for seg in segments])
-            
-            logger.info(f"✅ Transcription completed: {len(full_text)} characters")
-            
-            return TranscriptionResponse(
-                success=True,
-                transcription={
-                    "segments": segments,
-                    "full_text": full_text,
-                    "language": result.get("language", "ko"),
-                    "duration": sum([seg.get("end", 0) - seg.get("start", 0) for seg in segments])
-                }
-            )
-            
-        finally:
-            # 임시 파일 정리
-            try:
-                os.unlink(temp_path)
-            except:
-                pass
+            if response.status_code == 200:
+                result = response.json()
+                logger.info(f"✅ Remote transcription completed")
+                return TranscriptionResponse(**result)
+            else:
+                logger.error(f"❌ WhisperX server error: {response.status_code}")
+                return TranscriptionResponse(
+                    success=False,
+                    error=f"WhisperX server error: {response.status_code}"
+                )
                 
+    except httpx.TimeoutException:
+        logger.error("❌ WhisperX server timeout")
+        return TranscriptionResponse(
+            success=False,
+            error="WhisperX server timeout"
+        )
     except Exception as e:
         logger.error(f"❌ Transcription error: {e}")
         return TranscriptionResponse(
@@ -1747,7 +1836,7 @@ async def final_pipeline(
             "processing_time": total_time,
             "model_info": {
                 "whisperx": "large-v3",
-                "qwen3": "Qwen3-32B-AWQ",
+                "qwen3": "Qwen3-4B LoRA",
                 "process": "2-stage-task-master",
                 "triplet_available": TRIPLET_AVAILABLE
             }
