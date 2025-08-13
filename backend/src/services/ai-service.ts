@@ -753,6 +753,50 @@ class AIService {
       return false;
     }
   }
+
+  /**
+   * 슬랙에서 음성 파일 처리 (호환성을 위한 메서드)
+   */
+  async processAudioFile(params: {
+    fileUrl: string;
+    fileName: string;
+    projectName: string;
+    userId: string;
+  }): Promise<any> {
+    try {
+      console.log(`🎤 Processing audio file from Slack: ${params.fileName}`);
+      
+      // 파일 다운로드
+      const response = await axiosInstance.get(params.fileUrl, {
+        responseType: 'arraybuffer',
+        headers: {
+          'Authorization': `Bearer ${process.env.SLACK_BOT_TOKEN}`
+        }
+      });
+      
+      const audioBuffer = Buffer.from(response.data as ArrayBuffer);
+      
+      // 2단계 파이프라인 실행 (음성 → 전사 → 노션 → PRD → 업무)
+      const result = await this.processTwoStagePipeline(audioBuffer, params.fileName);
+      
+      if (result.success) {
+        console.log(`✅ Audio processing completed for project: ${params.projectName}`);
+        return {
+          projectName: params.projectName,
+          ...result
+        };
+      } else {
+        throw new Error(result.error || 'Processing failed');
+      }
+      
+    } catch (error: any) {
+      console.error('❌ Audio file processing error:', error);
+      return {
+        success: false,
+        error: error.message || 'Unknown error'
+      };
+    }
+  }
 }
 
 export { AIService };

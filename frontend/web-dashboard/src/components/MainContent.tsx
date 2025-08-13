@@ -848,14 +848,14 @@ const MainContent = () => {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3 }}
-              className="grid grid-cols-2 md:grid-cols-4 gap-4"
+              className="space-y-4"
             >
-              <h3 className="text-lg font-bold text-neutral-900 mb-4">빠른 액션</h3>
+              <h3 className="text-lg font-bold text-neutral-900">빠른 액션</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <motion.label
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
-                  className="relative group cursor-pointer"
+                  className="relative group cursor-pointer flex-1"
                 >
                   <input
                     type="file"
@@ -864,23 +864,23 @@ const MainContent = () => {
                     className="hidden"
                     disabled={isUploading}
                   />
-                  <div className="flex flex-col items-center p-6 bg-gradient-to-br from-brand-50 to-brand-100 rounded-2xl border-2 border-dashed border-brand-300 transition-all duration-200 group-hover:border-brand-400 group-hover:shadow-medium">
+                  <div className="flex flex-col items-center p-8 bg-gradient-to-br from-brand-50 to-brand-100 rounded-2xl border-2 border-dashed border-brand-300 transition-all duration-200 group-hover:border-brand-400 group-hover:shadow-medium h-full">
                     {isUploading ? (
-                      <RefreshCw className="w-8 h-8 text-brand-600 animate-spin mb-3" />
+                      <RefreshCw className="w-10 h-10 text-brand-600 animate-spin mb-4" />
                     ) : (
-                      <Volume2 className="w-8 h-8 text-brand-600 mb-3" />
+                      <Volume2 className="w-10 h-10 text-brand-600 mb-4" />
                     )}
-                    <span className="font-semibold text-brand-700">
+                    <span className="font-semibold text-lg text-brand-700">
                       {isUploading ? '처리 중...' : '음성 파일 업로드'}
                     </span>
-                    <span className="text-sm text-brand-600 mt-1">회의록 자동 생성</span>
+                    <span className="text-sm text-brand-600 mt-2">회의록 자동 생성</span>
                   </div>
                 </motion.label>
 
                 <motion.label
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
-                  className="relative group cursor-pointer"
+                  className="relative group cursor-pointer flex-1"
                 >
                   <input
                     type="file"
@@ -889,16 +889,16 @@ const MainContent = () => {
                     className="hidden"
                     disabled={isDocumentUploading}
                   />
-                  <div className="flex flex-col items-center p-6 bg-gradient-to-br from-neutral-50 to-neutral-100 rounded-2xl border-2 border-dashed border-neutral-300 transition-all duration-200 group-hover:border-neutral-400 group-hover:shadow-medium">
+                  <div className="flex flex-col items-center p-8 bg-gradient-to-br from-neutral-50 to-neutral-100 rounded-2xl border-2 border-dashed border-neutral-300 transition-all duration-200 group-hover:border-neutral-400 group-hover:shadow-medium h-full">
                     {isDocumentUploading ? (
-                      <RefreshCw className="w-8 h-8 text-neutral-600 animate-spin mb-3" />
+                      <RefreshCw className="w-10 h-10 text-neutral-600 animate-spin mb-4" />
                     ) : (
-                      <FileText className="w-8 h-8 text-neutral-600 mb-3" />
+                      <FileText className="w-10 h-10 text-neutral-600 mb-4" />
                     )}
-                    <span className="font-semibold text-neutral-700">
+                    <span className="font-semibold text-lg text-neutral-700">
                       {isDocumentUploading ? '분석 중...' : '문서 분석'}
                     </span>
-                    <span className="text-sm text-neutral-500 mt-1">PDF, DOC, TXT 업로드</span>
+                    <span className="text-sm text-neutral-500 mt-2">PDF, DOC, TXT 업로드</span>
                   </div>
                 </motion.label>
               </div>

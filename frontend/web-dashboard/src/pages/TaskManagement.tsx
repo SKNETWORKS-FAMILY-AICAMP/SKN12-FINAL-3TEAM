@@ -97,7 +97,7 @@ const TaskManagement = () => {
       console.log('✅ 업무 생성 성공:', data);
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       toast.success('새 업무가 추가되었습니다! ✨');
-      setShowModal(false); // 모달 닫기
+      setShowNewTaskModal(false); // 모달 닫기
     },
     onError: (error: any) => {
       console.error('❌ Task creation failed:', error);
@@ -842,7 +842,7 @@ const TaskManagement = () => {
                     // 디버깅: 모든 업무가 있는 날에 표시
                     const debugTasks = tasks.filter(task => task.dueDate === dateStr);
                     if (debugTasks.length > 0) {
-                      console.log(`${dateStr} (${day}일) 업무:`, debugTasks.map(t => t.name));
+                      console.log(`${dateStr} (${day}일) 업무:`, debugTasks.map(t => t.title));
                     }
                     const isToday = (
                       day === now.getDate() && 

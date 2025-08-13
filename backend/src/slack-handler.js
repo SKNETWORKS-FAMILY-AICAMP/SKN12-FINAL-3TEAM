@@ -264,71 +264,144 @@ async function handleTkCommandSafe(text, respond, client, channelId, userId) {
 async function handleTkCommand(text, respond, client, channelId, userId) {
   
   if (text === 'process') {
-    // 파일 처리 강제 실행
-    await respond({
-      text: '🎵 가장 최근 업로드된 음성 파일을 처리합니다...',
-      blocks: [
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: '🧠 AI가 음성을 분석하고 있습니다... (데모 모드)\n\n✅ 3초 후 결과가 표시됩니다.'
-          }
-        }
-      ]
-    });
-    
-    // 데모 처리
-    setTimeout(async () => {
-      const projectName = global.pendingProjects?.[process.env.USER_ID] || '새 프로젝트';
-      await respond({
-        text: '✅ 데모: 음성 분석 완료!',
-        blocks: [
-          {
-            type: 'section',
-            text: {
-              type: 'mrkdwn',
-              text: `🎯 *${projectName}*\n\n✅ 데모 모드로 프로젝트가 생성되었습니다.`
-            }
-          },
-          {
-            type: 'actions',
-            elements: [
-              {
-                type: 'button',
-                text: {
-                  type: 'plain_text',
-                  text: '📋 Notion 페이지 보기'
-                },
-                url: '#',
-                action_id: 'view_notion_demo'
-              },
-              {
-                type: 'button',
-                text: {
-                  type: 'plain_text',
-                  text: '🎫 JIRA 이슈 보기'
-                },
-                url: '#',
-                action_id: 'view_jira_demo'
-              }
-            ]
-          }
-        ]
+    // 파일 처리 강제 실행 - 채널에서 최근 파일 찾기
+    try {
+      console.log('🔍 최근 파일 검색 중...');
+      
+      // 사용자가 업로드한 최근 파일 목록 가져오기
+      const result = await client.files.list({
+        user: userId,
+        count: 10,
+        types: 'all'
       });
-    }, 3000);
+      
+      console.log(`📂 사용자 ${userId}의 최근 파일 수: ${result.files?.length || 0}`);
+      
+      // 프로젝트 시작 시간 가져오기 (없으면 최근 60초)
+      const projectStartTime = global.pendingProjects?.[userId]?.startTime || 
+                              (Date.now() / 1000) - 60;
+      
+      // 음성/비디오 파일 찾기 (프로젝트 시작 후 업로드된 것만)
+      const audioFile = result.files?.find(file => {
+        const isAfterStart = file.created > projectStartTime;
+        const isAudio = file.mimetype && (
+          file.mimetype.includes('audio') ||
+          file.mimetype.includes('video') ||
+          file.name.toLowerCase().endsWith('.mp3') ||
+          file.name.toLowerCase().endsWith('.wav') ||
+          file.name.toLowerCase().endsWith('.m4a') ||
+          file.name.toLowerCase().endsWith('.mp4')
+        );
+        return isAfterStart && isAudio;
+      });
+      
+      if (audioFile) {
+        console.log('🎵 음성 파일 발견:', audioFile.name);
+        
+        const pendingProject = global.pendingProjects?.[userId] || { projectName: '새 프로젝트' };
+        
+        await respond({
+          text: '🎵 음성 파일을 찾았습니다!',
+          blocks: [
+            {
+              type: 'section',
+              text: {
+                type: 'mrkdwn',
+                text: `🎯 *프로젝트:* ${pendingProject.projectName}\n🎵 *파일:* ${audioFile.name}\n📊 *크기:* ${Math.round(audioFile.size / 1024)}KB\n\n🧠 AI가 음성을 분석하고 있습니다...`
+              }
+            }
+          ]
+        });
+        
+        // AI 처리 시작
+        if (aiService) {
+          try {
+            const fileInfo = await client.files.info({
+              file: audioFile.id
+            });
+            
+            const result = await aiService.processAudioFile({
+              fileUrl: fileInfo.file.url_private_download,
+              fileName: audioFile.name,
+              projectName: pendingProject.projectName,
+              userId: userId
+            });
+            
+            await respond({
+              text: '✅ 프로젝트 생성이 완료되었습니다!',
+              blocks: [
+                {
+                  type: 'section',
+                  text: {
+                    type: 'mrkdwn',
+                    text: `✅ *${pendingProject.projectName}* 프로젝트가 생성되었습니다!\n\n📋 *다음 단계:*\n• Notion에 프로젝트 페이지 생성\n• JIRA에 업무 티켓 생성\n• 팀원에게 업무 자동 할당`
+                  }
+                }
+              ]
+            });
+          } catch (error) {
+            console.error('❌ AI 처리 오류:', error);
+            await respond({
+              text: `❌ AI 처리 중 오류가 발생했습니다: ${error.message}`
+            });
+          }
+        } else {
+          // 데모 모드
+          setTimeout(async () => {
+            await respond({
+              text: '✅ 데모: 음성 분석 완료!',
+              blocks: [
+                {
+                  type: 'section',
+                  text: {
+                    type: 'mrkdwn',
+                    text: `🎯 *${pendingProject.projectName}*\n\n✅ 데모 모드로 프로젝트가 생성되었습니다.`
+                  }
+                }
+              ]
+            });
+          }, 3000);
+        }
+      } else {
+        await respond({
+          text: '❌ 채널에서 음성 파일을 찾을 수 없습니다.',
+          blocks: [
+            {
+              type: 'section',
+              text: {
+                type: 'mrkdwn',
+                text: '❌ 채널에서 음성 파일을 찾을 수 없습니다.\n\n📁 먼저 음성 파일을 업로드해주세요:\n• MP3, WAV, M4A, MP4 형식 지원\n• 이 채널에 파일을 드래그앤드롭'
+              }
+            }
+          ]
+        });
+      }
+    } catch (error) {
+      console.error('❌ 파일 목록 조회 오류:', error);
+      await respond({
+        text: `❌ 파일 목록을 가져오는 중 오류가 발생했습니다: ${error.message}`
+      });
+    }
     return;
   }
   
   if (!text || text === 'help') {
     await respond({
-      text: '🚀 TtalKkak 사용법',
+      text: '📚 TtalKkac 도움말',
       blocks: [
+        {
+          type: 'header',
+          text: {
+            type: 'plain_text',
+            text: '📚 TtalKkac AI 회의록 자동화 도움말',
+            emoji: true
+          }
+        },
         {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: '*🎯 TtalKkak AI 프로젝트 관리*\n\n*사용 가능한 명령어:*\n• `/tk start` - 새 프로젝트 시작\n• `/tk team` - 팀원 정보 설정\n• `/tk status` - 프로젝트 현황\n• `/tk help` - 도움말'
+            text: '*회의 내용을 AI가 자동으로 분석하여 업무를 생성합니다*'
           }
         },
         {
@@ -338,8 +411,100 @@ async function handleTkCommand(text, respond, client, channelId, userId) {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: '🎤 *시작하려면:* 회의 음성 파일을 업로드하거나 `/tk start`를 입력하세요!'
+            text: '*🎯 주요 명령어*'
           }
+        },
+        {
+          type: 'section',
+          fields: [
+            {
+              type: 'mrkdwn',
+              text: '*`/tk start`*\n🚀 새 프로젝트 시작'
+            },
+            {
+              type: 'mrkdwn',
+              text: '*`/tk team`*\n👥 팀원 정보 관리'
+            },
+            {
+              type: 'mrkdwn',
+              text: '*`/tk status`*\n📊 프로젝트 현황 확인'
+            },
+            {
+              type: 'mrkdwn',
+              text: '*`/tk help`*\n📚 도움말 보기'
+            }
+          ]
+        },
+        {
+          type: 'divider'
+        },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: '*🔄 워크플로우*'
+          }
+        },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: '1️⃣ `/tk start` 명령어 실행\n2️⃣ 음성 파일 업로드 또는 회의록 텍스트 입력\n3️⃣ AI가 자동으로 분석 및 요약\n4️⃣ PRD 문서와 업무 자동 생성\n5️⃣ Notion/JIRA로 자동 연동 (선택사항)'
+          }
+        },
+        {
+          type: 'divider'
+        },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: '*💡 팁*'
+          }
+        },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: '• 음성 파일: MP3, WAV, M4A, MP4 지원\n• 회의록 텍스트: 이미 정리된 회의록 직접 입력 가능\n• 외부 연동: Notion과 JIRA에 자동으로 업무 생성'
+          }
+        },
+        {
+          type: 'divider'
+        },
+        {
+          type: 'actions',
+          elements: [
+            {
+              type: 'button',
+              style: 'primary',
+              text: {
+                type: 'plain_text',
+                text: '🚀 시작하기',
+                emoji: true
+              },
+              value: 'start_from_help',
+              action_id: 'start_from_help_button'
+            },
+            {
+              type: 'button',
+              text: {
+                type: 'plain_text',
+                text: '📊 대시보드',
+                emoji: true
+              },
+              url: `${process.env.FRONTEND_URL || 'http://localhost:3002'}/dashboard`
+            }
+          ]
+        },
+        {
+          type: 'context',
+          elements: [
+            {
+              type: 'mrkdwn',
+              text: '🤖 *Powered by Qwen3-4B & WhisperX* | 📧 문의: support@ttalkkac.ai'
+            }
+          ]
         }
       ]
     });
@@ -398,10 +563,19 @@ async function handleTkCommand(text, respond, client, channelId, userId) {
       
       // 헤더
       teamBlocks.push({
+        type: 'header',
+        text: {
+          type: 'plain_text',
+          text: `팀원 현황 (${teamMembers.length}명)`,
+          emoji: true
+        }
+      });
+      
+      teamBlocks.push({
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: `*👥 프로젝트 팀원 (${teamMembers.length}명)*\n_${currentUser.tenant.name} 팀_`
+          text: `*${currentUser.tenant.name}* 팀`
         }
       });
       
@@ -410,19 +584,16 @@ async function handleTkCommand(text, respond, client, channelId, userId) {
       // 각 팀원별 상세 정보 블록
       for (const member of teamMembers) {
         const activeTaskCount = member.assignedTasks.length;
-        const statusEmoji = activeTaskCount > 3 ? '🔥' : activeTaskCount > 0 ? '💼' : '✅';
-        const statusText = activeTaskCount > 3 ? '바쁨' : activeTaskCount > 0 ? '작업중' : '여유';
+        const statusText = activeTaskCount > 3 ? '🔴 바쁨' : activeTaskCount > 0 ? '🟡 작업중' : '🟢 여유';
         const isCurrentUser = member.id === currentUser.id;
         const currentUserMark = isCurrentUser ? ' (나)' : '';
         
-        // 역할 아이콘
-        const roleIcon = member.role === 'OWNER' ? '👑' : member.role === 'ADMIN' ? '⚡' : '👤';
+        // 역할
         const roleText = member.role === 'OWNER' ? '오너' : member.role === 'ADMIN' ? '관리자' : '멤버';
         
-        // 경험 수준 아이콘
-        const expIcon = member.experienceLevel === 'senior' ? '🎖️' : 
-                       member.experienceLevel === 'mid' ? '💪' : '🌱';
-        const expText = member.experienceLevel || 'junior';
+        // 경험 수준
+        const expText = member.experienceLevel === 'senior' ? '시니어' : 
+                       member.experienceLevel === 'mid' ? '미드' : '주니어';
         
         // 스킬 파싱
         let skillsText = '미설정';
@@ -435,39 +606,21 @@ async function handleTkCommand(text, respond, client, channelId, userId) {
           }
         }
         
-        // 선호 작업 유형 파싱
-        let preferredText = '미설정';
-        if (member.preferredTypes) {
-          try {
-            const preferred = typeof member.preferredTypes === 'string' ? JSON.parse(member.preferredTypes) : member.preferredTypes;
-            preferredText = Array.isArray(preferred) ? preferred.join(', ') : '미설정';
-          } catch (e) {
-            preferredText = '미설정';
-          }
-        }
-        
-        // 마지막 할당 시간
-        const lastAssignedText = member.lastAssignedAt ? 
-          new Date(member.lastAssignedAt).toLocaleString('ko-KR') : '없음';
-        
-        // 팀원 정보 섹션
+        // 팀원 정보 섹션 (간소화)
         teamBlocks.push({
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: `${statusEmoji} *${member.name}${currentUserMark}*\n` +
-                  `📧 ${member.email}\n` +
-                  `${roleIcon} *권한:* ${roleText} | ${expIcon} *경험:* ${expText}\n` +
-                  `⏰ *주간 가능시간:* ${member.availableHours || 40}시간 | 📋 *진행중 작업:* ${activeTaskCount}개\n` +
-                  `💻 *기술:* ${skillsText}\n` +
-                  `🎯 *선호 작업:* ${preferredText}\n` +
-                  `🕐 *마지막 할당:* ${lastAssignedText}`
+            text: `*${member.name}${currentUserMark}* ${statusText}\n` +
+                  `${member.email}\n` +
+                  `*역할:* ${roleText} | *경험:* ${expText} | *진행중:* ${activeTaskCount}개\n` +
+                  `*기술:* ${skillsText}`
           },
           accessory: {
             type: 'button',
             text: {
               type: 'plain_text',
-              text: '✏️ 수정',
+              text: '수정',
               emoji: true
             },
             action_id: 'edit_member_info',
@@ -475,10 +628,14 @@ async function handleTkCommand(text, respond, client, channelId, userId) {
           }
         });
         
-        teamBlocks.push({ type: 'divider' });
+        if (teamMembers.indexOf(member) < teamMembers.length - 1) {
+          teamBlocks.push({ type: 'divider' });
+        }
       }
       
-      // 통계 섹션
+      teamBlocks.push({ type: 'divider' });
+      
+      // 통계 섹션 (간소화)
       const busyCount = teamMembers.filter(m => m.assignedTasks.length > 3).length;
       const workingCount = teamMembers.filter(m => m.assignedTasks.length > 0).length;
       const availableCount = teamMembers.filter(m => m.assignedTasks.length === 0).length;
@@ -488,19 +645,19 @@ async function handleTkCommand(text, respond, client, channelId, userId) {
         fields: [
           {
             type: 'mrkdwn',
-            text: `*🔥 바쁨*\n${busyCount}명`
+            text: `*바쁨*\n${busyCount}명`
           },
           {
             type: 'mrkdwn',
-            text: `*💼 작업중*\n${workingCount}명`
+            text: `*작업중*\n${workingCount}명`
           },
           {
             type: 'mrkdwn',
-            text: `*✅ 여유*\n${availableCount}명`
+            text: `*여유*\n${availableCount}명`
           },
           {
             type: 'mrkdwn',
-            text: `*👥 전체*\n${teamMembers.length}명`
+            text: `*전체*\n${teamMembers.length}명`
           }
         ]
       });
@@ -515,7 +672,7 @@ async function handleTkCommand(text, respond, client, channelId, userId) {
             type: 'button',
             text: {
               type: 'plain_text',
-              text: '📊 대시보드 보기',
+              text: '대시보드 보기',
               emoji: true
             },
             url: `${process.env.FRONTEND_URL || 'http://localhost:3002'}/dashboard`,
@@ -525,7 +682,7 @@ async function handleTkCommand(text, respond, client, channelId, userId) {
             type: 'button',
             text: {
               type: 'plain_text',
-              text: '🔄 새로고침',
+              text: '새로고침',
               emoji: true
             },
             value: 'refresh_team',
@@ -535,7 +692,7 @@ async function handleTkCommand(text, respond, client, channelId, userId) {
             type: 'button',
             text: {
               type: 'plain_text',
-              text: '➕ 팀원 추가',
+              text: '팀원 추가',
               emoji: true
             },
             action_id: 'add_team_member',
@@ -550,7 +707,7 @@ async function handleTkCommand(text, respond, client, channelId, userId) {
         elements: [
           {
             type: 'mrkdwn',
-            text: `🕐 업데이트: ${new Date().toLocaleString('ko-KR')}`
+            text: `업데이트: ${new Date().toLocaleString('ko-KR')}`
           }
         ]
       });
@@ -743,13 +900,31 @@ async function handleTkCommand(text, respond, client, channelId, userId) {
       // 이미 설정이 완료된 경우 기존 프로젝트 시작 화면 표시
       if (existingUser) {
         await respond({
-          text: '🎯 새 프로젝트 시작',
+          text: '🎯 TtalKkac AI 회의록 자동화',
           blocks: [
+            {
+              type: 'header',
+              text: {
+                type: 'plain_text',
+                text: '🎯 TtalKkac AI 회의록 자동화',
+                emoji: true
+              }
+            },
             {
               type: 'section',
               text: {
                 type: 'mrkdwn',
-                text: '*🚀 새 프로젝트를 시작합니다!*\n\n다음 중 하나를 선택하세요:'
+                text: '*회의 내용을 AI가 자동으로 분석하여 업무를 생성합니다*'
+              }
+            },
+            {
+              type: 'divider'
+            },
+            {
+              type: 'section',
+              text: {
+                type: 'mrkdwn',
+                text: '*📊 회의 데이터 입력*'
               }
             },
             {
@@ -757,97 +932,80 @@ async function handleTkCommand(text, respond, client, channelId, userId) {
               elements: [
                 {
                   type: 'button',
+                  style: 'primary',
                   text: {
                     type: 'plain_text',
-                    text: '🎤 음성 업로드'
+                    text: '🎤 음성 파일 업로드',
+                    emoji: true
                   },
                   value: JSON.stringify({ action: 'upload_voice', channelId: channelId }),
                   action_id: 'upload_voice_button'
                 },
                 {
                   type: 'button',
+                  style: 'primary',
                   text: {
                     type: 'plain_text',
-                    text: '📝 회의록 등록'
+                    text: '📝 회의록 텍스트 입력',
+                    emoji: true
                   },
                   value: 'input_transcript',
                   action_id: 'input_transcript_button'
-                },
-                {
-                  type: 'button',
-                  text: {
-                    type: 'plain_text',
-                    text: '🐛 디버깅'
-                  },
-                  value: 'debugging_mode',
-                  action_id: 'debugging_button'
                 }
               ]
             },
-        {
-          type: 'divider'
-        },
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: '*🔗 외부 서비스 연동 (선택사항)*\n\n연동하면 자동으로 회의록과 업무가 생성됩니다:'
-          }
-        },
-        {
-          type: 'actions',
-          elements: [
             {
-              type: 'button',
-              text: {
-                type: 'plain_text',
-                text: '📝 Notion 연동'
-              },
-              value: 'connect_notion',
-              action_id: 'connect_notion_button'
+              type: 'divider'
             },
             {
-              type: 'button',
+              type: 'section',
               text: {
-                type: 'plain_text',
-                text: '🎫 JIRA 연동'
+                type: 'mrkdwn',
+                text: '*🔗 외부 서비스 연동*\n업무를 자동으로 생성하고 관리합니다'
               },
-              value: 'connect_jira',
-              action_id: 'connect_jira_button'
+              accessory: {
+                type: 'overflow',
+                options: [
+                  {
+                    text: {
+                      type: 'plain_text',
+                      text: '📝 Notion 연동'
+                    },
+                    value: 'connect_notion'
+                  },
+                  {
+                    text: {
+                      type: 'plain_text',
+                      text: '🎫 JIRA 연동'
+                    },
+                    value: 'connect_jira'
+                  },
+                  {
+                    text: {
+                      type: 'plain_text',
+                      text: '⚙️ 연동 상태 확인'
+                    },
+                    value: 'check_integrations'
+                  }
+                ],
+                action_id: 'integration_overflow'
+              }
             },
             {
-              type: 'button',
-              text: {
-                type: 'plain_text',
-                text: '⚙️ 연동 상태 확인'
-              },
-              value: 'check_integrations',
-              action_id: 'check_integrations_button'
-            }
+              type: 'section',
+              fields: [
+                {
+                  type: 'mrkdwn',
+                  text: '✅ *Notion*\n회의록 페이지 자동 생성'
+                },
+                {
+                  type: 'mrkdwn',
+                  text: '✅ *JIRA*\n이슈 자동 생성 및 할당'
+                }
+              ]
+            },
           ]
-        }
-      ]
-    });
-  } else if (text === 'team') {
-    await respond({
-      text: '👥 팀원 정보 설정',
-      blocks: [
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: '*👥 팀원 정보 설정*\n\n스마트 업무 배정을 위해 팀원들의 기술 정보를 수집합니다.'
-          }
-        },
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: '🔧 *준비 중인 기능:*\n• 개인별 기술 스택 수집\n• 경험 레벨 설정\n• 선호 업무 유형 설정'
-          }
-        }
-      ]
-    });
+        });
         await prismaClient.$disconnect();
         return;
       }
@@ -945,7 +1103,75 @@ async function handleTkCommand(text, respond, client, channelId, userId) {
   }
 }
 
-// 버튼 클릭 이벤트 처리
+// help에서 시작하기 버튼
+app.action('start_from_help_button', async ({ ack, client, body }) => {
+  await ack();
+  
+  // /tk start와 동일한 화면 표시
+  const channelId = body.channel?.id || body.user.id;
+  const userId = body.user.id;
+  
+  await client.chat.postMessage({
+    channel: channelId,
+    text: '🎯 TtalKkac AI 회의록 자동화',
+    blocks: [
+      {
+        type: 'header',
+        text: {
+          type: 'plain_text',
+          text: '🎯 TtalKkac AI 회의록 자동화',
+          emoji: true
+        }
+      },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: '*회의 내용을 AI가 자동으로 분석하여 업무를 생성합니다*'
+        }
+      },
+      {
+        type: 'divider'
+      },
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: '*📊 회의 데이터 입력*'
+        }
+      },
+      {
+        type: 'actions',
+        elements: [
+          {
+            type: 'button',
+            style: 'primary',
+            text: {
+              type: 'plain_text',
+              text: '🎤 음성 파일 업로드',
+              emoji: true
+            },
+            value: JSON.stringify({ action: 'upload_voice', channelId: channelId }),
+            action_id: 'upload_voice_button'
+          },
+          {
+            type: 'button',
+            style: 'primary',
+            text: {
+              type: 'plain_text',
+              text: '📝 회의록 텍스트 입력',
+              emoji: true
+            },
+            value: 'input_transcript',
+            action_id: 'input_transcript_button'
+          }
+        ]
+      }
+    ]
+  });
+});
+
+// 버튼 클릭 이벤트 처리 (음성 업로드)
 app.action('upload_voice_button', async ({ ack, client, body }) => {
   await ack();
   
@@ -1002,7 +1228,7 @@ app.action('upload_voice_button', async ({ ack, client, body }) => {
             type: 'section',
             text: {
               type: 'mrkdwn',
-              text: '*파일 업로드 방법:*\n1. 이 모달을 닫고 채널에 음성 파일을 드래그앤드롭\n2. 또는 채널에서 클립 📎 버튼으로 파일 업로드\n\n*지원 형식:* MP3, WAV, M4A, MP4'
+              text: '*파일 업로드 방법:*\n1. 이 모달을 닫고 채널에 음성 파일을 드래그앤드롭\n2. 또는 채널에서 클립 📎 버튼으로 파일 업로드\n\n✨ *실시간 감지:* 파일 업로드 즉시 자동으로 처리가 시작됩니다!\n\n*지원 형식:* MP3, WAV, M4A, MP4'
             }
           },
           {
@@ -1032,12 +1258,190 @@ app.action('upload_voice_button', async ({ ack, client, body }) => {
   }
 });
 
+// overflow 메뉴 핸들러
+app.action('integration_overflow', async ({ ack, body, client }) => {
+  await ack();
+  
+  const selectedOption = body.actions[0].selected_option.value;
+  
+  if (selectedOption === 'connect_notion') {
+    // Notion 연동 로직
+    const userId = body.user.id;
+    const channelId = body.channel?.id || body.container?.channel_id;
+    const tenantSlug = 'dev-tenant';
+    const state = Buffer.from(JSON.stringify({
+      tenantSlug,
+      userId,
+      timestamp: Date.now()
+    })).toString('base64');
+    
+    const authUrl = `${process.env.APP_URL || 'http://localhost:3500'}/auth/notion/${tenantSlug}?userId=${encodeURIComponent(userId)}&state=${encodeURIComponent(state)}`;
+    
+    await client.chat.postMessage({
+      channel: channelId,
+      text: `📝 Notion 연동하기:\n${authUrl}`,
+      blocks: [
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: '*📝 Notion 연동하기*\n\n아래 링크를 클릭해서 Notion과 연동하세요:'
+          }
+        },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `<${authUrl}|🔗 Notion 연동 시작하기>`
+          }
+        }
+      ]
+    });
+  } else if (selectedOption === 'connect_jira') {
+    // JIRA 연동 로직
+    const userId = body.user.id;
+    const channelId = body.channel?.id || body.container?.channel_id;
+    const tenantSlug = 'dev-tenant';
+    const state = Buffer.from(JSON.stringify({
+      tenantSlug,
+      userId,
+      timestamp: Date.now()
+    })).toString('base64');
+    
+    const authUrl = `${process.env.APP_URL || 'http://localhost:3500'}/auth/jira/${tenantSlug}?userId=${userId}&state=${state}`;
+    
+    await client.chat.postMessage({
+      channel: channelId,
+      text: `🎫 JIRA 연동하기:\n${authUrl}`,
+      blocks: [
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: '*🎫 JIRA 연동하기*\n\n아래 링크를 클릭해서 JIRA와 연동하세요:'
+          }
+        },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `<${authUrl}|🔗 JIRA 연동 시작하기>`
+          }
+        }
+      ]
+    });
+  } else if (selectedOption === 'check_integrations') {
+    // 연동 상태 확인
+    try {
+      const { PrismaClient } = require('@prisma/client');
+      const prismaClient = new PrismaClient();
+      
+      const user = await prismaClient.user.findFirst({
+        where: { slackUserId: body.user.id },
+        include: { 
+          tenant: {
+            include: { 
+              integrations: true
+            }
+          }
+        }
+      });
+      
+      // 현재 채널 ID 가져오기
+      const channelId = body.channel?.id || body.container?.channel_id;
+      
+      if (!user) {
+        await client.chat.postMessage({
+          channel: channelId,
+          text: '⚠️ 사용자 정보를 찾을 수 없습니다.',
+          blocks: [
+            {
+              type: 'section',
+              text: {
+                type: 'mrkdwn',
+                text: '⚠️ *사용자 정보를 찾을 수 없습니다.*\n\n먼저 `/tk team` 명령어로 팀 설정을 완료해주세요.'
+              }
+            }
+          ]
+        });
+        await prismaClient.$disconnect();
+        return;
+      }
+      
+      // integrations 배열에서 서비스 타입별로 필터링
+      const notionIntegration = user.tenant?.integrations?.find(i => i.serviceType === 'NOTION' && i.isActive);
+      const jiraIntegration = user.tenant?.integrations?.find(i => i.serviceType === 'JIRA' && i.isActive);
+      
+      const notionStatus = notionIntegration ? '✅ 연동됨' : '❌ 미연동';
+      const jiraStatus = jiraIntegration ? '✅ 연동됨' : '❌ 미연동';
+      
+      await client.chat.postMessage({
+        channel: channelId,
+        text: '⚙️ 연동 상태',
+        blocks: [
+          {
+            type: 'header',
+            text: {
+              type: 'plain_text',
+              text: '⚙️ 서비스 연동 상태'
+            }
+          },
+          {
+            type: 'section',
+            fields: [
+              {
+                type: 'mrkdwn',
+                text: `*Notion*\n${notionStatus}`
+              },
+              {
+                type: 'mrkdwn',
+                text: `*JIRA*\n${jiraStatus}`
+              }
+            ]
+          },
+          {
+            type: 'divider'
+          },
+          {
+            type: 'context',
+            elements: [
+              {
+                type: 'mrkdwn',
+                text: '💡 연동이 필요한 경우 각 서비스의 연동 버튼을 클릭하세요.'
+              }
+            ]
+          }
+        ]
+      });
+      
+      await prismaClient.$disconnect();
+    } catch (error) {
+      console.error('❌ 연동 상태 확인 오류:', error);
+      const channelId = body.channel?.id || body.container?.channel_id;
+      await client.chat.postMessage({
+        channel: channelId,
+        text: '❌ 연동 상태를 확인할 수 없습니다.',
+        blocks: [
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: `❌ *연동 상태를 확인할 수 없습니다.*\n\n오류: ${error.message}`
+            }
+          }
+        ]
+      });
+    }
+  }
+});
+
 // Notion 연동 버튼
-app.action('connect_notion_button', async ({ ack, body, respond }) => {
+app.action('connect_notion_button', async ({ ack, body, respond, client }) => {
   await ack();
   
   const userId = body.user.id;
   const tenantSlug = 'dev-tenant'; // 임시로 고정, 나중에 동적으로 설정
+  const channelId = body.channel?.id || body.container?.channel_id;
   
   // OAuth URL 생성
   const state = Buffer.from(JSON.stringify({
@@ -1050,7 +1454,9 @@ app.action('connect_notion_button', async ({ ack, body, respond }) => {
   
   console.log('🔍 생성된 완전한 URL:', authUrl);
   
-  await respond({
+  // 명령어를 보낸 채널에 메시지 전송
+  await client.chat.postMessage({
+    channel: channelId,
     text: '📝 Notion 연동',
     blocks: [
       {
@@ -1069,7 +1475,7 @@ app.action('connect_notion_button', async ({ ack, body, respond }) => {
               type: 'plain_text',
               text: '🔗 Notion 연결하기'
             },
-            value: JSON.stringify({ authUrl, userId, tenantSlug }),
+            value: JSON.stringify({ authUrl, userId, tenantSlug, channelId }),
             action_id: 'notion_oauth_redirect'
           }
         ]
@@ -1079,14 +1485,17 @@ app.action('connect_notion_button', async ({ ack, body, respond }) => {
 });
 
 // Notion OAuth 리다이렉트 처리
-app.action('notion_oauth_redirect', async ({ ack, body, respond }) => {
+app.action('notion_oauth_redirect', async ({ ack, body, respond, client }) => {
   await ack();
   
   try {
     const actionData = JSON.parse(body.actions[0].value);
-    const { authUrl } = actionData;
+    const { authUrl, channelId } = actionData;
+    const targetChannel = channelId || body.channel?.id || body.container?.channel_id;
     
-    await respond({
+    // 명령어를 보낸 채널에 메시지 전송
+    await client.chat.postMessage({
+      channel: targetChannel,
       text: '🔗 Notion 연동',
       blocks: [
         {
@@ -1107,23 +1516,28 @@ app.action('notion_oauth_redirect', async ({ ack, body, respond }) => {
     });
   } catch (error) {
     console.error('Notion OAuth 리다이렉트 오류:', error);
-    await respond({
+    const channelId = body.channel?.id || body.container?.channel_id;
+    await client.chat.postMessage({
+      channel: channelId,
       text: '❌ 연동 처리 중 오류가 발생했습니다.'
     });
   }
 });
 
 // JIRA 연동 버튼
-app.action('connect_jira_button', async ({ ack, body, respond }) => {
+app.action('connect_jira_button', async ({ ack, body, respond, client }) => {
   await ack();
   
   try {
+    const channelId = body.channel?.id || body.container?.channel_id;
+    
     // JIRA 설정 확인
     const jiraClientId = process.env.JIRA_CLIENT_ID;
     
     if (!jiraClientId || jiraClientId === 'YOUR-JIRA-CLIENT-ID-HERE') {
       // JIRA 설정이 완료되지 않은 경우
-      await respond({
+      await client.chat.postMessage({
+        channel: channelId,
         text: '🎫 JIRA 연동',
         blocks: [
           {
@@ -1159,7 +1573,9 @@ app.action('connect_jira_button', async ({ ack, body, respond }) => {
     
     const authUrl = `${process.env.APP_URL || 'http://localhost:3500'}/auth/jira/${tenantSlug}?userId=${userId}&state=${state}`;
     
-    await respond({
+    // 명령어를 보낸 채널에 메시지 전송
+    await client.chat.postMessage({
+      channel: channelId,
       text: '🎫 JIRA 연동',
       blocks: [
         {
@@ -1178,7 +1594,7 @@ app.action('connect_jira_button', async ({ ack, body, respond }) => {
                 type: 'plain_text',
                 text: '🔗 JIRA 연결하기'
               },
-              value: JSON.stringify({ authUrl, userId, tenantSlug }),
+              value: JSON.stringify({ authUrl, userId, tenantSlug, channelId }),
               action_id: 'jira_oauth_redirect'
             }
           ]
@@ -1187,21 +1603,25 @@ app.action('connect_jira_button', async ({ ack, body, respond }) => {
     });
   } catch (error) {
     console.error('JIRA 연동 버튼 처리 오류:', error);
-    await respond({
+    await client.chat.postMessage({
+      channel: channelId,
       text: '❌ JIRA 연동 처리 중 오류가 발생했습니다.'
     });
   }
 });
 
 // JIRA OAuth 리다이렉트 처리
-app.action('jira_oauth_redirect', async ({ ack, body, respond }) => {
+app.action('jira_oauth_redirect', async ({ ack, body, respond, client }) => {
   await ack();
   
   try {
     const actionData = JSON.parse(body.actions[0].value);
-    const { authUrl } = actionData;
+    const { authUrl, channelId } = actionData;
+    const targetChannel = channelId || body.channel?.id || body.container?.channel_id;
     
-    await respond({
+    // 명령어를 보낸 채널에 메시지 전송
+    await client.chat.postMessage({
+      channel: targetChannel,
       text: '🔗 JIRA 연동',
       blocks: [
         {
@@ -1222,7 +1642,9 @@ app.action('jira_oauth_redirect', async ({ ack, body, respond }) => {
     });
   } catch (error) {
     console.error('JIRA OAuth 리다이렉트 오류:', error);
-    await respond({
+    const channelId = body.channel?.id || body.container?.channel_id;
+    await client.chat.postMessage({
+      channel: channelId,
       text: '❌ 연동 처리 중 오류가 발생했습니다.'
     });
   }
@@ -1473,7 +1895,7 @@ app.action('refresh_team', async ({ ack, body, client }) => {
 });
 
 // 상태 새로고침 버튼
-app.action('refresh_status', async ({ ack, body, respond, client }) => {
+app.action('refresh_status', async ({ ack, body, respond }) => {
   await ack();
   
   try {
@@ -1513,99 +1935,98 @@ app.action('refresh_status', async ({ ack, body, respond, client }) => {
     // 진행률 바 생성
     const progressBar = generateProgressBar(doneCount, totalCount);
     
-    // 메시지 업데이트
-    await client.chat.update({
-      channel: body.channel.id,
-      ts: body.message.ts,
-      text: '📊 프로젝트 현황',
-      blocks: [
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: '*📊 프로젝트 현황*'
-          }
-        },
-        {
-          type: 'divider'
-        },
-        {
-          type: 'section',
-          fields: [
-            {
+    // respond를 사용하여 메시지 업데이트
+    await respond({
+        text: '📊 프로젝트 현황 (새로고침됨)',
+        replace_original: true,
+        blocks: [
+          {
+            type: 'section',
+            text: {
               type: 'mrkdwn',
-              text: `*📝 전체 업무*\n${totalCount}개`
-            },
-            {
-              type: 'mrkdwn',
-              text: `*✅ 완료율*\n${totalCount > 0 ? Math.round(doneCount / totalCount * 100) : 0}%`
-            },
-            {
-              type: 'mrkdwn',
-              text: `*📋 해야할 일*\n${todoCount}개`
-            },
-            {
-              type: 'mrkdwn',
-              text: `*🔄 진행중*\n${inProgressCount}개`
-            },
-            {
-              type: 'mrkdwn',
-              text: `*✅ 완료*\n${doneCount}개`
-            },
-            {
-              type: 'mrkdwn',
-              text: `*📈 진행률*\n${progressBar}`
+              text: '*📊 프로젝트 현황*'
             }
-          ]
-        },
-        {
-          type: 'divider'
-        },
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: `*👥 담당자별 현황*\n${assigneeList || '• 할당된 업무 없음'}`
-          }
-        },
-        {
-          type: 'divider'
-        },
-        {
-          type: 'actions',
-          elements: [
-            {
-              type: 'button',
-              text: {
-                type: 'plain_text',
-                text: '📊 대시보드 보기',
-                emoji: true
+          },
+          {
+            type: 'divider'
+          },
+          {
+            type: 'section',
+            fields: [
+              {
+                type: 'mrkdwn',
+                text: `*📝 전체 업무*\n${totalCount}개`
               },
-              url: `${process.env.FRONTEND_URL || 'http://localhost:3002'}/dashboard`,
-              action_id: 'view_dashboard'
-            },
-            {
-              type: 'button',
-              text: {
-                type: 'plain_text',
-                text: '🔄 새로고침',
-                emoji: true
+              {
+                type: 'mrkdwn',
+                text: `*✅ 완료율*\n${totalCount > 0 ? Math.round(doneCount / totalCount * 100) : 0}%`
               },
-              value: 'refresh_status',
-              action_id: 'refresh_status'
-            }
-          ]
-        },
-        {
-          type: 'context',
-          elements: [
-            {
+              {
+                type: 'mrkdwn',
+                text: `*📋 해야할 일*\n${todoCount}개`
+              },
+              {
+                type: 'mrkdwn',
+                text: `*🔄 진행중*\n${inProgressCount}개`
+              },
+              {
+                type: 'mrkdwn',
+                text: `*✅ 완료*\n${doneCount}개`
+              },
+              {
+                type: 'mrkdwn',
+                text: `*📈 진행률*\n${progressBar}`
+              }
+            ]
+          },
+          {
+            type: 'divider'
+          },
+          {
+            type: 'section',
+            text: {
               type: 'mrkdwn',
-              text: `🕐 업데이트: ${new Date().toLocaleString('ko-KR')}`
+              text: `*👥 담당자별 현황*\n${assigneeList || '• 할당된 업무 없음'}`
             }
-          ]
-        }
-      ]
+          },
+          {
+            type: 'divider'
+          },
+          {
+            type: 'actions',
+            elements: [
+              {
+                type: 'button',
+                text: {
+                  type: 'plain_text',
+                  text: '📊 대시보드 보기',
+                  emoji: true
+                },
+                url: `${process.env.FRONTEND_URL || 'http://localhost:3002'}/dashboard`,
+                action_id: 'view_dashboard'
+              },
+              {
+                type: 'button',
+                text: {
+                  type: 'plain_text',
+                  text: '🔄 새로고침',
+                  emoji: true
+                },
+                value: 'refresh_status',
+                action_id: 'refresh_status'
+              }
+            ]
+          },
+          {
+            type: 'context',
+            elements: [
+              {
+                type: 'mrkdwn',
+                text: `🕐 업데이트: ${new Date().toLocaleString('ko-KR')}`
+              }
+            ]
+          }
+        ]
     });
     
     await prismaClient.$disconnect();
@@ -2842,62 +3263,6 @@ app.action('input_transcript_button', async ({ ack, body, client }) => {
   }
 });
 
-// 디버깅 버튼 처리
-app.action('debugging_button', async ({ ack, body, client }) => {
-  await ack();
-  
-  try {
-    // 기존 회의록 등록과 완전히 동일한 모달 사용
-    await client.views.open({
-      trigger_id: body.trigger_id,
-      view: {
-        type: 'modal',
-        callback_id: 'transcript_input_modal',  // ⭐ 기존과 동일한 callback_id
-        title: {
-          type: 'plain_text',
-          text: '🐛 디버깅 - 회의록 등록'  // 제목만 살짝 변경
-        },
-        submit: {
-          type: 'plain_text',
-          text: '업무 생성'
-        },
-        close: {
-          type: 'plain_text',
-          text: '취소'
-        },
-        blocks: [
-          {
-            type: 'section',
-            text: {
-              type: 'mrkdwn',
-              text: '🐛 *디버깅 모드 - 회의록 등록*\n\n이미 정리된 회의록을 입력하시면 AI가 바로 PRD와 업무를 생성합니다.\n*요약 과정은 생략됩니다.*'
-            }
-          },
-          {
-            type: 'input',
-            block_id: 'transcript_input',  // ⭐ 기존과 동일
-            element: {
-              type: 'plain_text_input',
-              action_id: 'transcript_text',  // ⭐ 기존과 동일
-              multiline: true,
-              placeholder: {
-                type: 'plain_text',
-                text: '예시: 오늘 회의에서 논의된 내용을 정리하면...\n\n1. 프로젝트 목표: 새로운 전자상거래 플랫폼 개발\n2. 주요 기능: 사용자 인증, 상품 관리, 결제 시스템\n3. 일정: 3개월 내 완료\n4. 담당자: 프론트엔드 김○○, 백엔드 박○○...'
-              },
-              min_length: 50
-            },
-            label: {
-              type: 'plain_text',
-              text: '회의록 내용 (최소 50자)'
-            }
-          }
-        ]
-      }
-    });
-  } catch (error) {
-    console.error('디버깅 모달 열기 오류:', error);
-  }
-});
 
 
 // 메시지 이벤트 처리
@@ -2948,8 +3313,10 @@ app.message(async ({ message, ack, say }) => {
   }
 });
 
-// 파일 업로드 이벤트 처리
-app.event('file_shared', async ({ event, ack, say, client }) => {
+// 파일 업로드 이벤트 처리 (첫 번째 리스너 - 비활성화, 두 번째 리스너 사용)
+/* 
+// 첫 번째 리스너 주석 처리됨
+app.event('file_shared_disabled', async ({ event, ack, say, client }) => {
   // 즉시 응답 (3초 내 필수)
   await ack();
   
@@ -3061,6 +3428,7 @@ app.event('file_shared', async ({ event, ack, say, client }) => {
     }
   }
 });
+*/
 
 // AI 텍스트 처리 함수
 // 회의록 전용 처리 함수 (완전 새 버전)
@@ -3071,54 +3439,208 @@ async function processTranscriptWithAI(transcript, client, channelId) {
   try {
     console.log('📝 회의록 직접 처리 시작:', transcript.substring(0, 100) + '...');
     
-    // ⭐ AI 서비스 호출 부분 주석처리
-    /*
-    if (!aiService) {
-      throw new Error('AI 서비스가 초기화되지 않았습니다.');
-    }
-    // 회의록 → PRD → 업무 생성 (요약 과정 생략)
-    const result = await aiService.processTwoStagePipeline(
-      Buffer.from(transcript), 
-      'transcript-input.txt'
-    );
+    let aiData;
+    let projectTitle;
+    let projectSummary;
     
-    console.log('🔍 2단계 파이프라인 결과:', JSON.stringify(result, null, 2));
-    */
-    
-    // ⭐ JSON 입력 데이터 직접 파싱
-    console.log('📋 입력 JSON 데이터 직접 파싱');
-    let inputData;
+    // JSON 형식인지 확인 (WhisperX에서 온 데이터)
+    let isJsonFormat = false;
     try {
-      inputData = JSON.parse(transcript);
-      console.log('✅ JSON 파싱 성공:', {
-        hasSummary: !!inputData.summary,
-        hasActionItems: !!inputData.action_items,
-        actionItemsCount: inputData.action_items?.length || 0
-      });
-    } catch (parseError) {
-      console.error('❌ JSON 파싱 실패:', parseError);
-      throw new Error('유효하지 않은 JSON 형식입니다.');
+      const parsed = JSON.parse(transcript);
+      if (parsed.summary || parsed.action_items) {
+        isJsonFormat = true;
+        console.log('✅ JSON 형식 감지 (WhisperX 출력)');
+        
+        // JSON 데이터 직접 사용
+        aiData = {
+          summary: parsed.summary || '프로젝트 개요가 생성되었습니다.',
+          action_items: parsed.action_items || []
+        };
+        projectTitle = parsed.summary?.substring(0, 50) || '생성된 프로젝트';
+        projectSummary = aiData.summary;
+      }
+    } catch (e) {
+      // JSON이 아니면 일반 텍스트로 처리
+      isJsonFormat = false;
     }
-
-    // ⭐ 입력 데이터에서 직접 추출 (복잡한 로직 제거)
-    const extractedSummary = inputData.summary || '프로젝트 개요가 생성되었습니다.';
-    const extractedTitle = inputData.summary?.substring(0, 50) || '생성된 프로젝트';
-    const actionItems = inputData.action_items || [];
     
-    // InputData 인터페이스에 맞게 구성
-    const aiData = {
-      summary: extractedSummary,
-      action_items: actionItems
-    };
+    // 일반 텍스트인 경우 AI 서버로 처리
+    if (!isJsonFormat) {
+      console.log('📄 일반 텍스트 형식 감지 (직접 입력)');
+      
+      // AI 서비스가 초기화되었는지 확인
+      if (!aiService) {
+        console.error('❌ AI 서비스가 초기화되지 않았습니다.');
+        throw new Error('AI 서비스가 초기화되지 않았습니다.');
+      }
+      
+      // 회의록 → PRD → 업무 생성 (WhisperX 건너뛰고 바로 AI 서버로)
+      console.log('🚀 AI 서버로 회의록 전송 중...');
+      const result = await aiService.processTwoStagePipeline(
+        Buffer.from(transcript, 'utf-8'), 
+        'transcript-input.txt'
+      );
+      
+      console.log('🔍 2단계 파이프라인 결과:', {
+        success: result.success,
+        hasStage1: !!result.stage1,
+        hasStage2: !!result.stage2,
+        hasTasks: !!result.stage2?.task_master_prd?.tasks,
+        tasksCount: result.stage2?.task_master_prd?.tasks?.length || 0
+      });
+      
+      if (!result.success) {
+        throw new Error(result.error || 'AI 처리 실패');
+      }
+      
+      // 결과에서 데이터 추출
+      const extractedSummary = result.stage1?.notion_project?.overview || '프로젝트 개요가 생성되었습니다.';
+      const extractedTitle = result.stage1?.notion_project?.title || '생성된 프로젝트';
+      const tasks = result.stage2?.task_master_prd?.tasks || [];
+      
+      // InputData 인터페이스에 맞게 구성
+      aiData = {
+        summary: extractedSummary,
+        action_items: tasks.map((task, index) => ({
+          id: index + 1,
+          title: task.title,  // 'task'가 아니라 'title' 사용
+          description: task.description || '',
+          details: task.description || '',
+          priority: task.priority || 'medium',
+          status: 'pending',
+          assignee: task.assignee || 'unassigned',
+          start_date: task.startDate || new Date().toISOString().split('T')[0],
+          deadline: task.dueDate || new Date(Date.now() + 7*24*60*60*1000).toISOString().split('T')[0],
+          estimated_hours: task.estimated_hours || 8,
+          complexity: task.complexity || 5,
+          dependencies: [],
+          test_strategy: '',
+          acceptance_criteria: task.acceptance_criteria || [],
+          subtasks: task.subtasks || [],
+          tags: task.tags || [],
+          created_at: new Date().toISOString(),
+          updated_at: null
+        }))
+      };
+      
+      projectTitle = extractedTitle;
+      projectSummary = aiData.summary;
+    }
     
-    console.log('📊 추출된 AI 데이터:', {
+    console.log('📊 최종 AI 데이터:', {
+      format: isJsonFormat ? 'JSON (WhisperX)' : 'Text (Direct)',
       summary: aiData.summary.substring(0, 50) + '...',
       tasksCount: aiData.action_items.length
     });
     
-    const projectTitle = extractedTitle;
-    const projectSummary = aiData.summary;
     const tasksCount = aiData.action_items.length;
+    
+    // ⭐ DB에 프로젝트와 태스크 저장
+    let createdProject = null;
+    let createdTasks = [];
+    try {
+      const { PrismaClient } = require('@prisma/client');
+      const prisma = new PrismaClient();
+      
+      // tenant 조회
+      const tenant = await prisma.tenant.findUnique({
+        where: { slug: tenantSlug }
+      });
+      
+      if (!tenant) {
+        throw new Error('Tenant not found');
+      }
+      
+      // 사용자 조회
+      const user = await prisma.user.findFirst({
+        where: {
+          tenantId: tenant.id,
+          slackUserId: slackUserId
+        }
+      });
+      
+      if (!user) {
+        throw new Error('User not found');
+      }
+      
+      // SlackInput 생성
+      const slackInput = await prisma.slackInput.create({
+        data: {
+          tenantId: tenant.id,
+          userId: user.id,
+          channelId: channelId,
+          messageType: 'COMMAND',
+          status: 'PROCESSING',
+          rawContent: transcript,
+          processedContent: {
+            summary: aiData.summary,
+            tasks: aiData.action_items
+          }
+        }
+      });
+      
+      // 프로젝트 생성
+      createdProject = await prisma.project.create({
+        data: {
+          tenantId: tenant.id,
+          slackInputId: slackInput.id,
+          title: projectTitle,
+          overview: projectSummary,
+          content: {
+            notion_project: result?.stage1?.notion_project || {},
+            prd: result?.stage2?.task_master_prd || {},
+            generated_tasks: aiData.action_items
+          },
+          notionStatus: 'pending'
+        }
+      });
+      
+      console.log('✅ 프로젝트 생성 완료:', createdProject.id);
+      
+      // 태스크 생성
+      for (const [index, taskItem] of aiData.action_items.entries()) {
+        const taskNumber = `TK-${Date.now()}-${index + 1}`;
+        
+        const createdTask = await prisma.task.create({
+          data: {
+            tenantId: tenant.id,
+            projectId: createdProject.id,
+            taskNumber,
+            title: taskItem.task || 'Untitled Task',
+            description: taskItem.description || '',
+            status: 'TODO',
+            priority: taskItem.priority === 'high' ? 'HIGH' : 
+                     taskItem.priority === 'low' ? 'LOW' : 'MEDIUM',
+            assigneeId: user.id,
+            dueDate: taskItem.deadline && taskItem.deadline !== 'TBD' 
+              ? new Date(taskItem.deadline) 
+              : null,
+            metadata: {
+              create: {
+                estimatedHours: 0,
+                actualHours: 0,
+                labels: [],
+                customFields: {}
+              }
+            }
+          }
+        });
+        
+        createdTasks.push(createdTask);
+      }
+      
+      console.log(`✅ 태스크 ${createdTasks.length}개 생성 완료`);
+      
+      // SlackInput 상태 업데이트
+      await prisma.slackInput.update({
+        where: { id: slackInput.id },
+        data: { status: 'COMPLETED' }
+      });
+      
+    } catch (dbError) {
+      console.error('❌ DB 저장 실패:', dbError);
+      // DB 저장 실패해도 계속 진행
+    }
     
     // Notion 연동 시도
     let notionPageUrl = null;
@@ -3240,12 +3762,34 @@ async function processTranscriptWithAI(transcript, client, channelId) {
           console.log('프로젝트 키 조회 실패, 기본값 사용');
         }
 
-        const jiraResult = await jiraService.syncTaskMasterToJira(tenant.id, user.id, {
+        // JIRA 형식에 맞게 데이터 변환
+        const jiraTaskData = {
           title: projectTitle,
           overview: projectSummary,
-          tasks: tasks,
-          projectKey: projectKey  // ← 프로젝트 키 직접 전달
-        });
+          projectKey: projectKey,
+          tasks: tasks.map(task => ({
+            title: task.title || task.task,  // title 또는 task 필드 사용
+            description: task.description || '',
+            priority: task.priority || 'medium',
+            estimated_hours: task.estimated_hours || 8,
+            complexity: task.complexity || 'medium',
+            start_date: task.start_date || task.startDate,
+            deadline: task.deadline || task.dueDate,
+            subtasks: task.subtasks ? task.subtasks.map(sub => ({
+              title: sub.title,
+              description: sub.description || '',
+              estimated_hours: sub.estimated_hours || 4,
+              startDate: sub.start_date,
+              dueDate: sub.due_date
+            })) : []
+          }))
+        };
+        
+        const jiraResult = await jiraService.syncTaskMasterToJira(
+          tenant.id, 
+          user.id, 
+          jiraTaskData
+        );
         
         if (jiraResult.success) {
           console.log(`✅ TaskMaster → JIRA 매핑 완료: Epic ${jiraResult.epicsCreated}개, Task ${jiraResult.tasksCreated}개`);
@@ -3642,7 +4186,203 @@ app.view('transcript_input_modal', async ({ ack, body, view, client }) => {
 });
 
 
+// 모든 이벤트 디버깅은 맨 마지막에 (다른 핸들러가 먼저 실행되도록)
+
+// message 이벤트에서 파일 확인
+app.event('message', async ({ event, client, ack }) => {
+  if (ack) await ack();
+  
+  // 파일이 포함된 메시지인지 확인
+  if (event.files && event.files.length > 0) {
+    console.log('📎 메시지에 파일 포함 감지:', {
+      userId: event.user,
+      channelId: event.channel,
+      files: event.files.map(f => ({
+        id: f.id,
+        name: f.name,
+        mimetype: f.mimetype
+      }))
+    });
+    
+    // 대기 중인 프로젝트가 있는지 확인
+    if (global.pendingProjects && global.pendingProjects[event.user]) {
+      const pendingProject = global.pendingProjects[event.user];
+      console.log('🎯 대기 중인 프로젝트 발견:', pendingProject);
+      
+      // 음성 파일인지 확인
+      const audioFile = event.files.find(file => 
+        file.mimetype && (
+          file.mimetype.includes('audio') ||
+          file.mimetype.includes('video') ||
+          file.name.toLowerCase().endsWith('.mp3') ||
+          file.name.toLowerCase().endsWith('.wav') ||
+          file.name.toLowerCase().endsWith('.m4a') ||
+          file.name.toLowerCase().endsWith('.mp4')
+        )
+      );
+      
+      if (audioFile) {
+        console.log('🎵 음성 파일 감지, 처리 시작:', audioFile.name);
+        
+        await client.chat.postMessage({
+          channel: pendingProject.channelId || event.channel,
+          text: '🎵 음성 파일을 감지했습니다!',
+          blocks: [
+            {
+              type: 'section',
+              text: {
+                type: 'mrkdwn',
+                text: `🎯 *프로젝트:* ${pendingProject.projectName}\n🎵 *파일:* ${audioFile.name}\n📊 *크기:* ${Math.round(audioFile.size / 1024)}KB\n\n🧠 AI가 음성을 분석하고 있습니다...`
+              }
+            }
+          ]
+        });
+        
+        // AI 처리 로직 추가 필요
+        // 일단 데모 응답
+        setTimeout(async () => {
+          await client.chat.postMessage({
+            channel: pendingProject.channelId || event.channel,
+            text: '✅ 프로젝트 생성 완료!',
+            blocks: [
+              {
+                type: 'section',
+                text: {
+                  type: 'mrkdwn',
+                  text: `✅ *${pendingProject.projectName}* 프로젝트가 생성되었습니다!\n\n📋 분석 결과가 곧 표시됩니다.`
+                }
+              }
+            ]
+          });
+          
+          // 처리 완료 후 대기 목록에서 제거
+          delete global.pendingProjects[event.user];
+        }, 3000);
+      }
+    }
+  }
+});
+
 // 에러 핸들링
+// 파일 공유 이벤트 리스너 추가
+app.event('file_shared', async ({ event, client, ack }) => {
+  // 3초 내 응답 필수
+  if (ack) await ack();
+  
+  try {
+    console.log('📁 파일 공유 이벤트 감지 (file_shared):', {
+      userId: event.user_id,
+      fileId: event.file_id,
+      channelId: event.channel_id,
+      fullEvent: event
+    });
+    
+    const userId = event.user_id;
+    const fileId = event.file_id;
+    const channelId = event.channel_id;
+    
+    // 대기 중인 프로젝트가 있는지 확인
+    if (!global.pendingProjects || !global.pendingProjects[userId]) {
+      console.log('⏭️ 대기 중인 프로젝트 없음, 무시');
+      return;
+    }
+    
+    console.log('✅ 대기 중인 프로젝트 발견:', global.pendingProjects[userId]);
+    
+    // 폴링 타이머가 있으면 중지 (file_shared 이벤트로 처리하므로)
+    if (global.fileCheckIntervals && global.fileCheckIntervals[userId]) {
+      clearInterval(global.fileCheckIntervals[userId]);
+      delete global.fileCheckIntervals[userId];
+      console.log('⏱️ 폴링 타이머 중지 - file_shared 이벤트로 처리');
+    }
+    
+    const pendingProject = global.pendingProjects[userId];
+    const { projectName, channelId: targetChannelId } = pendingProject;
+    
+    // 파일 정보 가져오기
+    const fileInfo = await client.files.info({
+      file: fileId
+    });
+    
+    const file = fileInfo.file;
+    console.log('📄 파일 정보:', {
+      name: file.name,
+      mimetype: file.mimetype,
+      size: file.size,
+      created: file.created,
+      createdDate: new Date(file.created * 1000).toLocaleString()
+    });
+    
+    // 프로젝트 시작 시간 확인 (10초 여유 포함)
+    const projectStartTime = pendingProject.startTime;
+    const adjustedStartTime = projectStartTime - 10; // 10초 여유
+    
+    if (file.created < adjustedStartTime) {
+      console.log('⏰ 파일이 프로젝트 시작 전에 업로드됨:', {
+        fileCreated: new Date(file.created * 1000).toLocaleString(),
+        projectStart: new Date(projectStartTime * 1000).toLocaleString(),
+        difference: projectStartTime - file.created + '초 전'
+      });
+      return;
+    }
+    
+    // 음성/비디오 파일인지 확인
+    const isAudioFile = file.mimetype && (
+      file.mimetype.includes('audio') ||
+      file.mimetype.includes('video') ||
+      file.name.toLowerCase().endsWith('.mp3') ||
+      file.name.toLowerCase().endsWith('.wav') ||
+      file.name.toLowerCase().endsWith('.m4a') ||
+      file.name.toLowerCase().endsWith('.mp4')
+    );
+    
+    if (!isAudioFile) {
+      console.log('❌ 음성 파일이 아님, 무시');
+      return;
+    }
+    
+    // 즉시 처리 시작 메시지 전송
+    await client.chat.postMessage({
+      channel: targetChannelId || channelId,
+      text: '🎵 음성 파일을 감지했습니다!',
+      blocks: [
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `🎵 *음성 파일 감지*\n\n📁 파일명: ${file.name}\n🎯 프로젝트: ${projectName}\n\n🔄 AI 분석을 시작합니다...`
+          }
+        }
+      ]
+    });
+    
+    // 대기 중인 프로젝트 정보 삭제
+    delete global.pendingProjects[userId];
+    
+    // 파일 처리
+    await processUploadedFile(file, projectName, client, userId);
+    
+  } catch (error) {
+    console.error('❌ file_shared 이벤트 처리 오류:', error);
+  }
+});
+
+// 모든 이벤트 디버깅 (맨 마지막에 위치)
+app.event(/.*/, async ({ event, ack }) => {
+  if (ack) await ack();
+  
+  // file_shared 이벤트는 상세 로그
+  if (event.type === 'file_shared') {
+    console.log('🔔 file_shared 이벤트 수신 (디버그):', {
+      type: event.type,
+      user_id: event.user_id,
+      file_id: event.file_id,
+      channel_id: event.channel_id,
+      pendingProjects: global.pendingProjects
+    });
+  }
+});
+
 app.error((error) => {
   console.error('❌ Slack 앱 에러:', error);
 });
@@ -3663,11 +4403,28 @@ app.view('voice_upload_modal', async ({ ack, body, view, client }) => {
     
     console.log('📁 모달 제출 데이터:', {
       projectName,
-      userId
+      userId,
+      commandChannel: body.view.private_metadata
     });
     
     // 명령어를 입력한 채널에 메시지 전송
     const commandChannel = body.view.private_metadata; // 채널 ID를 모달에서 가져옴
+    
+    // 프로젝트 정보를 임시 저장 (file_shared 이벤트에서 사용)
+    global.pendingProjects = global.pendingProjects || {};
+    global.pendingProjects[userId] = {
+      projectName: projectName,
+      channelId: commandChannel || userId,
+      timestamp: Date.now(),
+      startTime: Math.floor(Date.now() / 1000) // 프로젝트 시작 시간 (초 단위)
+    };
+    
+    console.log('✅ pendingProjects 설정 완료:', {
+      userId: userId,
+      project: global.pendingProjects[userId],
+      startTime: global.pendingProjects[userId].startTime,
+      startTimeDate: new Date(global.pendingProjects[userId].startTime * 1000).toLocaleString()
+    });
     
     await client.chat.postMessage({
       channel: commandChannel || userId,
@@ -3677,24 +4434,157 @@ app.view('voice_upload_modal', async ({ ack, body, view, client }) => {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: `🎯 *프로젝트:* ${projectName}\n\n📁 *30초 내에 음성 파일을 업로드해주세요:*\n• 이 채널에 파일을 드래그앤드롭\n• 또는 📎 클립 버튼으로 업로드\n\n지원 형식: MP3, WAV, M4A, MP4\n⏰ *제한시간: 30초*`
+            text: `🎯 *프로젝트:* ${projectName}\n\n📁 *이제 음성 파일을 업로드해주세요:*\n• 이 채널에 파일을 드래그앤드롭\n• 또는 📎 클립 버튼으로 업로드\n\n✨ *실시간 감지*: 파일이 업로드되면 즉시 처리가 시작됩니다!\n\n지원 형식: MP3, WAV, M4A, MP4`
           }
+        },
+        {
+          type: 'context',
+          elements: [
+            {
+              type: 'mrkdwn',
+              text: '💡 파일 업로드 후 자동으로 AI 분석이 시작됩니다'
+            }
+          ]
         }
       ]
     });
     
-    // 프로젝트 정보를 임시 저장
-    global.pendingProjects = global.pendingProjects || {};
-    global.pendingProjects[userId] = {
-      projectName: projectName,
-      timestamp: Date.now(),
-      channelId: commandChannel || userId
-    };
+    // 파일 자동 감지 - 10초마다 채널의 파일을 확인
+    let checkCount = 0;
+    const maxChecks = 30; // 30번 * 10초 = 5분
     
-    // 30초 후 자동으로 최근 파일 검색 및 처리
-    setTimeout(async () => {
-      await checkRecentFiles(client, userId, projectName);
-    }, 30000);
+    // 글로벌 인터벌 관리
+    global.fileCheckIntervals = global.fileCheckIntervals || {};
+    global.fileCheckIntervals[userId] = setInterval(async () => {
+      checkCount++;
+      console.log(`🔍 파일 확인 중... (${checkCount}/${maxChecks})`);
+      
+      try {
+        // 사용자가 업로드한 최근 파일 목록 가져오기 (채널 제한 없이)
+        const result = await client.files.list({
+          user: userId,
+          count: 10,
+          types: 'all'
+        });
+        
+        // 프로젝트 시작 시간 가져오기 (없으면 null)
+        const pendingProject = global.pendingProjects?.[userId];
+        if (!pendingProject) {
+          console.log('❌ 대기 중인 프로젝트 없음 - userId:', userId);
+          console.log('📋 현재 pendingProjects 목록:', Object.keys(global.pendingProjects || {}));
+          return;
+        }
+        const projectStartTime = pendingProject.startTime;
+        
+        if (!projectStartTime) {
+          console.log('⚠️ projectStartTime이 undefined입니다. pendingProject:', pendingProject);
+        }
+        
+        // 디버깅 로그 추가
+        const currentTime = Date.now() / 1000;
+        console.log('⏰ 시간 정보:', {
+          projectStartTime: new Date(projectStartTime * 1000).toLocaleString(),
+          currentTime: new Date(currentTime * 1000).toLocaleString(),
+          경과시간: Math.round(currentTime - projectStartTime) + '초'
+        });
+        
+        // 디버깅: 최근 파일 정보 출력
+        if (result.files && result.files.length > 0) {
+          // 프로젝트 시작 후 10초 이전부터 업로드된 파일 확인 (여유있게)
+          const adjustedStartTime = projectStartTime - 10;
+          const recentFiles = result.files.filter(file => file.created > adjustedStartTime);
+          
+          if (recentFiles.length > 0) {
+            console.log('📁 최근 업로드된 파일들:');
+            recentFiles.forEach(file => {
+              const uploadTime = new Date(file.created * 1000).toLocaleString();
+              const timeDiff = file.created - projectStartTime;
+              console.log(`  - ${file.name} (${file.mimetype}) - 업로드: ${uploadTime} (차이: ${Math.round(timeDiff)}초)`);
+            });
+          } else {
+            console.log('⏳ 최근 업로드된 파일 없음');
+          }
+        }
+        
+        const audioFile = result.files?.find(file => {
+          // 프로젝트 시작 10초 전부터 업로드된 파일도 허용 (타이밍 여유)
+          const adjustedStartTime = projectStartTime - 10;
+          const isRecent = file.created > adjustedStartTime;
+          const isAudio = file.mimetype && (
+            file.mimetype.includes('audio') ||
+            file.mimetype.includes('video') ||
+            file.name.toLowerCase().endsWith('.mp3') ||
+            file.name.toLowerCase().endsWith('.wav') ||
+            file.name.toLowerCase().endsWith('.m4a') ||
+            file.name.toLowerCase().endsWith('.mp4')
+          );
+          
+          if (isAudio) {
+            const timeDiff = file.created - projectStartTime;
+            if (!isRecent) {
+              console.log(`⏰ ${file.name}은 프로젝트 시작 10초 이전에 업로드됨 (무시)`);
+            } else {
+              console.log(`✅ ${file.name}은 처리 가능 (시간차: ${Math.round(timeDiff)}초)`);
+            }
+          }
+          
+          return isRecent && isAudio;
+        });
+        
+        if (audioFile) {
+          console.log('🎵 음성 파일 감지!:', audioFile.name);
+          clearInterval(global.fileCheckIntervals[userId]);
+          delete global.fileCheckIntervals[userId];
+          
+          // 파일 처리 시작
+          await client.chat.postMessage({
+            channel: commandChannel,
+            text: '🎵 음성 파일을 감지했습니다!',
+            blocks: [
+              {
+                type: 'section',
+                text: {
+                  type: 'mrkdwn',
+                  text: `🎯 *프로젝트:* ${projectName}\n🎵 *파일:* ${audioFile.name}\n📊 *크기:* ${Math.round(audioFile.size / 1024)}KB\n\n🧠 AI가 음성을 분석하고 있습니다...`
+                }
+              }
+            ]
+          });
+          
+          // processUploadedFile 함수 호출
+          await processUploadedFile(audioFile, projectName, client, userId);
+          
+          // 처리 완료 후 대기 목록에서 제거
+          delete global.pendingProjects[userId];
+        }
+      } catch (error) {
+        console.error('❌ 파일 확인 오류:', error);
+      }
+      
+      // 5분 경과 시 타임아웃
+      if (checkCount >= maxChecks) {
+        clearInterval(global.fileCheckIntervals[userId]);
+        delete global.fileCheckIntervals[userId];
+        
+        if (global.pendingProjects && global.pendingProjects[userId]) {
+          delete global.pendingProjects[userId];
+          
+          await client.chat.postMessage({
+            channel: commandChannel || userId,
+            text: '⏰ 파일 업로드 대기 시간이 만료되었습니다',
+            blocks: [
+              {
+                type: 'section',
+                text: {
+                  type: 'mrkdwn',
+                  text: '⏰ *대기 시간 만료*\n\n5분 내에 파일이 업로드되지 않아 대기가 취소되었습니다.\n\n🔄 다시 시작하려면 `/tk start`를 입력해주세요.'
+                }
+              }
+            ]
+          });
+        }
+      }
+    }, 10000); // 10초마다 확인
     
   } catch (error) {
     console.error('❌ 음성 업로드 모달 처리 오류:', error);
@@ -3737,41 +4627,54 @@ async function processUploadedFile(file, projectName, client, userId) {
       });
       
       // 결과 전송
+      const resultBlocks = [
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `🎯 *${projectName}*\n\n✅ 업무가 성공적으로 생성되었습니다.`
+          }
+        }
+      ];
+      
+      // URL이 있을 때만 버튼 추가
+      const buttons = [];
+      if (result.notionUrl && result.notionUrl !== '#') {
+        buttons.push({
+          type: 'button',
+          text: {
+            type: 'plain_text',
+            text: '📋 Notion 페이지 보기'
+          },
+          url: result.notionUrl,
+          action_id: 'view_notion'
+        });
+      }
+      
+      if (result.jiraUrl && result.jiraUrl !== '#') {
+        buttons.push({
+          type: 'button',
+          text: {
+            type: 'plain_text',
+            text: '🎫 JIRA 이슈 보기'
+          },
+          url: result.jiraUrl,
+          action_id: 'view_jira'
+        });
+      }
+      
+      // 버튼이 있을 때만 actions 블록 추가
+      if (buttons.length > 0) {
+        resultBlocks.push({
+          type: 'actions',
+          elements: buttons
+        });
+      }
+      
       await client.chat.postMessage({
         channel: userId,
         text: '✅ 프로젝트 생성이 완료되었습니다!',
-        blocks: [
-          {
-            type: 'section',
-            text: {
-              type: 'mrkdwn',
-              text: `🎯 *${projectName}*\n\n✅ 업무가 성공적으로 생성되었습니다.`
-            }
-          },
-          {
-            type: 'actions',
-            elements: [
-              {
-                type: 'button',
-                text: {
-                  type: 'plain_text',
-                  text: '📋 Notion 페이지 보기'
-                },
-                url: result.notionUrl || '#',
-                action_id: 'view_notion'
-              },
-              {
-                type: 'button',
-                text: {
-                  type: 'plain_text',
-                  text: '🎫 JIRA 이슈 보기'
-                },
-                url: result.jiraUrl || '#',
-                action_id: 'view_jira'
-              }
-            ]
-          }
-        ]
+        blocks: resultBlocks
       });
     } else {
       throw new Error('AI 서비스가 초기화되지 않았습니다.');
@@ -3787,6 +4690,9 @@ async function processUploadedFile(file, projectName, client, userId) {
 }
 
 // 최근 파일 확인 및 처리 함수
+// [Deprecated] 이제 file_shared 이벤트로 실시간 감지하므로 불필요
+// 보관용으로 남겨둠 - 추후 필요시 참고
+/*
 async function checkRecentFiles(client, userId, projectName) {
   try {
     console.log(`🔍 ${userId}의 최근 파일 검색 시작...`);
@@ -4215,6 +5121,8 @@ async function checkRecentFiles(client, userId, projectName) {
     delete global.pendingProjects[userId];
   }
 }
+*/
+// checkRecentFiles 함수 끝 - deprecated
 
 module.exports = { 
   slackApp: app,

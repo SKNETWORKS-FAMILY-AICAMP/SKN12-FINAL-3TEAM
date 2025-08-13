@@ -16,16 +16,6 @@ const Integration = () => {
   const [integrations, setIntegrations] = useState([
     {
       id: 1,
-      name: "슬랙(Slack)",
-      tag: integrationStatus?.slack ? "활성화" : "비활성화",
-      status: integrationStatus?.slack ? "connected" : "disconnected",
-      url: integrationStatus?.slack ? "SYNC_PRJ_321AM" : "연결 필요",
-      lastSync: integrationStatus?.slack ? "방금 전" : "-",
-      color: "bg-purple-100",
-      logo: "https://cdn.worldvectorlogo.com/logos/slack-new-logo.svg"
-    },
-    {
-      id: 2,
       name: "노션(Notion)",
       tag: integrationStatus?.notion ? "활성화" : "비활성화",
       status: integrationStatus?.notion ? "connected" : "disconnected",
@@ -35,7 +25,7 @@ const Integration = () => {
       logo: "https://upload.wikimedia.org/wikipedia/commons/4/45/Notion_app_logo.png"
     },
     {
-      id: 3,
+      id: 2,
       name: "지라(Jira)", 
       tag: integrationStatus?.jira ? "활성화" : "비활성화",
       status: integrationStatus?.jira ? "connected" : "disconnected",
@@ -83,9 +73,6 @@ const Integration = () => {
     
     // 서비스별 OAuth URL 생성
     switch (confirmData.name) {
-      case '슬랙(Slack)':
-        oauthUrl = `${import.meta.env.VITE_API_BASE_URL}/auth/slack/${tenantSlug}`;
-        break;
       case '노션(Notion)':
         oauthUrl = `${import.meta.env.VITE_API_BASE_URL}/auth/notion/${tenantSlug}`;
         break;
@@ -222,32 +209,9 @@ const Integration = () => {
       {/* 연동 진행 상황 */}
       <div className="mb-8">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">연동 진행 상황</h2>
-        <div className="flex items-center justify-between max-w-md">
-                               {/* 1단계 - 슬랙 */}
-                     <div className="flex flex-col items-center">
-                       <div className={`w-8 h-8 rounded-full flex items-center justify-center mb-2 ${
-                         integrations.find(i => i.name.includes('슬랙'))?.status === 'connected'
-                           ? 'bg-green-500'
-                           : 'bg-gray-300'
-                       }`}>
-                         <Check className={`w-4 h-4 ${
-                           integrations.find(i => i.name.includes('슬랙'))?.status === 'connected'
-                             ? 'text-white'
-                             : 'text-gray-500'
-                         }`} />
-                       </div>
-                       <span className="text-xs text-gray-600">슬랙 연동</span>
-                     </div>
-          
-          {/* 연결선 1 */}
-          <div className={`flex-1 h-0.5 mx-4 ${
-            integrations.find(i => i.name.includes('슬랙'))?.status === 'connected' &&
-            integrations.find(i => i.name.includes('노션'))?.status === 'connected'
-              ? 'bg-green-500' 
-              : 'bg-gray-300'
-          }`}></div>
-          
-                               {/* 2단계 - 노션 */}
+        <div className="flex items-center justify-center">
+          <div className="flex items-center justify-between max-w-md">
+                               {/* 1단계 - 노션 */}
                      <div className="flex flex-col items-center">
                        <div className={`w-8 h-8 rounded-full flex items-center justify-center mb-2 ${
                          integrations.find(i => i.name.includes('노션'))?.status === 'connected'
@@ -263,7 +227,7 @@ const Integration = () => {
                        <span className="text-xs text-gray-600">노션 연동</span>
                      </div>
           
-          {/* 연결선 2 */}
+          {/* 연결선 */}
           <div className={`flex-1 h-0.5 mx-4 ${
             integrations.find(i => i.name.includes('노션'))?.status === 'connected' &&
             integrations.find(i => i.name.includes('지라'))?.status === 'connected'
@@ -271,7 +235,7 @@ const Integration = () => {
               : 'bg-gray-300'
           }`}></div>
           
-                               {/* 3단계 - 지라 */}
+                               {/* 2단계 - 지라 */}
                      <div className="flex flex-col items-center">
                        <div className={`w-8 h-8 rounded-full flex items-center justify-center mb-2 ${
                          integrations.find(i => i.name.includes('지라'))?.status === 'connected'
@@ -286,6 +250,7 @@ const Integration = () => {
                        </div>
                        <span className="text-xs text-gray-600">지라 연동</span>
                      </div>
+          </div>
         </div>
         
         {/* 진행률 표시 */}

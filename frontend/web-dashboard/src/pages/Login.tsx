@@ -69,13 +69,39 @@ const Login = () => {
     setIsLoading(true);
     
     try {
-      // TODO: 실제 로그인 API 호출
-      await new Promise(resolve => setTimeout(resolve, 2000)); // 시뮬레이션
+      // 로그인 API 호출
+      const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3500';
+      const response = await fetch(`${backendUrl}/api/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: formData.email,
+          password: formData.password
+        })
+      });
       
-      // 로그인 성공 시 대시보드로 이동
-      navigate('/dashboard');
+      const data = await response.json();
+      
+      if (response.ok && data.success) {
+        // 사용자 정보를 localStorage에 저장
+        localStorage.setItem('currentUser', JSON.stringify(data.user));
+        localStorage.setItem('isAuthenticated', 'true');
+        
+        // 새 계정 생성 메시지 표시
+        if (data.message) {
+          console.log(data.message);
+        }
+        
+        // 로그인 성공 시 대시보드로 이동
+        navigate('/dashboard');
+      } else {
+        setErrors({ general: data.error || '로그인에 실패했습니다.' });
+      }
     } catch (error) {
-      setErrors({ general: '로그인에 실패했습니다. 다시 시도해주세요.' });
+      console.error('Login error:', error);
+      setErrors({ general: '서버 연결에 실패했습니다. 다시 시도해주세요.' });
     } finally {
       setIsLoading(false);
     }

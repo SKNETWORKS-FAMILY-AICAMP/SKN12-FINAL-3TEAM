@@ -1624,7 +1624,7 @@ app.delete('/api/integrations/:service',
 // Slack OAuth 시작 (로그인 버튼 클릭 시)
 app.get('/api/auth/slack', (req: Request, res: Response) => {
   const slackClientId = process.env.SLACK_CLIENT_ID || '9123205664802.9178095689748';
-  const redirectUri = process.env.SLACK_REDIRECT_URI || 'https://07e05725ca63.ngrok-free.app/auth/slack/callback';
+  const redirectUri = process.env.SLACK_REDIRECT_URI || 'https://22baa147d75d.ngrok-free.app/auth/slack/callback';
   
   console.log('🔍 환경변수 SLACK_REDIRECT_URI:', process.env.SLACK_REDIRECT_URI);
   console.log('🔍 사용할 redirectUri:', redirectUri);
@@ -1652,7 +1652,7 @@ app.get('/api/auth/slack', (req: Request, res: Response) => {
 // Slack 앱 설치 (OAuth + 채널 초대) - Go to Market 버튼
 app.get('/api/auth/slack/install', (req: Request, res: Response) => {
   const slackClientId = process.env.SLACK_CLIENT_ID || '9123205664802.9178095689748';
-  const redirectUri = process.env.SLACK_REDIRECT_URI || 'https://07e05725ca63.ngrok-free.app/auth/slack/callback';
+  const redirectUri = process.env.SLACK_REDIRECT_URI || 'https://22baa147d75d.ngrok-free.app/auth/slack/callback';
   
   // Slack OAuth URL에 채널 초대 권한 추가
   const scopes = [
@@ -1745,7 +1745,7 @@ app.get('/auth/slack/callback', async (req: Request, res: Response) => {
     console.log('📝 환경변수 확인:', {
       clientId: process.env.SLACK_CLIENT_ID ? '존재' : '없음',
       clientSecret: process.env.SLACK_CLIENT_SECRET ? '존재' : '없음',
-      redirectUri: process.env.SLACK_REDIRECT_URI || 'https://07e05725ca63.ngrok-free.app/auth/slack/callback'
+      redirectUri: process.env.SLACK_REDIRECT_URI || 'https://22baa147d75d.ngrok-free.app/auth/slack/callback'
     });
     
     // 테스트 모드: 실제 API 호출 대신 테스트 데이터 사용
@@ -1789,7 +1789,7 @@ app.get('/auth/slack/callback', async (req: Request, res: Response) => {
         client_id: process.env.SLACK_CLIENT_ID || '9123205664802.9178095689748',
         client_secret: process.env.SLACK_CLIENT_SECRET || '943bff5c993ed1609923e84b7a5e4365',
         code: code as string,
-        redirect_uri: process.env.SLACK_REDIRECT_URI || 'https://07e05725ca63.ngrok-free.app/auth/slack/callback'
+        redirect_uri: process.env.SLACK_REDIRECT_URI || 'https://759a00971ae6.ngrok-free.app/auth/slack/callback'
       })
     });
     
@@ -3218,25 +3218,118 @@ app.get('/tasks', async (req, res) => {
   }
 });
 
-// 개발용 테스트 API - 유저 목록 (인증 없이)
+// 개발용 테스트 API - 유저 목록 (tenantId로 필터링)
 app.get('/test/users', async (req, res) => {
   try {
+    const { tenantId } = req.query;
+    
+    // tenantId가 제공되면 해당 tenant의 사용자만, 아니면 전체 (하위 호환성)
+    const whereClause = tenantId ? { tenantId: tenantId as string } : {};
+    
     const users = await prisma.user.findMany({
+      where: whereClause,
       select: {
         id: true,
         name: true,
         email: true,
         role: true,
-        tenantId: true
+        tenantId: true,
+        skills: true,
+        availableHours: true,
+        experienceLevel: true
       }
     });
-    console.log(`✅ ${users.length}개의 유저 조회 성공`);
+    console.log(`✅ ${users.length}개의 유저 조회 성공 (tenantId: ${tenantId || 'all'})`);
     res.json(users);
   } catch (error) {
     console.error('❌ /test/users API 오류:', error);
     res.status(500).json({ 
       error: '서버 내부 오류', 
       detail: error instanceof Error ? error.message : 'Unknown error' 
+    });
+  }
+});
+
+// 로그인 API
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    
+    if (!email || !password) {
+      return res.status(400).json({ 
+        error: '이메일과 비밀번호를 입력해주세요.' 
+      });
+    }
+    
+    // 사용자 찾기
+    const user = await prisma.user.findFirst({
+      where: { email },
+      include: {
+        tenant: true
+      }
+    });
+    
+    if (!user) {
+      // 개발 환경: 사용자가 없으면 자동 생성
+      const defaultTenant = await prisma.tenant.findFirst({
+        where: { slug: 'dev-tenant' }
+      });
+      
+      if (!defaultTenant) {
+        return res.status(401).json({ 
+          error: '로그인 실패: 테넌트를 찾을 수 없습니다.' 
+        });
+      }
+      
+      // 새 사용자 생성
+      const newUser = await prisma.user.create({
+        data: {
+          email,
+          name: email.split('@')[0],
+          tenantId: defaultTenant.id,
+          role: 'MEMBER'
+        },
+        include: {
+          tenant: true
+        }
+      });
+      
+      console.log(`✅ 새 사용자 생성: ${email}`);
+      
+      return res.json({
+        success: true,
+        user: {
+          id: newUser.id,
+          email: newUser.email,
+          name: newUser.name,
+          role: newUser.role,
+          tenantId: newUser.tenantId,
+          tenantName: newUser.tenant.name
+        },
+        message: '새 계정이 생성되었습니다.'
+      });
+    }
+    
+    // 개발 환경: 비밀번호 검증 생략 (실제로는 bcrypt 등으로 검증 필요)
+    console.log(`✅ 로그인 성공: ${email}`);
+    
+    return res.json({
+      success: true,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        tenantId: user.tenantId,
+        tenantName: user.tenant.name
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ 로그인 오류:', error);
+    return res.status(500).json({ 
+      error: '로그인 처리 중 오류가 발생했습니다.',
+      detail: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 });

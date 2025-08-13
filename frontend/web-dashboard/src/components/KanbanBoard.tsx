@@ -322,12 +322,12 @@ const KanbanBoard: React.FC = () => {
   // 컬럼 설정
   const columns: KanbanColumn[] = [
     {
-      id: 'todo',
-      title: '대기 중',
-      status: 'TODO',
-      color: '#F59E0B',
-      bgColor: 'bg-accent-amber/10',
-      tasks: tasks.filter(task => task.status === 'TODO'),
+      id: 'done',
+      title: '완료',
+      status: 'DONE',
+      color: '#10B981',
+      bgColor: 'bg-accent-green/10',
+      tasks: tasks.filter(task => task.status === 'DONE'),
     },
     {
       id: 'in-progress',
@@ -338,12 +338,12 @@ const KanbanBoard: React.FC = () => {
       tasks: tasks.filter(task => task.status === 'IN_PROGRESS'),
     },
     {
-      id: 'done',
-      title: '완료',
-      status: 'DONE',
-      color: '#10B981',
-      bgColor: 'bg-accent-green/10',
-      tasks: tasks.filter(task => task.status === 'DONE'),
+      id: 'todo',
+      title: '대기 중',
+      status: 'TODO',
+      color: '#F59E0B',
+      bgColor: 'bg-accent-amber/10',
+      tasks: tasks.filter(task => task.status === 'TODO'),
     },
   ];
 

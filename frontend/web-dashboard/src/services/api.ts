@@ -404,11 +404,25 @@ export const taskAPI = {
 };
 
 export const userAPI = {
-  // 사용자 목록 조회
+  // 사용자 목록 조회 (같은 tenant의 사용자만)
   getUsers: async (): Promise<User[]> => {
     try {
-      // 개발 환경에서는 테스트 API 사용
-      const response: AxiosResponse<User[]> = await apiClient.get('/test/users');
+      // localStorage에서 현재 사용자 정보 가져오기
+      const currentUserStr = localStorage.getItem('currentUser');
+      let tenantId = null;
+      
+      if (currentUserStr) {
+        try {
+          const currentUser = JSON.parse(currentUserStr);
+          tenantId = currentUser.tenantId;
+        } catch (e) {
+          console.error('Failed to parse current user:', e);
+        }
+      }
+      
+      // tenantId가 있으면 쿼리 파라미터로 전달
+      const url = tenantId ? `/test/users?tenantId=${tenantId}` : '/test/users';
+      const response: AxiosResponse<User[]> = await apiClient.get(url);
       return response.data;
     } catch (error) {
       console.error('Failed to fetch users:', error);

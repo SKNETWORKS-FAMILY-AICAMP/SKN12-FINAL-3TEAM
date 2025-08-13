@@ -52,8 +52,10 @@ const LoginSuccess = () => {
         
         // localStorage에 사용자 정보 및 토큰 저장
         localStorage.setItem('user', JSON.stringify(userInfo));
+        localStorage.setItem('currentUser', JSON.stringify(userInfo)); // API와 통일
         localStorage.setItem('token', token);
         localStorage.setItem('isLoggedIn', 'true');
+        localStorage.setItem('isAuthenticated', 'true'); // 추가 플래그
         
         // Go to Market으로 접근한 경우 채널 초대 메시지
         if (isInstall) {

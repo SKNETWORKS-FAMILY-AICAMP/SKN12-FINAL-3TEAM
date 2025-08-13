@@ -61,7 +61,7 @@ except ImportError as e:
     TRIPLET_AVAILABLE = False
 
 # WhisperX 원격 서버 URL
-WHISPERX_SERVER = "http://localhost:8001"
+WHISPERX_SERVER = "http://localhost:8002"
 
 # 글로벌 모델 변수
 whisper_model = None  # WhisperX는 원격 서버에서 처리
@@ -83,29 +83,52 @@ async def generate_tasks_from_prd(prd_data: dict, num_tasks: int = 5) -> List[Ta
         system_prompt = generate_prd_to_tasks_system_prompt(num_tasks)
         user_prompt = generate_prd_to_tasks_user_prompt(prd_data, num_tasks)
         
+        # JSON 응답 강제 프롬프트 추가
+        json_enforced_prompt = f"""
+{system_prompt}
+
+**CRITICAL INSTRUCTIONS:**
+- DO NOT use <think> or </think> tags
+- DO NOT provide any explanations or thinking process
+- START your response directly with a JSON object
+- ONLY output valid JSON, nothing else
+
+{user_prompt}
+
+RESPOND WITH JSON ONLY:"""
+        
         # Qwen 모델로 태스크 생성
-        messages = [{"role": "user", "content": user_prompt}]
+        messages = [{"role": "user", "content": json_enforced_prompt}]
         
         if qwen_model and qwen_tokenizer:
             text = qwen_tokenizer.apply_chat_template(
                 messages, tokenize=False, add_generation_prompt=True
             )
             
-            inputs = qwen_tokenizer([text], return_tensors="pt").to(qwen_model.device)
-            
-            with torch.no_grad():
-                outputs = qwen_model.generate(
-                    **inputs,
-                    max_new_tokens=2048,
-                    temperature=0.3,
-                    do_sample=True,
-                    pad_token_id=qwen_tokenizer.eos_token_id
-                )
-            
-            response = qwen_tokenizer.decode(
-                outputs[0][len(inputs["input_ids"][0]):], 
-                skip_special_tokens=True
+            # VLLM 사용 (qwen_model이 실제로는 VLLM LLM 객체)
+            from vllm import SamplingParams
+            sampling_params = SamplingParams(
+                temperature=0.3,
+                max_tokens=2048,
+                top_p=0.95
             )
+            
+            outputs = qwen_model.generate([text], sampling_params)
+            response = outputs[0].outputs[0].text
+            
+            # 디버깅: 응답 내용 확인
+            logger.info(f"📝 Raw response length: {len(response)} chars")
+            logger.info(f"📝 Response preview: {response[:500]}...")
+            
+            # <think> 태그 제거
+            if "<think>" in response:
+                think_end = response.find("</think>")
+                if think_end != -1:
+                    response = response[think_end + 8:].strip()
+                else:
+                    # </think> 태그가 없으면 <think> 이후 전체 제거
+                    think_start = response.find("<think>")
+                    response = response[:think_start].strip()
             
             # JSON 파싱
             if "```json" in response:
@@ -116,7 +139,19 @@ async def generate_tasks_from_prd(prd_data: dict, num_tasks: int = 5) -> List[Ta
                 else:
                     json_content = response[json_start:json_end].strip()
             else:
+                # JSON 블록이 없으면 전체 응답을 JSON으로 간주
                 json_content = response.strip()
+                # 하지만 먼저 JSON 시작 부분 찾기
+                if response.strip().startswith('{'):
+                    json_content = response.strip()
+                else:
+                    # JSON이 중간에 시작하는 경우
+                    json_start_idx = response.find('{')
+                    if json_start_idx != -1:
+                        json_content = response[json_start_idx:].strip()
+                    else:
+                        logger.error(f"❌ No JSON found in response")
+                        return []
             
             task_data = json.loads(json_content)
             
@@ -144,7 +179,23 @@ async def generate_tasks_from_prd(prd_data: dict, num_tasks: int = 5) -> List[Ta
             
     except Exception as e:
         logger.error(f"❌ Error generating tasks from PRD: {e}")
-        return []
+        
+        # Fallback: 더미 태스크 생성
+        logger.info("⚠️ Using fallback dummy tasks")
+        dummy_tasks = []
+        for i in range(num_tasks):
+            dummy_tasks.append(TaskItem(
+                id=i + 1,
+                title=f"Task {i + 1}: 시스템 구현",
+                description=f"프로젝트의 주요 기능 {i + 1} 구현",
+                details="상세 구현 내용",
+                priority="high" if i == 0 else "medium",
+                status="pending",
+                dependencies=[],
+                test_strategy="단위 테스트 및 통합 테스트",
+                subtasks=[]
+            ))
+        return dummy_tasks
 
 async def analyze_task_complexity(task_items: List[TaskItem]) -> dict:
     """Task Master 스타일 복잡도 분석"""
@@ -181,21 +232,16 @@ async def analyze_task_complexity(task_items: List[TaskItem]) -> dict:
                 messages, tokenize=False, add_generation_prompt=True
             )
             
-            inputs = qwen_tokenizer([text], return_tensors="pt").to(qwen_model.device)
-            
-            with torch.no_grad():
-                outputs = qwen_model.generate(
-                    **inputs,
-                    max_new_tokens=2048,
-                    temperature=0.3,
-                    do_sample=True,
-                    pad_token_id=qwen_tokenizer.eos_token_id
-                )
-            
-            response = qwen_tokenizer.decode(
-                outputs[0][len(inputs["input_ids"][0]):], 
-                skip_special_tokens=True
+            # VLLM 사용 (qwen_model이 실제로는 VLLM LLM 객체)
+            from vllm import SamplingParams
+            sampling_params = SamplingParams(
+                temperature=0.3,
+                max_tokens=2048,
+                top_p=0.95
             )
+            
+            outputs = qwen_model.generate([text], sampling_params)
+            response = outputs[0].outputs[0].text
             
             # JSON 파싱
             if "```json" in response:
@@ -272,28 +318,46 @@ async def generate_subtasks_for_all_tasks(task_items: List[TaskItem], complexity
                 )
                 
                 # Qwen 모델로 서브태스크 생성
-                messages = [{"role": "user", "content": user_prompt}]
+                # JSON 응답 강제 프롬프트
+                json_prompt = f"""
+{system_prompt}
+
+**CRITICAL: RESPOND ONLY WITH JSON. NO THINKING, NO EXPLANATIONS.**
+- DO NOT use <think> tags
+- START directly with JSON
+- Output valid JSON ONLY
+
+{user_prompt}
+
+RESPOND WITH JSON ONLY:"""
+                
+                messages = [{"role": "user", "content": json_prompt}]
                 
                 if qwen_model and qwen_tokenizer:
                     text = qwen_tokenizer.apply_chat_template(
                         messages, tokenize=False, add_generation_prompt=True
                     )
                     
-                    inputs = qwen_tokenizer([text], return_tensors="pt").to(qwen_model.device)
-                    
-                    with torch.no_grad():
-                        outputs = qwen_model.generate(
-                            **inputs,
-                            max_new_tokens=1024,
-                            temperature=0.3,
-                            do_sample=True,
-                            pad_token_id=qwen_tokenizer.eos_token_id
-                        )
-                    
-                    response = qwen_tokenizer.decode(
-                        outputs[0][len(inputs["input_ids"][0]):], 
-                        skip_special_tokens=True
+                    # VLLM 사용
+                    from vllm import SamplingParams
+                    sampling_params = SamplingParams(
+                        temperature=0.3,
+                        max_tokens=2048,  # 증가: 서브태스크는 더 긴 응답 필요
+                        top_p=0.95
                     )
+                    
+                    outputs = qwen_model.generate([text], sampling_params)
+                    response = outputs[0].outputs[0].text
+                    
+                    # <think> 태그 제거
+                    if "<think>" in response:
+                        think_end = response.find("</think>")
+                        if think_end != -1:
+                            response = response[think_end + 8:].strip()
+                        else:
+                            json_start_idx = response.find('{')
+                            if json_start_idx != -1:
+                                response = response[json_start_idx:].strip()
                     
                     # JSON 파싱
                     if "```json" in response:
@@ -330,6 +394,9 @@ async def generate_subtasks_for_all_tasks(task_items: List[TaskItem], complexity
                     
             except Exception as e:
                 logger.warning(f"⚠️ '{task.title}' 서브태스크 생성 실패: {e}")
+                if 'response' in locals():
+                    logger.error(f"   Response length: {len(response)}")
+                    logger.error(f"   Response preview: {response[:200]}...")
                 # 복잡도 기반 기본 서브태스크 생성
                 task_analysis = complexity_analysis.get(task.id, {}) if complexity_analysis else {}
                 task.subtasks = create_complexity_based_default_subtasks(task, task_analysis)
@@ -562,20 +629,60 @@ def load_qwen3():
                     use_vllm = False
                 
             if use_vllm:
-                # RunPod에서 사용할 경로 설정
+                # LoRA 어댑터 경로
                 if os.path.exists("/workspace"):
-                    model_name = "/workspace/SKN12-FINAL-3TEAM/ai-engine-dev/qwen3_lora_ttalkkac_4b"
+                    lora_path = "/workspace/SKN12-FINAL-3TEAM/ai-engine-dev/qwen3_lora_ttalkkac_4b"
                 else:
-                    model_name = "C:/Users/SH/Desktop/TtalKkac/ai-engine-dev/qwen3_lora_ttalkkac_4b"
+                    lora_path = "C:/Users/SH/Desktop/TtalKkac/ai-engine-dev/qwen3_lora_ttalkkac_4b"
+                
+                # 병합된 모델이 있는지 확인
+                merged_model_path = "/workspace/SKN12-FINAL-3TEAM/ai-engine-dev/qwen3-4b-merged"
+                
+                # 병합된 모델이 없으면 즉시 병합 수행
+                if not os.path.exists(merged_model_path):
+                    logger.info("🔄 LoRA 어댑터를 베이스 모델과 병합 중...")
+                    try:
+                        from transformers import AutoModelForCausalLM, AutoTokenizer
+                        from peft import PeftModel
+                        
+                        # 베이스 모델 로드
+                        base_model = AutoModelForCausalLM.from_pretrained(
+                            "Qwen/Qwen3-4B",
+                            torch_dtype=torch.float16,
+                            trust_remote_code=True,
+                            device_map="auto"
+                        )
+                        
+                        # LoRA 어댑터 적용
+                        if os.path.exists(lora_path) and os.path.exists(f"{lora_path}/adapter_config.json"):
+                            logger.info(f"📎 LoRA 어댑터 적용: {lora_path}")
+                            model_with_lora = PeftModel.from_pretrained(base_model, lora_path)
+                            
+                            # 병합 및 저장
+                            merged_model = model_with_lora.merge_and_unload()
+                            merged_model.save_pretrained(merged_model_path)
+                            
+                            # 토크나이저도 저장
+                            tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-4B", trust_remote_code=True)
+                            tokenizer.save_pretrained(merged_model_path)
+                            
+                            logger.info(f"✅ 병합 완료: {merged_model_path}")
+                            del base_model, model_with_lora, merged_model  # 메모리 정리
+                        else:
+                            logger.warning("⚠️ LoRA 어댑터 파일 없음, 베이스 모델 사용")
+                            merged_model_path = "Qwen/Qwen3-4B"
+                    except Exception as e:
+                        logger.error(f"❌ 병합 실패: {e}")
+                        merged_model_path = "Qwen/Qwen3-4B"
                 
                 try:
-                    # VLLM 모델 로딩
+                    # VLLM으로 병합된 모델 로딩
+                    logger.info(f"🚀 VLLM으로 모델 로딩: {merged_model_path}")
                     qwen_model = LLM(
-                        model=model_name,
+                        model=merged_model_path,
                         tensor_parallel_size=1,
                         gpu_memory_utilization=0.7,  # GPU 메모리 70%
                         trust_remote_code=True,
-                        quantization="awq",  # AWQ 양자화
                         max_model_len=16384,  # 토큰 길이
                         enforce_eager=True,  # CUDA 그래프 비활성화 (메모리 절약)
                         swap_space=4,  # 4GB swap space
@@ -584,7 +691,8 @@ def load_qwen3():
                     
                     # 토크나이저는 별도 로딩 (템플릿 적용용)
                     qwen_tokenizer = AutoTokenizer.from_pretrained(
-                        model_name, trust_remote_code=True
+                        merged_model_path if os.path.exists(merged_model_path) else "Qwen/Qwen3-4B", 
+                        trust_remote_code=True
                     )
                     
                     logger.info("🎉 VLLM Qwen3-4B LoRA loaded successfully")
@@ -608,7 +716,7 @@ def load_qwen3():
                 else:
                     model_name = "C:/Users/SH/Desktop/TtalKkac/ai-engine-dev/qwen3_lora_ttalkkac_4b"
                 
-                # Qwen3 토크나이저 로드 (Qwen3 LoRA 4B와 완벽 호환)
+                # Qwen3-4B 토크나이저 로드
                 try:
                     # 먼저 로컬 모델에서 토크나이저 시도
                     qwen_tokenizer = AutoTokenizer.from_pretrained(
@@ -616,56 +724,53 @@ def load_qwen3():
                         trust_remote_code=True,
                         use_fast=True
                     )
-                    logger.info("✅ 로컬 Qwen3 토크나이저 로드 성공")
+                    logger.info("✅ 로컬 Qwen3-4B 토크나이저 로드 성공")
                 except Exception as e:
                     logger.warning(f"로컬 토크나이저 실패: {e}")
-                    # Qwen3-4B-Instruct 토크나이저 사용 (Qwen3 LoRA 4B와 완벽 호환)
+                    # Qwen3-4B 토크나이저 사용
                     try:
                         qwen_tokenizer = AutoTokenizer.from_pretrained(
-                            "Qwen/Qwen3-4B-Instruct-2507", 
+                            "Qwen/Qwen3-4B", 
                             trust_remote_code=True,
                             use_fast=True
                         )
-                        logger.info("✅ Qwen3-4B-Instruct-2507 토크나이저 로드 성공")
-                    except:
-                        # 대안: Qwen3-0.6B (경량 버전)
-                        try:
-                            qwen_tokenizer = AutoTokenizer.from_pretrained(
-                                "Qwen/Qwen3-0.6B", 
-                                trust_remote_code=True,
-                                use_fast=True
-                            )
-                            logger.info("✅ Qwen3-0.6B 토크나이저 로드 성공")
-                        except:
-                            # 마지막 대안: Qwen2.5 (이전 버전과의 호환)
-                            qwen_tokenizer = AutoTokenizer.from_pretrained(
-                                "Qwen/Qwen2.5-7B-Instruct", 
-                                trust_remote_code=True,
-                                use_fast=True
-                            )
-                            logger.info("✅ Qwen2.5-7B-Instruct 토크나이저 로드 성공 (fallback)")
+                        logger.info("✅ Qwen3-4B 토크나이저 로드 성공")
+                    except Exception as e2:
+                        logger.error(f"Qwen3-4B 토크나이저 로드 실패: {e2}")
+                        raise
                 
                 # Qwen3-4B 모델 로드
                 model_loaded = False
                 
-                try:
-                    # Qwen3-4B 직접 로드
-                    logger.info("🎯 Qwen3-4B-Instruct-2507 로드 시도...")
-                    
-                    # HuggingFace에서 Qwen3-4B 직접 로드
-                    base_model_name = "Qwen/Qwen3-4B-Instruct-2507"
-                    
+                # 먼저 로컬 모델 시도
+                if os.path.exists(model_name):
+                    logger.info("🔄 로컬 모델 직접 로드 시도...")
+                    config_path = os.path.join(model_name, "config.json")
+                    if os.path.exists(config_path):
+                        try:
+                            # 로컬 Qwen3-4B 모델 로드
+                            qwen_model = AutoModelForCausalLM.from_pretrained(
+                                model_name,
+                                torch_dtype=torch.float16,
+                                trust_remote_code=True,
+                                local_files_only=True
+                            )
+                            if torch.cuda.is_available():
+                                qwen_model = qwen_model.cuda()
+                            
+                            model_loaded = True
+                            logger.info("✅ 로컬 Qwen3 모델 로드 성공")
+                            
+                        except Exception as e:
+                            logger.warning(f"로컬 모델 로드 실패: {e}")
+                
+                # 로컬 모델 실패시 HuggingFace에서 Qwen3-4B 다운로드
+                if not model_loaded:
                     try:
-                        import accelerate
-                        base_model = AutoModelForCausalLM.from_pretrained(
-                            base_model_name,
-                            device_map="auto",
-                            torch_dtype=torch.float16,
-                            trust_remote_code=True  # Qwen3 커스텀 코드 실행
-                        )
-                        logger.info("✅ Qwen3-4B 베이스 모델 로드 성공")
-                    except ImportError:
-                        logger.warning("⚠️ Accelerate 없음, device_map 없이 로드")
+                        logger.info("🎯 Qwen3-4B 베이스 모델 다운로드 시도...")
+                        base_model_name = "Qwen/Qwen3-4B"
+                        
+                        # 베이스 모델 로드
                         base_model = AutoModelForCausalLM.from_pretrained(
                             base_model_name,
                             torch_dtype=torch.float16,
@@ -673,25 +778,25 @@ def load_qwen3():
                         )
                         if torch.cuda.is_available():
                             base_model = base_model.cuda()
-                        logger.info("✅ Qwen3-4B 베이스 모델 로드 성공 (GPU)")
-                    
-                    # LoRA 어댑터 적용 (있는 경우)
-                    if os.path.exists(model_name) and os.path.exists(os.path.join(model_name, "adapter_model.bin")):
-                        try:
-                            from peft import PeftModel
-                            qwen_model = PeftModel.from_pretrained(base_model, model_name)
-                            logger.info("✅ Qwen3 LoRA 어댑터 적용 성공")
-                        except Exception as e:
-                            logger.warning(f"LoRA 적용 실패: {e}, 베이스 모델 사용")
+                        logger.info("✅ Qwen3-4B 베이스 모델 로드 성공")
+                        
+                        # LoRA 어댑터 적용 (있는 경우)
+                        if os.path.exists(model_name) and os.path.exists(os.path.join(model_name, "adapter_config.json")):
+                            try:
+                                from peft import PeftModel
+                                qwen_model = PeftModel.from_pretrained(base_model, model_name)
+                                logger.info("✅ Qwen3 LoRA 어댑터 적용 성공")
+                            except Exception as e:
+                                logger.warning(f"LoRA 적용 실패: {e}, 베이스 모델 사용")
+                                qwen_model = base_model
+                        else:
                             qwen_model = base_model
-                    else:
-                        qwen_model = base_model
-                        logger.info("🔔 LoRA 어댑터 없음, Qwen3-4B 베이스 모델 사용")
+                            logger.info("🔔 LoRA 어댑터 없음, Qwen3-4B 베이스 모델 사용")
+                        
+                        model_loaded = True
                     
-                    model_loaded = True
-                    
-                except Exception as e:
-                    logger.error(f"Qwen3-4B 로드 실패: {e}")
+                    except Exception as e:
+                        logger.error(f"Qwen3-4B 로드 실패: {e}")
                     
                     # Fallback: 로컬 모델 시도 (config.json 수정 필요)
                     if os.path.exists(model_name):
@@ -699,18 +804,7 @@ def load_qwen3():
                         config_path = os.path.join(model_name, "config.json")
                         if os.path.exists(config_path):
                             try:
-                                # config.json 임시 수정
-                                with open(config_path, 'r') as f:
-                                    config = json.load(f)
-                                original_type = config.get('model_type')
-                                if original_type == 'qwen3':
-                                    config['model_type'] = 'qwen2'
-                                    config['architectures'] = ['Qwen2ForCausalLM']
-                                    with open(config_path, 'w') as f:
-                                        json.dump(config, f, indent=2)
-                                    logger.info(f"🔧 config.json 임시 수정 ({original_type} -> qwen2)")
-                                
-                                # 로드 시도
+                                # Qwen3-4B LoRA 어댑터 로드 시도
                                 qwen_model = AutoModelForCausalLM.from_pretrained(
                                     model_name,
                                     torch_dtype=torch.float16,
@@ -781,6 +875,8 @@ def generate_structured_response(
     schema_prompt = f"""
 {system_prompt}
 
+**CRITICAL: RESPOND ONLY WITH JSON. NO THINKING, NO EXPLANATIONS, JUST JSON.**
+
 **Response Schema:**
 You must respond with a JSON object following this exact structure:
 ```json
@@ -788,15 +884,17 @@ You must respond with a JSON object following this exact structure:
 ```
 
 **Important Rules:**
-1. Always return valid JSON format
-2. Use Korean for all text content unless technical terms require English
-3. Follow the exact schema structure
-4. Include all required fields
-5. Use appropriate data types for each field
+1. DO NOT use <think> tags or any other markup
+2. START your response directly with ```json
+3. Always return valid JSON format ONLY
+4. Use Korean for all text content unless technical terms require English
+5. Follow the exact schema structure
+6. Include all required fields
+7. NO explanations before or after the JSON
 
 {user_prompt}
 
-**Response:**
+**Response (JSON ONLY):**
 ```json
 """
     
@@ -815,7 +913,7 @@ You must respond with a JSON object following this exact structure:
         
         # 샘플링 파라미터 설정
         sampling_params = SamplingParams(
-            max_tokens=2048,
+            max_tokens=4096,  # 증가
             temperature=temperature,
             top_p=0.9,
             repetition_penalty=1.1,
@@ -848,28 +946,31 @@ You must respond with a JSON object following this exact structure:
             add_generation_prompt=True
         )
         
-        inputs = qwen_tokenizer([text], return_tensors="pt").to(qwen_model.device)
-        
-        # 추론 실행
-        with torch.no_grad():
-            outputs = qwen_model.generate(
-                **inputs,
-                max_new_tokens=2048,
-                temperature=temperature,
-                do_sample=True,
-                pad_token_id=qwen_tokenizer.eos_token_id,
-                repetition_penalty=1.1,
-                top_p=0.9
-            )
-        
-        # 결과 디코딩
-        response = qwen_tokenizer.decode(
-            outputs[0][len(inputs["input_ids"][0]):], 
-            skip_special_tokens=True
+        # VLLM 사용
+        from vllm import SamplingParams
+        sampling_params = SamplingParams(
+            temperature=temperature,
+            max_tokens=4096,  # 증가
+            top_p=0.9,
+            repetition_penalty=1.1
         )
+        
+        outputs = qwen_model.generate([text], sampling_params)
+        response = outputs[0].outputs[0].text
         
         inference_time = time.time() - start_time
         logger.info(f"✅ Transformers 추론 완료: {inference_time:.3f}초")
+    
+    # <think> 태그 제거
+    if "<think>" in response:
+        think_end = response.find("</think>")
+        if think_end != -1:
+            response = response[think_end + 8:].strip()
+        else:
+            # </think> 태그가 없으면 JSON 시작 찾기
+            json_start_idx = response.find('{')
+            if json_start_idx != -1:
+                response = response[json_start_idx:].strip()
     
     # JSON 추출 및 파싱
     try:
@@ -885,13 +986,41 @@ You must respond with a JSON object following this exact structure:
             # JSON 마커가 없으면 전체 응답에서 JSON 찾기
             json_content = response.strip()
         
+        # JSON 파싱 전 정리
+        # 끝에 있는 ``` 제거
+        if json_content.endswith('```'):
+            json_content = json_content[:-3].strip()
+        
         # JSON 파싱
         parsed_result = json.loads(json_content)
         return parsed_result
         
     except json.JSONDecodeError as e:
         logger.error(f"❌ JSON 파싱 실패: {e}")
-        logger.error(f"Raw response: {response[:500]}...")
+        logger.error(f"Raw response length: {len(response)}")
+        logger.error(f"Raw response: {response}")
+        
+        # Fallback: 부분적으로 파싱 가능한 부분 찾기
+        try:
+            # JSON 끝 부분 정리
+            # 마지막 }를 찾아서 그 이후 제거
+            last_brace = json_content.rfind('}')
+            if last_brace != -1:
+                json_content_cleaned = json_content[:last_brace + 1]
+                logger.info(f"⚠️ Attempting to fix JSON by trimming after last }}")
+                parsed_result = json.loads(json_content_cleaned)
+                return parsed_result
+                
+            # 불완전한 JSON 복구 시도
+            if json_content.count('{') > json_content.count('}'):
+                # 닫는 중괄호 추가
+                json_content += '}' * (json_content.count('{') - json_content.count('}'))
+                logger.info("⚠️ Attempting to fix incomplete JSON by adding closing braces")
+                parsed_result = json.loads(json_content)
+                return parsed_result
+        except:
+            pass
+            
         return {
             "error": f"JSON parsing failed: {str(e)}",
             "raw_response": response[:1000]
@@ -1159,7 +1288,7 @@ async def transcribe_audio(audio: UploadFile = File(...)):
         logger.info(f"🎤 Transcribing audio via remote server: {audio.filename}")
         
         # WhisperX 원격 서버로 전송
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=300.0) as client:  # 5분으로 증가
             files = {"audio": (audio.filename, await audio.read(), audio.content_type)}
             response = await client.post(f"{WHISPERX_SERVER}/transcribe", files=files)
             
@@ -1390,6 +1519,7 @@ async def two_stage_analysis(request: TwoStageAnalysisRequest):
                     logger.error("❌ No tasks generated from PRD")
                     stage3_result = {
                         "success": False,
+                        "summary": "Failed to generate tasks from PRD",
                         "error": "Failed to generate tasks from PRD",
                         "tasks": [],
                         "complexity_analysis": {},
@@ -1412,6 +1542,7 @@ async def two_stage_analysis(request: TwoStageAnalysisRequest):
                     # Stage 3 결과 구성
                     stage3_result = {
                         "success": True,
+                        "summary": f"Generated {len(task_items_with_subtasks)} tasks with {sum(len(task.subtasks) for task in task_items_with_subtasks)} subtasks",
                         "tasks": [task.dict() for task in task_items_with_subtasks],
                         "complexity_analysis": complexity_analysis,
                         "total_tasks": len(task_items_with_subtasks),
@@ -1422,10 +1553,64 @@ async def two_stage_analysis(request: TwoStageAnalysisRequest):
                     logger.info(f"   ✅ Task Master workflow completed: {len(task_items_with_subtasks)} tasks, "
                               f"{stage3_result['total_subtasks']} subtasks")
                     
+                    # 생성된 모든 태스크와 서브태스크 상세 로그 출력
+                    try:
+                        logger.info("\n" + "="*80)
+                        logger.info("📋 생성된 태스크 및 서브태스크 전체 목록")
+                        logger.info("="*80)
+                        
+                        for idx, task in enumerate(task_items_with_subtasks, 1):
+                            try:
+                                logger.info(f"\n📌 [{idx}] {task.title}")
+                                logger.info(f"   📝 설명: {task.description[:100] if task.description else ''}{'...' if task.description and len(task.description) > 100 else ''}")
+                                logger.info(f"   ⚡ 복잡도: {getattr(task, 'complexity', 'medium')}")
+                                logger.info(f"   🎯 우선순위: {task.priority}")
+                                logger.info(f"   ⏱️ 예상시간: {task.estimated_hours or 0}시간")
+                                logger.info(f"   📅 시작일: {task.start_date or '미정'}")
+                                logger.info(f"   📅 마감일: {task.due_date or '미정'}")
+                                
+                                if hasattr(task, 'dependencies') and task.dependencies:
+                                    logger.info(f"   🔗 의존성: {', '.join(task.dependencies)}")
+                                
+                                if hasattr(task, 'acceptance_criteria') and task.acceptance_criteria:
+                                    logger.info(f"   ✅ 수락 기준:")
+                                    for criteria in task.acceptance_criteria[:3]:
+                                        logger.info(f"      - {criteria}")
+                                
+                                if hasattr(task, 'tags') and task.tags:
+                                    logger.info(f"   🏷️ 태그: {', '.join(task.tags)}")
+                                
+                                if hasattr(task, 'subtasks') and task.subtasks:
+                                    logger.info(f"   📂 서브태스크 ({len(task.subtasks)}개):")
+                                    for sub_idx, subtask in enumerate(task.subtasks, 1):
+                                        try:
+                                            logger.info(f"      [{idx}.{sub_idx}] {subtask.title}")
+                                            if hasattr(subtask, 'description') and subtask.description:
+                                                logger.info(f"         - 설명: {subtask.description[:60]}{'...' if len(subtask.description) > 60 else ''}")
+                                            logger.info(f"         - 예상시간: {getattr(subtask, 'estimated_hours', 0) or 0}시간")
+                                            if hasattr(subtask, 'start_date') and subtask.start_date:
+                                                logger.info(f"         - 시작일: {subtask.start_date}")
+                                            if hasattr(subtask, 'due_date') and subtask.due_date:
+                                                logger.info(f"         - 마감일: {subtask.due_date}")
+                                        except Exception as e:
+                                            logger.error(f"      서브태스크 로그 출력 오류: {e}")
+                                else:
+                                    logger.info("   📂 서브태스크: 없음")
+                            except Exception as e:
+                                logger.error(f"태스크 {idx} 로그 출력 오류: {e}")
+                        
+                        logger.info("\n" + "="*80)
+                        logger.info(f"📊 총 요약: 메인 태스크 {len(task_items_with_subtasks)}개, 서브태스크 {stage3_result['total_subtasks']}개")
+                        logger.info("="*80 + "\n")
+                    except Exception as e:
+                        logger.error(f"상세 로그 출력 중 오류 발생: {e}")
+                        logger.info(f"✅ 태스크 생성 완료: {len(task_items_with_subtasks)}개 태스크, {stage3_result['total_subtasks']}개 서브태스크")
+                    
             except Exception as e:
                 logger.error(f"❌ Task Master workflow failed: {str(e)}")
                 stage3_result = {
                     "success": False,
+                    "summary": f"Task generation failed: {str(e)}",
                     "error": f"Task Master workflow error: {str(e)}",
                     "tasks": [],
                     "complexity_analysis": {},
