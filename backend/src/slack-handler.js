@@ -2606,11 +2606,15 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
   
   if (currentIndex === 0) {
     // 팀 정보 저장 후 첫 번째 멤버 정보 입력으로 이동
+    console.log('🟢 팀 정보 처리 시작 - currentIndex:', currentIndex);
+    
     const teamName = view.state.values.team_name_input.team_name.value;
     const teamSlug = view.state.values.team_slug_input.team_slug.value;
+    console.log('📝 팀 정보:', { teamName, teamSlug });
     
     // slug 유효성 검사
     if (!/^[a-z0-9-]+$/.test(teamSlug)) {
+      console.log('❌ 유효하지 않은 slug:', teamSlug);
       await ack({
         response_action: 'errors',
         errors: {
@@ -2620,6 +2624,8 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
       return;
     }
     
+    console.log('✅ slug 유효성 검사 통과');
+    
     metadata.teamName = teamName;
     metadata.teamSlug = teamSlug;
     metadata.currentIndex = 1;
@@ -2628,7 +2634,9 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
     // 첫 번째 멤버 정보 입력 모달로 업데이트
     const firstMember = members[0];
     const isAdmin = firstMember.id === currentUserId;
+    console.log('🔄 다음 멤버 정보:', { firstMember: firstMember?.name, isAdmin });
     
+    console.log('🚀 ack 응답 전송 시작');
     await ack({
       response_action: 'update',
       view: {
