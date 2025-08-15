@@ -2801,6 +2801,9 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
         ]
       };
     
+    // 디버깅: nextView 구조 확인
+    console.log('📋 nextView 전체 구조:', JSON.stringify(nextView, null, 2));
+    
     try {
       // views.update API를 사용하여 모달 업데이트
       await client.views.update({
@@ -2811,6 +2814,11 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
     } catch (updateError) {
       console.error('❌ 모달 업데이트 실패:', updateError);
       console.error('오류 상세:', updateError.message);
+      
+      // Slack API 에러 상세 정보 출력
+      if (updateError.data && updateError.data.response_metadata) {
+        console.error('📍 Slack API 에러 메시지:', JSON.stringify(updateError.data.response_metadata.messages, null, 2));
+      }
       
       // 오류 발생 시 채널에 메시지 전송
       await client.chat.postMessage({
