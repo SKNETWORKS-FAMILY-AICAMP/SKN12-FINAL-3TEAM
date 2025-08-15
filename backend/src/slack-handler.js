@@ -2603,8 +2603,12 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
       channelId,
       currentUserId 
     });
+    
+    console.log('🔍 currentIndex 타입:', typeof currentIndex, 'currentIndex 값:', currentIndex);
+    console.log('🔍 조건 체크: currentIndex === 0 ?', currentIndex === 0);
+    console.log('🔍 조건 체크: currentIndex == 0 ?', currentIndex == 0);
   
-  if (currentIndex === 0) {
+    if (currentIndex === 0) {
     // 팀 정보 저장 후 첫 번째 멤버 정보 입력으로 이동
     console.log('🟢 팀 정보 처리 시작 - currentIndex:', currentIndex);
     
@@ -2775,8 +2779,10 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
         ]
       }
     });
+    console.log('✅ 팀 정보 모달 업데이트 완료');
   } else {
     // 멤버 정보 저장 및 다음 멤버로 이동
+    console.log('🟡 멤버 정보 처리 - currentIndex:', currentIndex);
     const memberIndex = currentIndex - 1;
     const currentMember = members[memberIndex];
     
