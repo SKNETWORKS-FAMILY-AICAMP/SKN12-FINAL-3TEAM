@@ -270,9 +270,20 @@ app.get('/auth/notion/callback', async (req, res) => {
     
     // state 디코딩
     const stateData = JSON.parse(Buffer.from(state as string, 'base64').toString());
-    const { tenantId, userId } = stateData;
+    const { tenantId, tenantSlug, userId, slackUserId } = stateData;
     
-    console.log('🔄 Notion OAuth 콜백 처리:', { tenantId, userId });
+    console.log('🔄 Notion OAuth 콜백 처리:', { tenantId, tenantSlug, userId, slackUserId });
+    
+    // tenantSlug로 실제 tenant 찾기
+    let actualTenantId = tenantId;
+    if (tenantSlug && !tenantId) {
+      const tenant = await prisma.tenant.findUnique({
+        where: { slug: tenantSlug }
+      });
+      if (tenant) {
+        actualTenantId = tenant.id;
+      }
+    }
     
     // 토큰 교환
     const tokenResponse = await fetch('https://api.notion.com/v1/oauth/token', {
@@ -306,26 +317,34 @@ app.get('/auth/notion/callback', async (req, res) => {
       return Buffer.from(text).toString('base64');
     };
     
-    // Slack 사용자 ID로 실제 User 찾기 또는 생성
-    let user = await prisma.user.findFirst({
-      where: {
-        tenantId,
-        slackUserId: userId
-      }
-    });
-
-    if (!user) {
-      console.log('🆕 새 사용자 생성:', { tenantId, slackUserId: userId });
-      // 사용자가 없으면 새로 생성
-      user = await prisma.user.create({
-        data: {
-          tenantId,
-          slackUserId: userId,
-          email: `${userId}@slack.local`, // 임시 이메일
-          name: `Slack User ${userId}`,
-          role: 'MEMBER'
+    // 실제 User 찾기 (userId가 실제 UUID인 경우)
+    let user = null;
+    
+    // userId가 UUID 형식이면 직접 찾기
+    if (userId && userId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+      user = await prisma.user.findUnique({
+        where: { id: userId }
+      });
+    }
+    
+    // 못 찾았으면 slackUserId로 찾기
+    if (!user && (slackUserId || userId)) {
+      const searchId = slackUserId || userId;
+      user = await prisma.user.findFirst({
+        where: {
+          tenantId: actualTenantId,
+          slackUserId: searchId
         }
       });
+    }
+
+    if (!user) {
+      console.error('❌ 사용자를 찾을 수 없음:', { 
+        tenantId: actualTenantId, 
+        userId, 
+        slackUserId 
+      });
+      return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:3001'}/settings?notion=error&message=user_not_found`);
     }
 
     console.log('👤 사용자 확인됨:', { userId: user.id, slackUserId: user.slackUserId });
@@ -334,7 +353,7 @@ app.get('/auth/notion/callback', async (req, res) => {
     await prisma.integration.upsert({
       where: {
         tenantId_userId_serviceType: {
-          tenantId,
+          tenantId: actualTenantId,
           userId: user.id, // Slack ID가 아닌 실제 User UUID 사용
           serviceType: 'NOTION'
         }
@@ -350,7 +369,7 @@ app.get('/auth/notion/callback', async (req, res) => {
         }
       },
       create: {
-        tenantId,
+        tenantId: actualTenantId,
         userId: user.id, // Slack ID가 아닌 실제 User UUID 사용
         serviceType: 'NOTION',
         accessToken: encrypt(tokens.access_token),

@@ -1268,10 +1268,30 @@ app.action('integration_overflow', async ({ ack, body, client }) => {
     // Notion 연동 로직
     const userId = body.user.id;
     const channelId = body.channel?.id || body.container?.channel_id;
-    const tenantSlug = 'dev-tenant';
+    
+    // 실제 tenant 찾기
+    const { PrismaClient } = require('@prisma/client');
+    const prismaClient = new PrismaClient();
+    
+    const user = await prismaClient.user.findFirst({
+      where: { slackUserId: userId },
+      include: { tenant: true }
+    });
+    
+    if (!user) {
+      await client.chat.postMessage({
+        channel: channelId,
+        text: '❌ 사용자 정보를 찾을 수 없습니다. `/tk start`로 먼저 팀 설정을 완료해주세요.'
+      });
+      await prismaClient.$disconnect();
+      return;
+    }
+    
+    const tenantSlug = user.tenant.slug;
     const state = Buffer.from(JSON.stringify({
       tenantSlug,
-      userId,
+      userId: user.id,  // 실제 user.id 사용
+      slackUserId: userId,  // Slack user ID도 저장
       timestamp: Date.now()
     })).toString('base64');
     
