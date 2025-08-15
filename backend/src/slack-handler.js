@@ -2590,8 +2590,19 @@ app.action('setup_team_initial', async ({ ack, body, client }) => {
 
 // 팀 설정 모달 제출 처리
 app.view('setup_team_modal', async ({ ack, body, view, client }) => {
-  const metadata = JSON.parse(view.private_metadata);
-  const { members, currentUserId, channelId, currentIndex } = metadata;
+  console.log('🔵 setup_team_modal 제출 처리 시작');
+  console.log('View ID:', view?.id);
+  console.log('Callback ID:', view?.callback_id);
+  
+  try {
+    const metadata = JSON.parse(view.private_metadata);
+    const { members, currentUserId, channelId, currentIndex } = metadata;
+    console.log('📊 메타데이터:', { 
+      currentIndex, 
+      memberCount: members?.length,
+      channelId,
+      currentUserId 
+    });
   
   if (currentIndex === 0) {
     // 팀 정보 저장 후 첫 번째 멤버 정보 입력으로 이동
@@ -2927,6 +2938,15 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
         const { PrismaClient } = require('@prisma/client');
         const prismaClient = new PrismaClient();
         
+        // 중복 체크
+        const existingTenant = await prismaClient.tenant.findUnique({
+          where: { slug: metadata.teamSlug }
+        });
+        
+        if (existingTenant) {
+          throw new Error(`이미 사용 중인 팀 식별자입니다: ${metadata.teamSlug}`);
+        }
+        
         // 1. Tenant 생성
         const tenant = await prismaClient.tenant.create({
           data: {
@@ -3009,12 +3029,71 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
         });
       } catch (error) {
         console.error('팀 설정 저장 오류:', error);
+        console.error('오류 상세:', {
+          teamName: metadata.teamName,
+          teamSlug: metadata.teamSlug,
+          memberCount: metadata.memberData?.length,
+          errorStack: error.stack
+        });
+        
+        let errorMessage = '팀 설정 저장 중 오류가 발생했습니다.';
+        
+        if (error.message.includes('이미 사용 중인')) {
+          errorMessage = error.message + '\n다른 팀 식별자를 사용해주세요.';
+        } else if (error.code === 'P2002') {
+          errorMessage = '이미 존재하는 팀 정보입니다. 다른 팀 식별자를 사용해주세요.';
+        } else if (error.code === 'P2025') {
+          errorMessage = '데이터베이스 연결 오류가 발생했습니다. 잠시 후 다시 시도해주세요.';
+        } else {
+          errorMessage = `오류: ${error.message}`;
+        }
+        
         await client.chat.postMessage({
           channel: channelId,
-          text: `❌ 팀 설정 저장 중 오류가 발생했습니다: ${error.message}`
+          text: `❌ ${errorMessage}`,
+          blocks: [
+            {
+              type: 'section',
+              text: {
+                type: 'mrkdwn',
+                text: `❌ *팀 설정 오류*\n\n${errorMessage}`
+              }
+            },
+            {
+              type: 'actions',
+              elements: [
+                {
+                  type: 'button',
+                  text: {
+                    type: 'plain_text',
+                    text: '🔄 다시 시도',
+                    emoji: true
+                  },
+                  value: JSON.stringify({ 
+                    members: metadata.members,
+                    currentUserId: metadata.currentUserId,
+                    channelId: channelId
+                  }),
+                  action_id: 'setup_team_initial',
+                  style: 'primary'
+                }
+              ]
+            }
+          ]
         });
       }
     }
+  } catch (error) {
+    console.error('🔴 setup_team_modal 처리 중 오류:', error);
+    console.error('오류 스택:', error.stack);
+    
+    // 에러 발생 시에도 응답은 보내야 함
+    await ack({
+      response_action: 'errors',
+      errors: {
+        team_name_input: '처리 중 오류가 발생했습니다. 다시 시도해주세요.'
+      }
+    });
   }
 });
 
