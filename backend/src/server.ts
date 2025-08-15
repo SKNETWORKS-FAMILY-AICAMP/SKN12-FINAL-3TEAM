@@ -1600,10 +1600,25 @@ app.get('/api/integrations/status',
       let email: string;
       
       try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as any;
-        userId = decoded.userId;
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'ddalkkak_super_secret_jwt_key_production_2024') as any;
+        // userId 또는 id 둘 다 체크 (호환성)
+        userId = decoded.userId || decoded.id;
         email = decoded.email;
-        console.log('✅ JWT 디코딩 성공:', { userId, email });
+        console.log('✅ JWT 디코딩 성공:', { 
+          userId, 
+          email,
+          decodedKeys: Object.keys(decoded)
+        });
+        
+        if (!userId) {
+          console.log('❌ JWT에 userId가 없음:', decoded);
+          return res.status(401).json({ 
+            error: 'Invalid token - no userId',
+            slack: false, 
+            notion: false, 
+            jira: false 
+          });
+        }
       } catch (err) {
         console.log('❌ JWT 검증 실패:', err);
         return res.status(401).json({ 
