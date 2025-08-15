@@ -7,10 +7,17 @@ import { integrationAPI } from '../services/api';
 
 const Integration = () => {
   // 연동 상태 가져오기
-  const { data: integrationStatus } = useQuery({
+  const { data: integrationStatus, isLoading, error } = useQuery({
     queryKey: ['integrationStatus'],
     queryFn: integrationAPI.getStatus
   });
+  
+  // 디버깅용 로그
+  useEffect(() => {
+    console.log('🔍 Integration Status:', integrationStatus);
+    console.log('📡 Loading:', isLoading);
+    console.log('❌ Error:', error);
+  }, [integrationStatus, isLoading, error]);
 
   // 더미 데이터를 실제 API 데이터로 교체
   const [integrations, setIntegrations] = useState([

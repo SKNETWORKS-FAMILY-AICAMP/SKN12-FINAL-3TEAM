@@ -1589,13 +1589,16 @@ app.get('/api/integrations/status',
       
       // JWT 토큰에서 사용자 정보 추출
       const authHeader = req.headers.authorization;
+      console.log('🔐 Auth Header:', authHeader?.substring(0, 20) + '...');
+      
       if (authHeader && authHeader.startsWith('Bearer ')) {
         const token = authHeader.substring(7);
         try {
           const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as any;
           userId = decoded.userId;
+          console.log('✅ JWT 디코딩 성공:', { userId, email: decoded.email });
         } catch (err) {
-          console.log('JWT 검증 실패:', err);
+          console.log('❌ JWT 검증 실패:', err);
         }
       }
       
@@ -1633,7 +1636,12 @@ app.get('/api/integrations/status',
         jira: integrations.some((i: any) => i.serviceType === 'JIRA')
       };
       
-      console.log('연동 상태 결과:', status);
+      console.log('📊 연동 상태 결과:', { 
+        userId, 
+        tenantId, 
+        integrations: integrations.map(i => i.serviceType),
+        status 
+      });
 
       return res.json(status);
     } catch (error) {
