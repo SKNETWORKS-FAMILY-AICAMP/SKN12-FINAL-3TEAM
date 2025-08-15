@@ -1317,18 +1317,40 @@ app.action('integration_overflow', async ({ ack, body, client }) => {
         }
       ]
     });
+    
+    await prismaClient.$disconnect();
   } else if (selectedOption === 'connect_jira') {
     // JIRA 연동 로직
     const userId = body.user.id;
     const channelId = body.channel?.id || body.container?.channel_id;
-    const tenantSlug = 'dev-tenant';
+    
+    // 실제 tenant 찾기
+    const { PrismaClient } = require('@prisma/client');
+    const prismaClient = new PrismaClient();
+    
+    const user = await prismaClient.user.findFirst({
+      where: { slackUserId: userId },
+      include: { tenant: true }
+    });
+    
+    if (!user) {
+      await client.chat.postMessage({
+        channel: channelId,
+        text: '❌ 사용자 정보를 찾을 수 없습니다. `/tk start`로 먼저 팀 설정을 완료해주세요.'
+      });
+      await prismaClient.$disconnect();
+      return;
+    }
+    
+    const tenantSlug = user.tenant.slug;
     const state = Buffer.from(JSON.stringify({
       tenantSlug,
-      userId,
+      userId: user.id,  // 실제 user.id 사용
+      slackUserId: userId,  // Slack user ID도 저장
       timestamp: Date.now()
     })).toString('base64');
     
-    const authUrl = `${process.env.APP_URL || 'http://localhost:3500'}/auth/jira/${tenantSlug}?userId=${userId}&state=${state}`;
+    const authUrl = `${process.env.APP_URL || 'http://localhost:3500'}/auth/jira/${tenantSlug}?userId=${encodeURIComponent(userId)}&state=${encodeURIComponent(state)}`;
     
     await client.chat.postMessage({
       channel: channelId,
@@ -1350,6 +1372,8 @@ app.action('integration_overflow', async ({ ack, body, client }) => {
         }
       ]
     });
+    
+    await prismaClient.$disconnect();
   } else if (selectedOption === 'check_integrations') {
     // 연동 상태 확인
     try {
