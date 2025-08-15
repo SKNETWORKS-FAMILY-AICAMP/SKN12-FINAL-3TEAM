@@ -90,16 +90,33 @@ const Integration = () => {
   const executeAddIntegration = () => {
     if (!confirmData) return;
     
-    const tenantSlug = 'dev-tenant'; // 환경변수에서 가져올 예정
+    // localStorage에서 현재 사용자 정보 가져오기
+    const userStr = localStorage.getItem('user') || localStorage.getItem('currentUser');
+    let userId = null;
+    let tenantSlug = 'dev-tenant';
+    
+    if (userStr) {
+      try {
+        const user = JSON.parse(userStr);
+        userId = user.id;
+        // tenant slug도 가져올 수 있으면 가져오기
+        if (user.tenant && user.tenant.slug) {
+          tenantSlug = user.tenant.slug;
+        }
+      } catch (e) {
+        console.error('Failed to parse user data:', e);
+      }
+    }
+    
     let oauthUrl = '';
     
-    // 서비스별 OAuth URL 생성
+    // 서비스별 OAuth URL 생성 - 백엔드 라우트 형식에 맞춤
     switch (confirmData.name) {
       case '노션(Notion)':
-        oauthUrl = `${import.meta.env.VITE_API_BASE_URL}/auth/notion/${tenantSlug}`;
+        oauthUrl = `${import.meta.env.VITE_API_BASE_URL}/auth/notion/${tenantSlug}?userId=${userId || ''}`;
         break;
       case '지라(Jira)':
-        oauthUrl = `${import.meta.env.VITE_API_BASE_URL}/auth/jira/${tenantSlug}`;
+        oauthUrl = `${import.meta.env.VITE_API_BASE_URL}/auth/jira/${tenantSlug}?userId=${userId || ''}`;
         break;
       default:
         toast.error('지원하지 않는 서비스입니다.');
