@@ -1577,76 +1577,116 @@ app.get('/api/slack/inputs',
   }
 );
 
-// 연동 상태 조회 API
+// 연동 상태 조회 API - 로그인한 사용자의 연동 정보를 DB에서 직접 조회
 app.get('/api/integrations/status', 
-  tenantMiddleware.createDevTenant,
   async (req, res) => {
     try {
-      const tenantId = req.tenantId!;
-      
-      // 현재 사용자 찾기 (인증된 사용자 또는 슬랙 사용자)
-      let userId: string | undefined;
-      
       // JWT 토큰에서 사용자 정보 추출
       const authHeader = req.headers.authorization;
-      console.log('🔐 Auth Header:', authHeader?.substring(0, 20) + '...');
+      console.log('🔐 연동 상태 조회 - Auth Header 존재:', !!authHeader);
       
-      if (authHeader && authHeader.startsWith('Bearer ')) {
-        const token = authHeader.substring(7);
-        try {
-          const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as any;
-          userId = decoded.userId;
-          console.log('✅ JWT 디코딩 성공:', { userId, email: decoded.email });
-        } catch (err) {
-          console.log('❌ JWT 검증 실패:', err);
-        }
-      }
-      
-      // userId가 없으면 tenant 전체 연동 상태 반환
-      if (!userId) {
-        console.log('사용자 ID 없음, tenant 전체 연동 상태 조회');
-        const integrations = await prisma.integration.findMany({
-          where: { tenantId, isActive: true },
-          select: { serviceType: true }
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        console.log('❌ 인증 헤더 없음');
+        return res.status(401).json({ 
+          error: 'Unauthorized',
+          slack: false, 
+          notion: false, 
+          jira: false 
         });
-
-        const status = {
-          slack: integrations.some((i: any) => i.serviceType === 'SLACK'),
-          notion: integrations.some((i: any) => i.serviceType === 'NOTION'),
-          jira: integrations.some((i: any) => i.serviceType === 'JIRA')
-        };
-
-        return res.json(status);
       }
       
-      // 특정 사용자의 연동 상태 조회
-      console.log('사용자별 연동 상태 조회:', { userId, tenantId });
+      const token = authHeader.substring(7);
+      let userId: string;
+      let email: string;
+      
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as any;
+        userId = decoded.userId;
+        email = decoded.email;
+        console.log('✅ JWT 디코딩 성공:', { userId, email });
+      } catch (err) {
+        console.log('❌ JWT 검증 실패:', err);
+        return res.status(401).json({ 
+          error: 'Invalid token',
+          slack: false, 
+          notion: false, 
+          jira: false 
+        });
+      }
+      
+      // 로그인한 사용자의 정보 조회 (tenant 정보 포함)
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        include: { tenant: true }
+      });
+      
+      if (!user) {
+        console.log('❌ 사용자를 찾을 수 없음:', userId);
+        return res.status(404).json({ 
+          error: 'User not found',
+          slack: false, 
+          notion: false, 
+          jira: false 
+        });
+      }
+      
+      console.log('👤 사용자 정보:', { 
+        userId: user.id, 
+        email: user.email, 
+        tenantId: user.tenantId,
+        tenantName: user.tenant?.name 
+      });
+      
+      // 해당 사용자의 연동 상태를 DB에서 직접 조회
       const integrations = await prisma.integration.findMany({
         where: { 
-          tenantId, 
-          userId,
+          userId: user.id,
+          tenantId: user.tenantId,
           isActive: true 
         },
-        select: { serviceType: true }
+        select: { 
+          serviceType: true,
+          createdAt: true,
+          config: true
+        }
       });
-
+      
+      console.log('🔗 조회된 연동 정보:', integrations.map(i => ({
+        service: i.serviceType,
+        createdAt: i.createdAt
+      })));
+      
+      // 연동 상태 객체 생성
       const status = {
-        slack: integrations.some((i: any) => i.serviceType === 'SLACK'),
-        notion: integrations.some((i: any) => i.serviceType === 'NOTION'),
-        jira: integrations.some((i: any) => i.serviceType === 'JIRA')
+        slack: integrations.some(i => i.serviceType === 'SLACK'),
+        notion: integrations.some(i => i.serviceType === 'NOTION'),
+        jira: integrations.some(i => i.serviceType === 'JIRA'),
+        // 추가 정보
+        details: {
+          slack: integrations.find(i => i.serviceType === 'SLACK') ? {
+            connected: true,
+            connectedAt: integrations.find(i => i.serviceType === 'SLACK')?.createdAt
+          } : { connected: false },
+          notion: integrations.find(i => i.serviceType === 'NOTION') ? {
+            connected: true,
+            connectedAt: integrations.find(i => i.serviceType === 'NOTION')?.createdAt,
+            workspaceName: (integrations.find(i => i.serviceType === 'NOTION')?.config as any)?.workspaceName
+          } : { connected: false },
+          jira: integrations.find(i => i.serviceType === 'JIRA') ? {
+            connected: true,
+            connectedAt: integrations.find(i => i.serviceType === 'JIRA')?.createdAt,
+            siteName: (integrations.find(i => i.serviceType === 'JIRA')?.config as any)?.site_name
+          } : { connected: false }
+        }
       };
       
-      console.log('📊 연동 상태 결과:', { 
-        userId, 
-        tenantId, 
-        integrations: integrations.map(i => i.serviceType),
-        status 
-      });
-
+      console.log('✅ 연동 상태 응답:', status);
       return res.json(status);
+      
     } catch (error) {
-      console.error('Integration status error:', error);
+      console.error('❌ Integration status error:', error);
       return res.status(500).json({ 
+        error: 'Internal server error',
         slack: false, 
         notion: false, 
         jira: false 
