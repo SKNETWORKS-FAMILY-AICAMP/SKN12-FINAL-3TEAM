@@ -3312,7 +3312,7 @@ app.get('/tasks', async (req, res) => {
     let userId = null;
     if (token) {
       try {
-        const decoded = jsonwebtoken.verify(token, process.env.JWT_SECRET || 'ddalkkak_super_secret_jwt_key_production_2024') as any;
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'ddalkkak_super_secret_jwt_key_production_2024') as any;
         userId = decoded.id;
         console.log('🔑 토큰에서 추출한 사용자 ID:', userId);
       } catch (err) {
