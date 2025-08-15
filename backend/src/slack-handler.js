@@ -1339,11 +1339,8 @@ app.action('integration_overflow', async ({ ack, body, client }) => {
       const user = await prismaClient.user.findFirst({
         where: { slackUserId: body.user.id },
         include: { 
-          tenant: {
-            include: { 
-              integrations: true
-            }
-          }
+          tenant: true,
+          integrations: true  // user의 integrations 직접 가져오기
         }
       });
       
@@ -1368,9 +1365,9 @@ app.action('integration_overflow', async ({ ack, body, client }) => {
         return;
       }
       
-      // integrations 배열에서 서비스 타입별로 필터링
-      const notionIntegration = user.tenant?.integrations?.find(i => i.serviceType === 'NOTION' && i.isActive);
-      const jiraIntegration = user.tenant?.integrations?.find(i => i.serviceType === 'JIRA' && i.isActive);
+      // user의 integrations에서 서비스 타입별로 필터링
+      const notionIntegration = user.integrations?.find(i => i.serviceType === 'NOTION' && i.isActive);
+      const jiraIntegration = user.integrations?.find(i => i.serviceType === 'JIRA' && i.isActive);
       
       const notionStatus = notionIntegration ? '✅ 연동됨' : '❌ 미연동';
       const jiraStatus = jiraIntegration ? '✅ 연동됨' : '❌ 미연동';

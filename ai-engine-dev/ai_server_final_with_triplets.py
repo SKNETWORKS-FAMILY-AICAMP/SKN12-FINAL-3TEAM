@@ -1133,7 +1133,7 @@ async def lifespan(app: FastAPI):
                 start_time = time.time()
                 logger.info("🎤 Checking WhisperX remote server...")
                 try:
-                    async with httpx.AsyncClient(timeout=5.0) as client:
+                    async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
                         response = await client.get(f"{WHISPERX_SERVER}/health")
                         if response.status_code == 200:
                             logger.info("✅ WhisperX server connected")
@@ -1262,7 +1262,7 @@ async def health_check():
     whisperx_loaded = False
     try:
         import httpx
-        with httpx.Client(timeout=2.0) as client:
+        with httpx.Client(timeout=httpx.Timeout(5.0)) as client:
             response = client.get(f"{WHISPERX_SERVER}/health")
             if response.status_code == 200:
                 whisperx_loaded = response.json().get("whisperx_loaded", False)
@@ -1288,7 +1288,31 @@ async def transcribe_audio(audio: UploadFile = File(...)):
         logger.info(f"🎤 Transcribing audio via remote server: {audio.filename}")
         
         # WhisperX 원격 서버로 전송
-        async with httpx.AsyncClient(timeout=300.0) as client:  # 5분으로 증가
+        # 타임아웃 설정: connect=30초, read=20분, write=60초, pool=30초
+        timeout = httpx.Timeout(
+            connect=30.0,
+            read=1200.0,  # 20분
+            write=60.0,
+            pool=30.0
+        )
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            # 먼저 서버 상태 확인
+            try:
+                health_response = await client.get(f"{WHISPERX_SERVER}/health")
+                if health_response.status_code != 200:
+                    logger.error(f"❌ WhisperX server not healthy: {health_response.status_code}")
+                    return TranscriptionResponse(
+                        success=False,
+                        error="WhisperX server not available"
+                    )
+            except Exception as e:
+                logger.error(f"❌ Cannot connect to WhisperX server: {e}")
+                return TranscriptionResponse(
+                    success=False,
+                    error=f"Cannot connect to WhisperX server: {str(e)}"
+                )
+            
+            # 오디오 파일 전송
             files = {"audio": (audio.filename, await audio.read(), audio.content_type)}
             response = await client.post(f"{WHISPERX_SERVER}/transcribe", files=files)
             
