@@ -2657,10 +2657,6 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
     
     console.log('🚀 ack 응답 전송 시작');
     
-    // 먼저 빈 ack 보내기
-    await ack();
-    console.log('✅ ack 완료');
-    
     // 모달 업데이트를 위한 view 객체 생성
     const nextView = {
         type: 'modal',
@@ -2801,13 +2797,10 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
         ]
       };
     
-    // 디버깅: nextView 구조 확인
-    console.log('📋 nextView 전체 구조:', JSON.stringify(nextView, null, 2));
-    
     try {
-      // views.update API를 사용하여 모달 업데이트
-      await client.views.update({
-        view_id: view.id,
+      // ack에 직접 view 업데이트 포함
+      await ack({
+        response_action: 'update',
         view: nextView
       });
       console.log('✅ 팀 정보 모달 업데이트 완료');
