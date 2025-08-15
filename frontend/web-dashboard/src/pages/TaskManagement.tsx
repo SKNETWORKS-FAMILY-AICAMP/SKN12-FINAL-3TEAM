@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Search, Plus, Calendar, CheckCircle, Clock, Star, Edit3, Trash2, FileText } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'; // ✅ 추가
@@ -412,7 +412,7 @@ const TaskManagement = () => {
           <div className="space-y-3">
             {filteredTasks.map((task) => {
               // 마감일 지났는지 확인 (완료 제외)
-              const isOverdue = task.status !== '완료' && new Date(task.dueDate) < new Date();
+              const isOverdue = task.status !== 'DONE' && task.dueDate && new Date(task.dueDate) < new Date();
               
               return (
                 <motion.div 
@@ -516,7 +516,7 @@ const TaskManagement = () => {
                       name="title"
                       type="text"
                       placeholder="업무명을 입력하세요"
-                      defaultValue={editingTaskForModal?.name || ''}
+                      defaultValue={editingTaskForModal?.title || ''}
                       className="w-full p-2 border border-gray-300 rounded-lg"
                       required
                     />
@@ -527,7 +527,7 @@ const TaskManagement = () => {
                       name="assignee"
                       type="text"
                       placeholder="담당자를 입력하세요"
-                      defaultValue={editingTaskForModal?.assignee || ''}
+                      defaultValue={editingTaskForModal?.assignee?.name || editingTaskForModal?.assigneeId || ''}
                       className="w-full p-2 border border-gray-300 rounded-lg"
                     />
                   </div>
@@ -546,9 +546,9 @@ const TaskManagement = () => {
                       name="status" 
                       className="w-full p-2 border border-gray-300 rounded-lg" 
                       defaultValue={
-                        editingTaskForModal?.status === '예정' ? 'todo' :
-                        editingTaskForModal?.status === '진행 중' ? 'progress' :
-                        editingTaskForModal?.status === '완료' ? 'done' : 'todo'
+                        editingTaskForModal?.status === 'TODO' ? 'todo' :
+                        editingTaskForModal?.status === 'IN_PROGRESS' ? 'progress' :
+                        editingTaskForModal?.status === 'DONE' ? 'done' : 'todo'
                       }
                       required
                     >
@@ -871,7 +871,7 @@ const TaskManagement = () => {
                             </div>
                           )}
                           {tasksForDay.slice(0, 2).map(task => {
-                            const taskDate = new Date(task.dueDate);
+                            const taskDate = task.dueDate ? new Date(task.dueDate) : new Date();
                             const today = new Date();
                             today.setHours(0, 0, 0, 0);
                             const isOverdue = taskDate < today;
@@ -886,7 +886,7 @@ const TaskManagement = () => {
                                 className={`text-xs p-1 rounded cursor-pointer truncate transition-all hover:scale-105 ${
                                   isOverdue
                                     ? 'bg-red-100 text-red-700 border border-red-200'
-                                    : task.status === '완료'
+                                    : task.status === 'DONE'
                                     ? 'bg-green-100 text-green-700 border border-green-200'
                                     : 'bg-blue-100 text-blue-700 border border-blue-200'
                                 }`}

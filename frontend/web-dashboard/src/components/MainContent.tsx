@@ -403,7 +403,7 @@ const MainContent = () => {
   const handleDragStart = (event: DragStartEvent) => {
     const { active } = event;
     // 현재 드래그되는 아이템 찾기
-    for (const [columnId, column] of Object.entries(columns)) {
+    for (const [, column] of Object.entries(columns)) {
       const task = column.items.find(item => item.id === active.id);
       if (task) {
         setActiveTask(task);
@@ -547,11 +547,11 @@ const MainContent = () => {
       const newTaskData = {
         title: taskData.title,
         description: taskData.description || '',
-        status: taskData.status === 'todo' ? 'TODO' : 
+        status: (taskData.status === 'todo' ? 'TODO' : 
                 taskData.status === 'progress' ? 'IN_PROGRESS' : 
-                taskData.status === 'done' ? 'DONE' : 'TODO',
-        priority: taskData.priority === '상' ? 'HIGH' : 
-                  taskData.priority === '하' ? 'LOW' : 'MEDIUM',
+                taskData.status === 'done' ? 'DONE' : 'TODO') as 'TODO' | 'IN_PROGRESS' | 'DONE',
+        priority: (taskData.priority === '상' ? 'HIGH' : 
+                  taskData.priority === '하' ? 'LOW' : 'MEDIUM') as 'HIGH' | 'MEDIUM' | 'LOW',
         dueDate: taskData.dueDate || undefined,
         assigneeId: taskData.assignee && taskData.assignee !== '' ? taskData.assignee : undefined
       };

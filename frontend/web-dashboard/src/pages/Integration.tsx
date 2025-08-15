@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Check, Settings, MoreHorizontal, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -7,7 +7,7 @@ import { integrationAPI } from '../services/api';
 
 const Integration = () => {
   // 연동 상태 가져오기
-  const { data: integrationStatus, isLoading } = useQuery({
+  const { data: integrationStatus } = useQuery({
     queryKey: ['integrationStatus'],
     queryFn: integrationAPI.getStatus
   });
@@ -60,18 +60,18 @@ const Integration = () => {
 
   // 확인 모달 상태 관리
   const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [confirmAction, setConfirmAction] = useState(null); // 'add' or 'remove'
-  const [confirmData, setConfirmData] = useState(null); // 선택된 integration 정보
+  const [confirmAction, setConfirmAction] = useState<'add' | 'remove' | null>(null);
+  const [confirmData, setConfirmData] = useState<any>(null);
 
   // 설정 모달 상태 관리
   const [showSettingsModal, setShowSettingsModal] = useState(false);
-  const [settingsData, setSettingsData] = useState(null);
+  const [settingsData, setSettingsData] = useState<any>(null);
 
   // 더보기 메뉴 상태 관리
-  const [showMoreMenu, setShowMoreMenu] = useState(null); // integration id or null
+  const [showMoreMenu, setShowMoreMenu] = useState<number | null>(null);
 
   // 연동 추가 확인 모달 열기
-  const handleAddIntegration = (integrationId) => {
+  const handleAddIntegration = (integrationId: number) => {
     const integration = integrations.find(i => i.id === integrationId);
     setConfirmData(integration);
     setConfirmAction('add');
@@ -79,7 +79,7 @@ const Integration = () => {
   };
 
   // 연동 해지 확인 모달 열기
-  const handleRemoveIntegration = (integrationId) => {
+  const handleRemoveIntegration = (integrationId: number) => {
     const integration = integrations.find(i => i.id === integrationId);
     setConfirmData(integration);
     setConfirmAction('remove');
@@ -175,7 +175,7 @@ const Integration = () => {
   };
 
   // 설정 모달 열기
-  const handleSettings = (integrationId) => {
+  const handleSettings = (integrationId: number) => {
     const integration = integrations.find(i => i.id === integrationId);
     setSettingsData(integration);
     setShowSettingsModal(true);
@@ -188,18 +188,18 @@ const Integration = () => {
   };
 
   // 더보기 메뉴 토글
-  const toggleMoreMenu = (integrationId) => {
+  const toggleMoreMenu = (integrationId: number) => {
     setShowMoreMenu(showMoreMenu === integrationId ? null : integrationId);
   };
 
   // 연결 테스트
-  const testConnection = (integration) => {
+  const testConnection = (integration: any) => {
     toast.success(`${integration.name} 연결 테스트가 성공했습니다! ✅`);
     setShowMoreMenu(null);
   };
 
   // 동기화 실행
-  const syncNow = (integration) => {
+  const syncNow = (integration: any) => {
     const now = new Date().toLocaleString('ko-KR', {
       year: 'numeric',
       month: '2-digit', 
@@ -216,15 +216,16 @@ const Integration = () => {
   };
 
   // 동기화 기록 보기
-  const viewSyncHistory = (integration) => {
+  const viewSyncHistory = (integration: any) => {
     toast.success(`${integration.name} 동기화 기록을 확인합니다! 📋`);
     setShowMoreMenu(null);
   };
 
   // 외부 클릭 시 메뉴 닫기
   useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (showMoreMenu && !event.target.closest('.dropdown-menu')) {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (showMoreMenu && target && !target.closest('.dropdown-menu')) {
         setShowMoreMenu(null);
       }
     };

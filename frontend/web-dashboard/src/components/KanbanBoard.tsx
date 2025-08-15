@@ -16,9 +16,6 @@ import {
   SortableContext,
   verticalListSortingStrategy,
   arrayMove,
-  insertAtIndex,
-  removeAtIndex,
-  rectIntersection,
 } from '@dnd-kit/sortable';
 import {
   useSortable,
@@ -52,7 +49,7 @@ const TaskCard: React.FC<{
   isInsertAfter?: boolean;
   shouldPushDown?: boolean;
   index: number;
-}> = ({ task, isDragging, isOver = false, isInsertAfter = false, shouldPushDown = false, index }) => {
+}> = ({ task, isDragging, isOver = false, isInsertAfter = false, shouldPushDown = false }) => {
   const {
     attributes,
     listeners,
@@ -543,7 +540,7 @@ const KanbanBoard: React.FC = () => {
           duration: 200,
           easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)',
         }}>
-          {activeTask ? <TaskCard task={activeTask} isDragging /> : null}
+          {activeTask ? <TaskCard task={activeTask} isDragging index={0} /> : null}
         </DragOverlay>
       </DndContext>
     </div>

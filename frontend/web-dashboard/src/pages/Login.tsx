@@ -1,15 +1,9 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
-  Eye, 
-  EyeOff, 
-  Mail, 
-  Lock, 
   ArrowRight, 
-  Brain,
   CheckCircle,
-  AlertCircle,
   Play
 } from 'lucide-react';
 import ttalkkakLogo from '../assets/logo.png';

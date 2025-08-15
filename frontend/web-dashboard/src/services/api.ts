@@ -1,5 +1,4 @@
 import axios from 'axios';
-import type { AxiosResponse } from 'axios';
 import { io, Socket } from 'socket.io-client';
 
 // API 기본 설정
@@ -161,7 +160,7 @@ export const dashboardAPI = {
   getStats: async (): Promise<DashboardStats> => {
     try {
       // 개발 환경에서는 테스트 API 사용
-      const response: AxiosResponse<DashboardStats> = await apiClient.get('/test/stats');
+      const response = await apiClient.get<DashboardStats>('/test/stats');
       return response.data;
     } catch (error) {
       console.error('Failed to fetch dashboard stats:', error);
@@ -193,7 +192,7 @@ export const projectAPI = {
   // 프로젝트 목록 조회
   getProjects: async (): Promise<Project[]> => {
     try {
-      const response: AxiosResponse<Project[]> = await apiClient.get('/api/projects');
+      const response = await apiClient.get<Project[]>('/api/projects');
       return response.data;
     } catch (error) {
       console.error('Failed to fetch projects:', error);
@@ -204,7 +203,7 @@ export const projectAPI = {
   // 프로젝트 상세 조회
   getProject: async (id: string): Promise<Project | null> => {
     try {
-      const response: AxiosResponse<Project> = await apiClient.get(`/api/projects/${id}`);
+      const response = await apiClient.get<Project>(`/api/projects/${id}`);
       return response.data;
     } catch (error) {
       console.error('Failed to fetch project:', error);
@@ -252,7 +251,7 @@ export const taskAPI = {
       }
       
       // 임시로 public endpoint 사용 (인증 없이 테스트)
-      const response: AxiosResponse<Task[]> = await apiClient.get('/tasks', {
+      const response = await apiClient.get<Task[]>('/tasks', {
         params: Object.keys(cleanFilters).length > 0 ? cleanFilters : undefined,
       });
       return response.data;
@@ -326,7 +325,7 @@ export const taskAPI = {
   // 업무 상세 조회
   getTask: async (id: string): Promise<Task | null> => {
     try {
-      const response: AxiosResponse<Task> = await apiClient.get(`/api/tasks/${id}`);
+      const response = await apiClient.get<Task>(`/api/tasks/${id}`);
       return response.data;
     } catch (error) {
       console.error('Failed to fetch task:', error);
@@ -367,7 +366,7 @@ export const taskAPI = {
     projectId?: string; // 선택사항으로 변경 (백엔드에서 자동 처리)
   }): Promise<Task> => {
     try {
-      const response: AxiosResponse<Task> = await apiClient.post('/api/tasks', taskData);
+      const response = await apiClient.post<Task>('/api/tasks', taskData);
       return response.data;
     } catch (error) {
       console.error('Failed to create task:', error);
@@ -385,7 +384,7 @@ export const taskAPI = {
     assigneeId?: string;
   }): Promise<Task> => {
     try {
-      const response: AxiosResponse<Task> = await apiClient.patch(`/api/tasks/${taskId}`, updates);
+      const response = await apiClient.patch<Task>(`/api/tasks/${taskId}`, updates);
       return response.data;
     } catch (error) {
       console.error('Failed to update task:', error);
@@ -423,7 +422,7 @@ export const userAPI = {
       
       // tenantId가 있으면 쿼리 파라미터로 전달
       const url = tenantId ? `/test/users?tenantId=${tenantId}` : '/test/users';
-      const response: AxiosResponse<User[]> = await apiClient.get(url);
+      const response = await apiClient.get<User[]>(url);
       return response.data;
     } catch (error) {
       console.error('Failed to fetch users:', error);
@@ -434,7 +433,7 @@ export const userAPI = {
   // 현재 사용자 정보 조회
   getCurrentUser: async (): Promise<User | null> => {
     try {
-      const response: AxiosResponse<User> = await apiClient.get('/api/users/me');
+      const response = await apiClient.get<User>('/api/users/me');
       return response.data;
     } catch (error) {
       console.error('Failed to fetch current user:', error);
@@ -452,7 +451,7 @@ export const userAPI = {
     experienceLevel?: string;
   }): Promise<User> => {
     try {
-      const response: AxiosResponse<User> = await apiClient.post('/api/users', userData);
+      const response = await apiClient.post<User>('/api/users', userData);
       return response.data;
     } catch (error) {
       console.error('Failed to create user:', error);
@@ -470,7 +469,7 @@ export const userAPI = {
     experienceLevel?: string;
   }): Promise<User> => {
     try {
-      const response: AxiosResponse<User> = await apiClient.patch(`/api/users/${userId}`, updates);
+      const response = await apiClient.patch<User>(`/api/users/${userId}`, updates);
       return response.data;
     } catch (error) {
       console.error('Failed to update user:', error);
@@ -493,7 +492,7 @@ export const slackAPI = {
   // Slack 입력 기록 조회
   getInputs: async (): Promise<SlackInput[]> => {
     try {
-      const response: AxiosResponse<SlackInput[]> = await apiClient.get('/api/slack/inputs');
+      const response = await apiClient.get<SlackInput[]>('/api/slack/inputs');
       return response.data;
     } catch (error) {
       console.error('Failed to fetch slack inputs:', error);
@@ -532,10 +531,10 @@ export const integrationAPI = {
   // 연동 해지
   disconnectService: async (service: 'slack' | 'notion' | 'jira'): Promise<{ success: boolean; message: string }> => {
     try {
-      const response = await apiClient.delete(`/api/integrations/${service}`);
+      const response = await apiClient.delete<{ message?: string }>(`/api/integrations/${service}`);
       return {
         success: true,
-        message: response.data.message || '연동이 해제되었습니다.'
+        message: response.data?.message || '연동이 해제되었습니다.'
       };
     } catch (error) {
       console.error(`Failed to disconnect ${service}:`, error);

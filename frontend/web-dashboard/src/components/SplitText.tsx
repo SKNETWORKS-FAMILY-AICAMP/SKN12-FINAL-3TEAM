@@ -150,7 +150,7 @@ const SplitText = ({
       ref={ref}
       className={`split-parent overflow-hidden inline-block whitespace-normal ${className}`}
       style={{
-        textAlign,
+        textAlign: textAlign as any,
         wordWrap: "break-word",
       }}
     >

@@ -1,11 +1,15 @@
-import { DashboardData } from '../types';
+import { DashboardStats } from '../types';
 
-export const mockDashboardData: DashboardData = {
-  meetingStats: {
-    totalMeetings: 12,
-    avgOnlineTime: 20,
-    accuracy: 95,
-  },
+export const mockDashboardData: DashboardStats = {
+  totalMeetings: 12,
+  averageProcessingTime: 20,
+  accuracy: 95,
+  completedTasks: 8,
+  inProgressTasks: 15,
+  scheduledTasks: 5
+};
+
+export const mockTaskData = {
   tasks: [
     // 완료된 작업
     {

@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { CheckCircle, X, ArrowRight, Sparkles, Check, ExternalLink, Zap, Link, FileText, Database } from "lucide-react";
+import { CheckCircle, X, ArrowRight, Sparkles, Check, ExternalLink, Zap } from "lucide-react";
 import ttalkkakLogo from '../assets/logo.png';
 
 const IntegrationSuccess = () => {

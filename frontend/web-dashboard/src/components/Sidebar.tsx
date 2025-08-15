@@ -30,7 +30,7 @@ const Sidebar = ({ setActiveMenu }: SidebarProps) => {
 
   const { data: tasks = [] } = useQuery({
     queryKey: ['tasks'],
-    queryFn: taskAPI.getTasks,
+    queryFn: () => taskAPI.getTasks(),
     refetchInterval: 30000 // 30초마다 갱신
   });
 
