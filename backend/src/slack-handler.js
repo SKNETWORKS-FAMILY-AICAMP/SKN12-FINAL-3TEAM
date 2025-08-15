@@ -2725,7 +2725,7 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
               type: 'static_select',
               action_id: 'member_exp',
               initial_option: {
-                text: { type: 'plain_text', text: '주니어' },
+                text: { type: 'plain_text', text: '주니어 (0-3년)' },
                 value: 'junior'
               },
               options: [
@@ -2917,7 +2917,7 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
                 type: 'static_select',
                 action_id: 'member_exp',
                 initial_option: {
-                  text: { type: 'plain_text', text: '주니어' },
+                  text: { type: 'plain_text', text: '주니어 (0-3년)' },
                   value: 'junior'
                 },
                 options: [
