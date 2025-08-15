@@ -2594,8 +2594,6 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
   console.log('View ID:', view?.id);
   console.log('Callback ID:', view?.callback_id);
   
-  // Slack은 3초 내에 응답을 받아야 함 - 먼저 ack 보내기
-  
   try {
     const metadata = JSON.parse(view.private_metadata);
     const { members, currentUserId, channelId, currentIndex } = metadata;
@@ -2658,10 +2656,13 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
     console.log('🔄 다음 멤버 정보:', { firstMember: firstMember?.name, isAdmin });
     
     console.log('🚀 ack 응답 전송 시작');
-    try {
-      await ack({
-        response_action: 'update',
-        view: {
+    
+    // 먼저 빈 ack 보내기
+    await ack();
+    console.log('✅ ack 완료');
+    
+    // 모달 업데이트를 위한 view 객체 생성
+    const nextView = {
         type: 'modal',
         callback_id: 'setup_team_modal',
         private_metadata: JSON.stringify(metadata),
@@ -2795,12 +2796,24 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
             optional: true
           }
         ]
-      }
-    });
+      };
+    
+    try {
+      // views.update API를 사용하여 모달 업데이트
+      await client.views.update({
+        view_id: view.id,
+        view: nextView
+      });
       console.log('✅ 팀 정보 모달 업데이트 완료');
-    } catch (ackError) {
-      console.error('❌ ack 응답 실패:', ackError);
-      throw ackError;
+    } catch (updateError) {
+      console.error('❌ 모달 업데이트 실패:', updateError);
+      console.error('오류 상세:', updateError.message);
+      
+      // 오류 발생 시 채널에 메시지 전송
+      await client.chat.postMessage({
+        channel: channelId,
+        text: '팀 설정 중 오류가 발생했습니다. 다시 시도해주세요.'
+      });
     }
   } else {
     // 멤버 정보 저장 및 다음 멤버로 이동
