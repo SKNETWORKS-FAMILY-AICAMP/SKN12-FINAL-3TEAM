@@ -17,24 +17,46 @@ const Integration = () => {
     {
       id: 1,
       name: "노션(Notion)",
-      tag: integrationStatus?.notion ? "활성화" : "비활성화",
-      status: integrationStatus?.notion ? "connected" : "disconnected",
-      url: integrationStatus?.notion ? "SYNC_PRJ_321AM" : "연결 필요",
-      lastSync: integrationStatus?.notion ? "방금 전" : "-",
+      tag: "비활성화",
+      status: "disconnected",
+      url: "연결 필요",
+      lastSync: "-",
       color: "bg-gray-100",
       logo: "https://upload.wikimedia.org/wikipedia/commons/4/45/Notion_app_logo.png"
     },
     {
       id: 2,
       name: "지라(Jira)", 
-      tag: integrationStatus?.jira ? "활성화" : "비활성화",
-      status: integrationStatus?.jira ? "connected" : "disconnected",
-      url: integrationStatus?.jira ? "SYNC_PRJ_321AM" : "연결 필요",
-      lastSync: integrationStatus?.jira ? "방금 전" : "-",
+      tag: "비활성화",
+      status: "disconnected",
+      url: "연결 필요",
+      lastSync: "-",
       color: "bg-blue-100",
       logo: "https://cdn.worldvectorlogo.com/logos/jira-1.svg"
     }
   ]);
+  
+  // integrationStatus가 변경될 때마다 integrations 상태 업데이트
+  useEffect(() => {
+    if (integrationStatus) {
+      setIntegrations(prev => [
+        {
+          ...prev[0],
+          tag: integrationStatus.notion ? "활성화" : "비활성화",
+          status: integrationStatus.notion ? "connected" : "disconnected",
+          url: integrationStatus.notion ? "SYNC_PRJ_321AM" : "연결 필요",
+          lastSync: integrationStatus.notion ? "방금 전" : "-"
+        },
+        {
+          ...prev[1],
+          tag: integrationStatus.jira ? "활성화" : "비활성화",
+          status: integrationStatus.jira ? "connected" : "disconnected",
+          url: integrationStatus.jira ? "SYNC_PRJ_321AM" : "연결 필요",
+          lastSync: integrationStatus.jira ? "방금 전" : "-"
+        }
+      ]);
+    }
+  }, [integrationStatus]);
 
   // 확인 모달 상태 관리
   const [showConfirmModal, setShowConfirmModal] = useState(false);

@@ -1584,8 +1584,46 @@ app.get('/api/integrations/status',
     try {
       const tenantId = req.tenantId!;
       
+      // 현재 사용자 찾기 (인증된 사용자 또는 슬랙 사용자)
+      let userId: string | undefined;
+      
+      // JWT 토큰에서 사용자 정보 추출
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        const token = authHeader.substring(7);
+        try {
+          const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as any;
+          userId = decoded.userId;
+        } catch (err) {
+          console.log('JWT 검증 실패:', err);
+        }
+      }
+      
+      // userId가 없으면 tenant 전체 연동 상태 반환
+      if (!userId) {
+        console.log('사용자 ID 없음, tenant 전체 연동 상태 조회');
+        const integrations = await prisma.integration.findMany({
+          where: { tenantId, isActive: true },
+          select: { serviceType: true }
+        });
+
+        const status = {
+          slack: integrations.some((i: any) => i.serviceType === 'SLACK'),
+          notion: integrations.some((i: any) => i.serviceType === 'NOTION'),
+          jira: integrations.some((i: any) => i.serviceType === 'JIRA')
+        };
+
+        return res.json(status);
+      }
+      
+      // 특정 사용자의 연동 상태 조회
+      console.log('사용자별 연동 상태 조회:', { userId, tenantId });
       const integrations = await prisma.integration.findMany({
-        where: { tenantId, isActive: true },
+        where: { 
+          tenantId, 
+          userId,
+          isActive: true 
+        },
         select: { serviceType: true }
       });
 
@@ -1594,6 +1632,8 @@ app.get('/api/integrations/status',
         notion: integrations.some((i: any) => i.serviceType === 'NOTION'),
         jira: integrations.some((i: any) => i.serviceType === 'JIRA')
       };
+      
+      console.log('연동 상태 결과:', status);
 
       return res.json(status);
     } catch (error) {
