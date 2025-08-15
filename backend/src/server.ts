@@ -12,7 +12,7 @@ import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import { PrismaClient } from '@prisma/client';
 import * as dotenv from 'dotenv';
-import * as jsonwebtoken from 'jsonwebtoken';
+import * as jwt from 'jsonwebtoken';
 
 import { SimpleTenantMiddleware } from './middleware/tenant';
 import { AIService } from './services/ai-service';
@@ -1655,6 +1655,35 @@ app.get('/api/integrations/status',
         service: i.serviceType,
         createdAt: i.createdAt
       })));
+      
+      // 디버깅: 모든 연동 정보 조회 (isActive 상관없이)
+      const allIntegrations = await prisma.integration.findMany({
+        where: { 
+          userId: user.id,
+          tenantId: user.tenantId
+        },
+        select: { 
+          serviceType: true,
+          isActive: true,
+          createdAt: true
+        }
+      });
+      
+      console.log('🔍 사용자의 모든 연동 정보 (isActive 포함):', allIntegrations);
+      
+      // 디버깅: tenant의 모든 연동 정보 조회
+      const tenantIntegrations = await prisma.integration.findMany({
+        where: { 
+          tenantId: user.tenantId
+        },
+        select: { 
+          userId: true,
+          serviceType: true,
+          isActive: true
+        }
+      });
+      
+      console.log('🏢 Tenant 전체 연동 정보:', tenantIntegrations);
       
       // 연동 상태 객체 생성
       const status = {

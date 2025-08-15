@@ -11,7 +11,8 @@ const JWT_SECRET = process.env.JWT_SECRET || 'ddalkkak_super_secret_jwt_key_prod
 export const generateToken = (user: any) => {
   return jwt.sign(
     {
-      id: user.id,
+      userId: user.id,  // userId로 통일
+      id: user.id,      // 기존 코드 호환성 유지
       email: user.email,
       name: user.name,
       slackUserId: user.slackUserId,
