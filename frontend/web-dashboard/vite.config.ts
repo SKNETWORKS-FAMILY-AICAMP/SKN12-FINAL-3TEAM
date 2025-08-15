@@ -11,7 +11,7 @@ export default defineConfig({
   },
   server: {
     port: 3002,
-    open: true,
+    open: false,  // 서버 환경에서 브라우저 자동 열기 비활성화
   },
   build: {
     outDir: 'dist',
