@@ -3083,6 +3083,7 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
         });
       }
     }
+    } // else 블록 닫기 추가
   } catch (error) {
     console.error('🔴 setup_team_modal 처리 중 오류:', error);
     console.error('오류 스택:', error.stack);
