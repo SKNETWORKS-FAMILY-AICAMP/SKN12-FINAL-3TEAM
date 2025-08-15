@@ -2695,9 +2695,12 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
             element: {
               type: 'static_select',
               action_id: 'member_role',
-              initial_option: {
-                text: { type: 'plain_text', text: isAdmin ? '관리자' : '멤버' },
-                value: isAdmin ? 'ADMIN' : 'MEMBER'
+              initial_option: isAdmin ? {
+                text: { type: 'plain_text', text: '관리자' },
+                value: 'ADMIN'
+              } : {
+                text: { type: 'plain_text', text: '멤버' },
+                value: 'MEMBER'
               },
               options: [
                 {
@@ -2876,9 +2879,12 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
               element: {
                 type: 'static_select',
                 action_id: 'member_role',
-                initial_option: {
-                  text: { type: 'plain_text', text: isAdmin ? '관리자' : '멤버' },
-                  value: isAdmin ? 'ADMIN' : 'MEMBER'
+                initial_option: isAdmin ? {
+                  text: { type: 'plain_text', text: '관리자' },
+                  value: 'ADMIN'
+                } : {
+                  text: { type: 'plain_text', text: '멤버' },
+                  value: 'MEMBER'
                 },
                 options: [
                   {
