@@ -14,7 +14,7 @@ import IntegrationSuccess from './pages/JiraSuccess';
 import NotionSuccess from './pages/NotionSuccess';
 import Integration from './pages/Integration';
 import ProtectedRoute from './components/ProtectedRoute';
-import { connectSocket, disconnectSocket } from './services/api';
+// import { connectSocket, disconnectSocket } from './services/api';
 import './App.css';
 
 // React Query 클라이언트 설정

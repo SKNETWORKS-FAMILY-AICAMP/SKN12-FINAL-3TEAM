@@ -1,4 +1,5 @@
-import axios, { AxiosResponse } from 'axios';
+import axios from 'axios';
+import type { AxiosResponse } from 'axios';
 import { io, Socket } from 'socket.io-client';
 
 // API 기본 설정
@@ -29,7 +30,7 @@ const apiClient = axios.create({
 apiClient.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
-    if (token) {
+    if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
@@ -501,11 +502,17 @@ export const slackAPI = {
   },
 };
 
+interface IntegrationStatus {
+  slack: boolean;
+  notion: boolean;
+  jira: boolean;
+}
+
 export const integrationAPI = {
   // 연동 상태 조회 (getStatus로도 접근 가능)
-  getIntegrationStatus: async () => {
+  getIntegrationStatus: async (): Promise<IntegrationStatus> => {
     try {
-      const response = await apiClient.get('/api/integrations/status');
+      const response = await apiClient.get<IntegrationStatus>('/api/integrations/status');
       return response.data;
     } catch (error) {
       console.error('Failed to fetch integration status:', error);
@@ -518,7 +525,7 @@ export const integrationAPI = {
   },
 
   // getStatus 별칭 (다른 컴포넌트에서 사용)
-  getStatus: async () => {
+  getStatus: async (): Promise<IntegrationStatus> => {
     return integrationAPI.getIntegrationStatus();
   },
 
