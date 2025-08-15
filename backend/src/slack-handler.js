@@ -2594,6 +2594,8 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
   console.log('View ID:', view?.id);
   console.log('Callback ID:', view?.callback_id);
   
+  // Slack은 3초 내에 응답을 받아야 함 - 먼저 ack 보내기
+  
   try {
     const metadata = JSON.parse(view.private_metadata);
     const { members, currentUserId, channelId, currentIndex } = metadata;
@@ -2641,9 +2643,10 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
     console.log('🔄 다음 멤버 정보:', { firstMember: firstMember?.name, isAdmin });
     
     console.log('🚀 ack 응답 전송 시작');
-    await ack({
-      response_action: 'update',
-      view: {
+    try {
+      await ack({
+        response_action: 'update',
+        view: {
         type: 'modal',
         callback_id: 'setup_team_modal',
         private_metadata: JSON.stringify(metadata),
@@ -2779,7 +2782,11 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
         ]
       }
     });
-    console.log('✅ 팀 정보 모달 업데이트 완료');
+      console.log('✅ 팀 정보 모달 업데이트 완료');
+    } catch (ackError) {
+      console.error('❌ ack 응답 실패:', ackError);
+      throw ackError;
+    }
   } else {
     // 멤버 정보 저장 및 다음 멤버로 이동
     console.log('🟡 멤버 정보 처리 - currentIndex:', currentIndex);
