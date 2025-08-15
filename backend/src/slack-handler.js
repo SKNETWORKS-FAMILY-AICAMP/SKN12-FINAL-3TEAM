@@ -41,10 +41,10 @@ console.log('🚀 Slack 앱 초기화 시작...');
 let app;
 try {
   // Express Receiver 명시적 생성
-  // processBeforeResponse를 false로 설정하여 응답 처리 개선
+  // processBeforeResponse를 true로 설정하여 모달 응답 처리
   const receiver = new ExpressReceiver({
     signingSecret: process.env.SLACK_SIGNING_SECRET,
-    processBeforeResponse: false,
+    processBeforeResponse: true,  // 모달 응답을 위해 true로 변경
     endpoints: {
       events: '/slack/events',
       commands: '/slack/commands',
@@ -2614,9 +2614,24 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
     // 팀 정보 저장 후 첫 번째 멤버 정보 입력으로 이동
     console.log('🟢 팀 정보 처리 시작 - currentIndex:', currentIndex);
     
-    const teamName = view.state.values.team_name_input.team_name.value;
-    const teamSlug = view.state.values.team_slug_input.team_slug.value;
+    // view.state.values 구조 확인
+    console.log('🔍 view.state.values 전체:', JSON.stringify(view.state.values, null, 2));
+    
+    const teamName = view.state.values.team_name_input?.team_name?.value;
+    const teamSlug = view.state.values.team_slug_input?.team_slug?.value;
     console.log('📝 팀 정보:', { teamName, teamSlug });
+    
+    if (!teamName || !teamSlug) {
+      console.error('❌ 팀 정보 누락:', { teamName, teamSlug });
+      await ack({
+        response_action: 'errors',
+        errors: {
+          team_name_input: teamName ? '' : '팀 이름을 입력해주세요',
+          team_slug_input: teamSlug ? '' : '팀 식별자를 입력해주세요'
+        }
+      });
+      return;
+    }
     
     // slug 유효성 검사
     if (!/^[a-z0-9-]+$/.test(teamSlug)) {
