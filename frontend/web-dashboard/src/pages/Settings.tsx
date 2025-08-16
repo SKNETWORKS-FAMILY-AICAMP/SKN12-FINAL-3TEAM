@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { integrationAPI, userAPI } from '../services/api';
 
 interface TeamMember {
-  id: number;
+  id: string; // user ID는 string
   name: string;
   role: string;
   email: string;
@@ -40,8 +40,8 @@ const Settings = () => {
   });
 
   // 팀원 데이터 변환 (API 데이터 -> UI 형식)  
-  const teamMembers: TeamMember[] = users.map((user, index) => ({
-    id: index + 1,
+  const teamMembers: TeamMember[] = users.map((user) => ({
+    id: user.id, // 실제 user ID 사용
     name: user.name,
     role: user.role === 'OWNER' ? '프로젝트 오너' : 
           user.role === 'ADMIN' ? '관리자' : '팀원',
@@ -134,34 +134,41 @@ const Settings = () => {
     }
 
     if (editingMember) {
-      // 수정 - 이메일로 실제 User 찾기
-      const actualUser = users.find(u => u.email === editingMember.email);
-      if (!actualUser) {
-        toast.error('사용자를 찾을 수 없습니다.');
-        return;
-      }
-      
-      console.log('수정할 사용자 ID:', actualUser.id);
+      // 수정 - editingMember.id가 이미 실제 user ID
+      console.log('수정할 사용자 ID:', editingMember.id);
       console.log('수정 데이터:', {
         name: memberFormData.name,
-        email: memberFormData.email
+        email: memberFormData.email,
+        role: memberFormData.role
       });
+      
+      // role 값을 API 형식으로 변환
+      let apiRole: 'OWNER' | 'ADMIN' | 'MEMBER' = 'MEMBER';
+      if (memberFormData.role === '프로젝트 오너') apiRole = 'OWNER';
+      else if (memberFormData.role === '관리자') apiRole = 'ADMIN';
+      else apiRole = 'MEMBER';
       
       // API 호출
       updateUserMutation.mutate({
-        userId: actualUser.id,
+        userId: editingMember.id,
         updates: {
           name: memberFormData.name,
           email: memberFormData.email,
-          // role, skills 등은 UI에 없으므로 생략
+          role: apiRole
         }
       });
     } else {
-      // 추가 - API 호출
+      // 추가 - role 값을 API 형식으로 변환
+      let apiRole: 'OWNER' | 'ADMIN' | 'MEMBER' = 'MEMBER';
+      if (memberFormData.role === '프로젝트 오너') apiRole = 'OWNER';
+      else if (memberFormData.role === '관리자') apiRole = 'ADMIN';
+      else apiRole = 'MEMBER';
+      
+      // API 호출
       createUserMutation.mutate({
         name: memberFormData.name,
         email: memberFormData.email,
-        role: 'MEMBER'
+        role: apiRole
       });
     }
 
@@ -203,21 +210,10 @@ const Settings = () => {
     }
   });
 
-  const deleteMember = (id: number) => {
-    // id로 teamMember 찾고, 그 email로 실제 user 찾기
-    const teamMember = teamMembers.find(tm => tm.id === id);
-    if (!teamMember) {
-      toast.error('팀원을 찾을 수 없습니다.');
-      return;
-    }
-    
-    const actualUser = users.find(user => user.email === teamMember.email);
-    if (actualUser) {
-      console.log('삭제할 사용자 ID:', actualUser.id);
-      deleteUserMutation.mutate(actualUser.id);
-    } else {
-      toast.error('사용자를 찾을 수 없습니다.');
-    }
+  const deleteMember = (id: string) => {
+    // id는 이미 실제 user ID
+    console.log('삭제할 사용자 ID:', id);
+    deleteUserMutation.mutate(id);
   };
 
   // 필터링된 팀원 목록
@@ -582,13 +578,21 @@ const Settings = () => {
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">역할</label>
-                <input
-                  type="text"
+                <select
                   value={memberFormData.role}
                   onChange={(e) => setMemberFormData({...memberFormData, role: e.target.value})}
                   className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="예: 프로젝트 매니저, 개발자"
-                />
+                >
+                  <option value="">역할 선택</option>
+                  <option value="프로젝트 오너">프로젝트 오너</option>
+                  <option value="관리자">관리자</option>
+                  <option value="팀원">팀원</option>
+                  <option value="프로젝트 매니저">프로젝트 매니저</option>
+                  <option value="개발자">개발자</option>
+                  <option value="디자이너">디자이너</option>
+                  <option value="기획자">기획자</option>
+                  <option value="QA">QA</option>
+                </select>
               </div>
               
               <div>

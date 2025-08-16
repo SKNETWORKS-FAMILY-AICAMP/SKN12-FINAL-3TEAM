@@ -928,16 +928,20 @@ app.get('/api/tasks',
       if (!tenantId || !userId) {
         return res.status(401).json({ error: 'Unauthorized' });
       }
-      const { status, assigneeId, priority } = req.query;
+      const { status, assigneeId, priority, myTasksOnly } = req.query;
       
-      // 로그인한 사용자와 관련된 작업만 필터링
+      // 기본적으로 같은 tenant의 모든 작업을 표시
       const where: any = {
-        tenantId,
-        OR: [
+        tenantId
+      };
+      
+      // myTasksOnly 파라미터가 true일 때만 내 작업만 필터링
+      if (myTasksOnly === 'true') {
+        where.OR = [
           { assigneeId: userId },        // 나에게 할당된 작업
           { assigneeId: null }            // 미할당 작업
-        ]
-      };
+        ];
+      }
       
       if (status) where.status = status;
       if (assigneeId) where.assigneeId = assigneeId;
@@ -969,7 +973,7 @@ app.get('/api/tasks',
         orderBy: { createdAt: 'desc' }
       });
 
-      console.log(`📋 사용자 ${userId}의 작업 ${tasks.length}개 조회됨`);
+      console.log(`📋 Tenant ${tenantId}의 작업 ${tasks.length}개 조회됨 (요청자: ${userId}, 내 작업만: ${myTasksOnly === 'true' ? '예' : '아니오'})`);
       return res.json(tasks);
     } catch (error) {
       console.error('Tasks fetch error:', error);
@@ -3408,13 +3412,19 @@ app.get('/tasks', async (req, res) => {
     await prisma.$connect();
     console.log('✅ DB 연결 성공');
     
-    // 사용자 ID가 있으면 해당 사용자의 태스크만, 없으면 전체 태스크
-    const whereClause = userId ? {
-      OR: [
-        { assigneeId: userId },        // 담당자인 태스크
-        { assigneeId: null }           // 미할당 태스크도 포함
-      ]
-    } : {};
+    // 사용자의 tenantId 가져오기
+    let tenantId = null;
+    if (userId) {
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { tenantId: true }
+      });
+      tenantId = user?.tenantId;
+      console.log('👥 사용자의 Tenant ID:', tenantId);
+    }
+    
+    // tenantId가 있으면 같은 조직의 모든 태스크 반환
+    const whereClause = tenantId ? { tenantId } : {};
     
     const tasks = await prisma.task.findMany({
       where: whereClause,
@@ -3444,7 +3454,7 @@ app.get('/tasks', async (req, res) => {
       },
     });
     
-    console.log(`✅ ${tasks.length}개의 태스크 조회 성공 (사용자: ${userId || '전체'})`);
+    console.log(`✅ ${tasks.length}개의 태스크 조회 성공 (Tenant: ${tenantId || '전체'})`);
     res.json(tasks);
   } catch (error) {
     console.error('❌ /tasks API 오류 상세:', {
