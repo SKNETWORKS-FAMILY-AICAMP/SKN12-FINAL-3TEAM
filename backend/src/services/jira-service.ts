@@ -1187,14 +1187,26 @@ class JiraService {
 
       console.log(`📊 JIRA 생성 완료: Task ${taskCount}개, Sub-task ${subtaskCount}개`);
 
-      return {
+      const result: {
+        success: boolean;
+        tasksCreated: number;
+        subtasksCreated: number;
+        projectKey?: string;
+        issues?: { key: string; title: string; subtasks?: string[] }[];
+        error?: string;
+      } = {
         success: taskCount > 0,
         tasksCreated: taskCount,
         subtasksCreated: subtaskCount,
         projectKey: projectKey,
-        issues: createdIssues,
-        error: taskCount === 0 ? '모든 Task 생성 실패' : undefined
+        issues: createdIssues
       };
+      
+      if (taskCount === 0) {
+        result.error = '모든 Task 생성 실패';
+      }
+      
+      return result;
       
     } catch (error) {
       console.error('❌ JIRA 업로드 전체 실패:', error);
