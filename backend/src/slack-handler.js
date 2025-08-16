@@ -4761,6 +4761,7 @@ app.view('voice_upload_modal', async ({ ack, body, view, client }) => {
 
 // 업로드된 파일 처리 함수
 async function processUploadedFile(file, projectName, client, userId) {
+  const { PrismaClient } = require('@prisma/client');
   const prisma = new PrismaClient();
   
   try {
