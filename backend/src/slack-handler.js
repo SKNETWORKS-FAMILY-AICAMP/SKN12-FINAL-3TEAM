@@ -4761,6 +4761,8 @@ app.view('voice_upload_modal', async ({ ack, body, view, client }) => {
 
 // 업로드된 파일 처리 함수
 async function processUploadedFile(file, projectName, client, userId) {
+  const prisma = new PrismaClient();
+  
   try {
     console.log('🔄 파일 처리 시작:', file.name);
     
@@ -4923,6 +4925,85 @@ async function processUploadedFile(file, projectName, client, userId) {
         notionWorkspaceUrl,
         jiraSiteUrl
       });
+      
+      // DB에 생성된 데이터 저장
+      if (result.success && result.stage2?.task_master_prd) {
+        try {
+          // SlackInput 생성
+          const slackInput = await prisma.slackInput.create({
+            data: {
+              tenantId: user.tenantId,
+              slackChannelId: 'direct_message',
+              slackUserId: userId,
+              inputType: 'VOICE',
+              content: result.stage1?.transcript || '',
+              status: 'COMPLETED'
+            }
+          });
+          
+          // Project 생성
+          const createdProject = await prisma.project.create({
+            data: {
+              tenantId: user.tenantId,
+              slackInputId: slackInput.id,
+              title: projectName,
+              overview: result.stage1?.notion_project?.overview || result.stage1?.transcript?.substring(0, 500) || '',
+              content: {
+                notion_project: result.stage1?.notion_project || {},
+                prd: result.stage2?.task_master_prd || {},
+                generated_tasks: result.stage2?.task_master_prd?.tasks || []
+              },
+              notionPageUrl: notionPageUrl,
+              notionStatus: notionPageUrl ? 'CREATED' : null
+            }
+          });
+          
+          // Tasks 생성
+          const tasks = result.stage2?.task_master_prd?.tasks || [];
+          for (const [index, taskItem] of tasks.entries()) {
+            const taskNumber = `TK-${Date.now()}-${index + 1}`;
+            
+            const createdTask = await prisma.task.create({
+              data: {
+                tenantId: user.tenantId,
+                projectId: createdProject.id,
+                taskNumber,
+                title: taskItem.title || taskItem.task || 'Untitled Task',
+                description: taskItem.description || '',
+                status: 'TODO',
+                priority: taskItem.priority?.toUpperCase() === 'HIGH' ? 'HIGH' : 
+                         taskItem.priority?.toUpperCase() === 'LOW' ? 'LOW' : 'MEDIUM',
+                startDate: taskItem.startDate || taskItem.start_date ? new Date(taskItem.startDate || taskItem.start_date) : null,
+                dueDate: taskItem.dueDate || taskItem.due_date ? new Date(taskItem.dueDate || taskItem.due_date) : null,
+                complexity: taskItem.complexity ? String(taskItem.complexity) : '5',
+                assigneeId: null // 나중에 할당
+              }
+            });
+            
+            // TaskMetadata 생성
+            if (taskItem.estimated_hours || taskItem.tags?.length > 0) {
+              await prisma.taskMetadata.create({
+                data: {
+                  taskId: createdTask.id,
+                  estimatedHours: taskItem.estimated_hours || taskItem.estimatedHours || 8,
+                  requiredSkills: taskItem.tags || [],
+                  taskType: taskItem.issueType || 'feature',
+                  jiraIssueKey: jiraIssueUrl ? jiraIssueUrl.split('/').pop() : null,
+                  jiraStatus: jiraIssueUrl ? 'CREATED' : null
+                }
+              });
+            }
+            
+            console.log(`✅ Task 저장 완료: ${createdTask.taskNumber} - ${createdTask.title}`);
+          }
+          
+          console.log(`✅ DB 저장 완료: Project ${createdProject.id}, ${tasks.length}개 업무`);
+          
+        } catch (dbError) {
+          console.error('❌ DB 저장 실패:', dbError);
+          // DB 저장 실패해도 Notion/JIRA 생성은 성공했으므로 계속 진행
+        }
+      }
       
       // 결과 전송
       const resultBlocks = [
@@ -5105,6 +5186,9 @@ async function processUploadedFile(file, projectName, client, userId) {
       channel: userId,
       text: `❌ 파일 처리 중 오류가 발생했습니다: ${error.message}`
     });
+  } finally {
+    // Prisma 연결 종료
+    await prisma.$disconnect();
   }
 }
 
