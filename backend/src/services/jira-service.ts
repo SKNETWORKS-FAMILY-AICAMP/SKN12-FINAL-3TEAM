@@ -1220,4 +1220,5 @@ class JiraService {
   }
 }
 
+export default JiraService;
 export { JiraService };

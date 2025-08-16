@@ -3288,7 +3288,7 @@ app.action('check_integrations_button', async ({ ack, body, respond }) => {
     
     // Services import
     const { NotionService } = require('./services/notion-service');
-    const { JiraService } = require('./services/jira-service');
+    const JiraService = require('./services/jira-service').default || require('./services/jira-service').JiraService;
     const { PrismaClient } = require('@prisma/client');
     
     const prisma = new PrismaClient();
@@ -3907,7 +3907,7 @@ async function processTranscriptWithAI(transcript, client, channelId) {
     // JIRA 연동 시도
     let jiraResult = null;
     try {
-      const { JiraService } = require('./services/jira-service');
+      const JiraService = require('./services/jira-service').default || require('./services/jira-service').JiraService;
       const { PrismaClient } = require('@prisma/client');
       
       const prisma = new PrismaClient();
@@ -4001,7 +4001,7 @@ async function processTranscriptWithAI(transcript, client, channelId) {
     let jiraButtonText = '🎫 JIRA에서 보기';
     
     try {
-      const { JiraService } = require('./services/jira-service');
+      const JiraService = require('./services/jira-service').default || require('./services/jira-service').JiraService;
       const { PrismaClient } = require('@prisma/client');
       
       const prisma = new PrismaClient();
@@ -4902,7 +4902,7 @@ async function processUploadedFile(file, projectName, client, userId) {
       // JIRA 이슈 생성
       if (jiraIntegration && result.stage2?.task_master_prd?.tasks) {
         try {
-          const JiraService = require('./services/jira-service').default;
+          const JiraService = require('./services/jira-service').default || require('./services/jira-service').JiraService;
           const jiraService = new JiraService(prisma);
           
           // 첫 번째 태스크를 메인 이슈로 생성 (나머지는 서브태스크로)
@@ -5483,7 +5483,7 @@ async function checkRecentFiles(client, userId, projectName) {
         let jiraButtonText = '🎫 JIRA에서 보기';
         
         try {
-          const { JiraService } = require('./services/jira-service');
+          const JiraService = require('./services/jira-service').default || require('./services/jira-service').JiraService;
           const { PrismaClient } = require('@prisma/client');
           
           const prisma = new PrismaClient();
