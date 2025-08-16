@@ -659,7 +659,7 @@ class AIService {
         if (isTextInput) {
           const transcript = audioBuffer.toString('utf-8');
 
-          const response = await axiosInstance.post<TwoStagePipelineResult>(`${this.baseUrl}/pipeline-final`, {
+          const response = await axiosInstance.post<any>(`${this.baseUrl}/pipeline-final`, {
             transcript,
             generate_notion: true,
             generate_tasks: true,
@@ -668,7 +668,24 @@ class AIService {
             timeout: this.timeout
           });
 
-          result = response.data;
+          // AI 서버 응답을 백엔드 형식으로 변환
+          const aiResponse = response.data;
+          result = {
+            success: aiResponse.success,
+            stage1: {
+              transcript: transcript,
+              notion_project: aiResponse.stage1_notion
+            },
+            stage2: {
+              task_master_prd: {
+                ...aiResponse.stage2_prd,
+                tasks: aiResponse.stage3_tasks?.tasks || []
+              }
+            }
+          };
+          if (aiResponse.error) {
+            result.error = aiResponse.error;
+          }
 
         } else {
           const formData = new FormData();
@@ -677,12 +694,29 @@ class AIService {
             contentType: 'audio/wav'
           });
 
-          const response = await axiosInstance.post<TwoStagePipelineResult>(`${this.baseUrl}/pipeline-final`, formData, {
+          const response = await axiosInstance.post<any>(`${this.baseUrl}/pipeline-final`, formData, {
             timeout: this.timeout,
             headers: formData.getHeaders()
           });
 
-          result = response.data;
+          // AI 서버 응답을 백엔드 형식으로 변환
+          const aiResponse = response.data;
+          result = {
+            success: aiResponse.success,
+            stage1: {
+              transcript: aiResponse.transcription?.full_text || '',
+              notion_project: aiResponse.stage1_notion
+            },
+            stage2: {
+              task_master_prd: {
+                ...aiResponse.stage2_prd,
+                tasks: aiResponse.stage3_tasks?.tasks || []
+              }
+            }
+          };
+          if (aiResponse.error) {
+            result.error = aiResponse.error;
+          }
         }
 
         console.log(`✅ 2-stage pipeline completed successfully via AI server`);
