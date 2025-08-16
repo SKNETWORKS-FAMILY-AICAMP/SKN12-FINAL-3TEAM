@@ -251,9 +251,12 @@ export const taskAPI = {
       }
       
       // 임시로 public endpoint 사용 (인증 없이 테스트)
+      console.log('🔍 /tasks API 호출 시작...');
       const response = await apiClient.get<Task[]>('/tasks', {
         params: Object.keys(cleanFilters).length > 0 ? cleanFilters : undefined,
       });
+      console.log('✅ /tasks API 응답:', response.data);
+      console.log('✅ 반환된 태스크 개수:', response.data.length);
       return response.data;
     } catch (error) {
       console.error('Failed to fetch tasks:', error);
@@ -409,12 +412,26 @@ export const userAPI = {
     try {
       // localStorage에서 현재 사용자 정보 가져오기
       const currentUserStr = localStorage.getItem('currentUser');
+      const userStr = localStorage.getItem('user');
       let tenantId = null;
       
-      if (currentUserStr) {
+      console.log('🔍 getUsers - currentUser:', currentUserStr);
+      console.log('🔍 getUsers - user:', userStr);
+      
+      // user 먼저 확인, 없으면 currentUser 확인
+      if (userStr) {
+        try {
+          const user = JSON.parse(userStr);
+          tenantId = user.tenantId;
+          console.log('🔍 user에서 가져온 tenantId:', tenantId);
+        } catch (e) {
+          console.error('Failed to parse user:', e);
+        }
+      } else if (currentUserStr) {
         try {
           const currentUser = JSON.parse(currentUserStr);
           tenantId = currentUser.tenantId;
+          console.log('🔍 currentUser에서 가져온 tenantId:', tenantId);
         } catch (e) {
           console.error('Failed to parse current user:', e);
         }
@@ -422,7 +439,9 @@ export const userAPI = {
       
       // tenantId가 있으면 쿼리 파라미터로 전달
       const url = tenantId ? `/test/users?tenantId=${tenantId}` : '/test/users';
+      console.log('🔍 최종 API URL:', url);
       const response = await apiClient.get<User[]>(url);
+      console.log('✅ getUsers API 응답:', response.data);
       return response.data;
     } catch (error) {
       console.error('Failed to fetch users:', error);

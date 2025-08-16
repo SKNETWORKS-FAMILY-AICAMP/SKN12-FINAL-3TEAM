@@ -3426,6 +3426,8 @@ app.get('/tasks', async (req, res) => {
     // tenantId가 있으면 같은 조직의 모든 태스크 반환
     const whereClause = tenantId ? { tenantId } : {};
     
+    console.log('🔍 태스크 조회 조건:', whereClause);
+    
     const tasks = await prisma.task.findMany({
       where: whereClause,
       include: {

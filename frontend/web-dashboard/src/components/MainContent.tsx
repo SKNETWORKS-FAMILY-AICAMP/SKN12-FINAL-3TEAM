@@ -240,6 +240,26 @@ const MainContent = () => {
     queryFn: userAPI.getUsers,
   });
 
+  // 태스크 목록 디버깅
+  useEffect(() => {
+    if (tasks) {
+      console.log('📋 칸반보드 - 전체 태스크 목록:', tasks);
+      console.log('📋 태스크 개수:', tasks.length);
+      const currentUser = localStorage.getItem('user');
+      console.log('📋 현재 사용자 정보:', currentUser);
+      if (currentUser) {
+        const user = JSON.parse(currentUser);
+        console.log('📋 현재 사용자 ID:', user.id);
+        console.log('📋 현재 사용자 tenantId:', user.tenantId);
+        
+        // 각 태스크의 assigneeId 확인
+        tasks.forEach(task => {
+          console.log(`태스크 "${task.title}": assigneeId=${task.assigneeId}, assignee.name=${task.assignee?.name}`);
+        });
+      }
+    }
+  }, [tasks]);
+
   // 사용자 목록 디버깅
   useEffect(() => {
     if (users && users.length > 0) {

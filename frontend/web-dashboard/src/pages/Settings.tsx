@@ -25,7 +25,11 @@ const Settings = () => {
   // 팀원 목록 가져오기
   const { data: users = [], isLoading: usersLoading } = useQuery({
     queryKey: ['users'],
-    queryFn: userAPI.getUsers
+    queryFn: async () => {
+      const data = await userAPI.getUsers();
+      console.log('🔍 API에서 받은 users 데이터:', data);
+      return data;
+    }
   });
 
   const [settings, setSettings] = useState({
@@ -40,15 +44,18 @@ const Settings = () => {
   });
 
   // 팀원 데이터 변환 (API 데이터 -> UI 형식)  
-  const teamMembers: TeamMember[] = users.map((user) => ({
-    id: user.id, // 실제 user ID 사용
-    name: user.name,
-    role: user.role === 'OWNER' ? '프로젝트 오너' : 
-          user.role === 'ADMIN' ? '관리자' : '팀원',
-    email: user.email,
-    phone: '', // API에서 전화번호가 없으므로 빈 문자열
-    department: user.skills?.length ? '개발팀' : '일반팀' // 스킬이 있으면 개발팀으로 가정
-  }));
+  const teamMembers: TeamMember[] = users.map((user, index) => {
+    console.log(`사용자 ${index}:`, user); // 디버깅용
+    return {
+      id: user.id || `temp-${index}`, // 실제 user ID 사용, 없으면 임시 ID
+      name: user.name,
+      role: user.role === 'OWNER' ? '프로젝트 오너' : 
+            user.role === 'ADMIN' ? '관리자' : '팀원',
+      email: user.email,
+      phone: '', // API에서 전화번호가 없으므로 빈 문자열
+      department: user.skills?.length ? '개발팀' : '일반팀' // 스킬이 있으면 개발팀으로 가정
+    };
+  });
 
   const [showTeamMemberModal, setShowTeamMemberModal] = useState(false);
   const [editingMember, setEditingMember] = useState<TeamMember | null>(null);
@@ -99,6 +106,12 @@ const Settings = () => {
     applyTheme(settings.appearance.theme);
   }, []);
 
+  // users 데이터 변경 시 로깅
+  useEffect(() => {
+    console.log('👥 Settings - users 데이터 변경됨:', users);
+    console.log('👥 Settings - teamMembers 데이터:', teamMembers);
+  }, [users, teamMembers]);
+
   // 설정 변경 시 자동 저장
   useEffect(() => {
     localStorage.setItem('settings', JSON.stringify(settings));
@@ -135,8 +148,10 @@ const Settings = () => {
 
     if (editingMember) {
       // 수정 - editingMember.id가 이미 실제 user ID
-      console.log('수정할 사용자 ID:', editingMember.id);
-      console.log('수정 데이터:', {
+      console.log('🔍 editingMember 전체 객체:', editingMember);
+      console.log('🔍 수정할 사용자 ID:', editingMember.id);
+      console.log('🔍 ID 타입:', typeof editingMember.id);
+      console.log('🔍 수정 데이터:', {
         name: memberFormData.name,
         email: memberFormData.email,
         role: memberFormData.role
