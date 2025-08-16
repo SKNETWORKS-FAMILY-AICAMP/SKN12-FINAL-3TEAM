@@ -28,7 +28,30 @@ const Settings = () => {
     queryFn: async () => {
       const data = await userAPI.getUsers();
       console.log('🔍 API에서 받은 users 데이터:', data);
-      return data;
+      
+      // 데이터 검증
+      if (!Array.isArray(data)) {
+        console.error('⚠️ users 데이터가 배열이 아닙니다:', data);
+        return [];
+      }
+      
+      // 각 사용자 데이터 검증
+      const validatedData = data.map((user, index) => {
+        if (!user || typeof user !== 'object') {
+          console.error(`⚠️ 사용자 ${index}의 데이터가 잘못되었습니다:`, user);
+          return null;
+        }
+        
+        // ID가 숫자로만 되어있는 경우 (예: 1, 2, 3)를 UUID로 매핑
+        // 이것은 임시 방편이며, 실제로는 백엔드에서 올바른 ID를 반환해야 함
+        if (typeof user.id === 'number' || (typeof user.id === 'string' && /^\d+$/.test(user.id))) {
+          console.warn(`⚠️ 사용자 ${index}의 ID가 숫자입니다. UUID가 필요합니다:`, user.id);
+        }
+        
+        return user;
+      }).filter(user => user !== null);
+      
+      return validatedData;
     }
   });
 
@@ -46,12 +69,19 @@ const Settings = () => {
   // 팀원 데이터 변환 (API 데이터 -> UI 형식)  
   const teamMembers: TeamMember[] = users.map((user, index) => {
     console.log(`사용자 ${index}:`, user); // 디버깅용
+    console.log(`사용자 ${index} ID:`, user.id, 'ID 타입:', typeof user.id); // ID 디버깅
+    
+    // ID가 없거나 숫자인 경우 경고
+    if (!user.id || typeof user.id === 'number') {
+      console.error(`⚠️ 사용자 ${index}의 ID가 잘못되었습니다:`, user.id);
+    }
+    
     return {
-      id: user.id || `temp-${index}`, // 실제 user ID 사용, 없으면 임시 ID
-      name: user.name,
+      id: String(user.id || `temp-${index}`), // 문자열로 강제 변환
+      name: user.name || '이름 없음',
       role: user.role === 'OWNER' ? '프로젝트 오너' : 
             user.role === 'ADMIN' ? '관리자' : '팀원',
-      email: user.email,
+      email: user.email || '',
       phone: '', // API에서 전화번호가 없으므로 빈 문자열
       department: user.skills?.length ? '개발팀' : '일반팀' // 스킬이 있으면 개발팀으로 가정
     };

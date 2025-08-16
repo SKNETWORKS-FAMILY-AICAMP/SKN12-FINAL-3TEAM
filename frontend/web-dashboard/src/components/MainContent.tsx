@@ -233,6 +233,14 @@ const MainContent = () => {
   const { data: tasks = [], isLoading: tasksLoading, refetch: refetchTasks, error: tasksError } = useQuery({
     queryKey: ['tasks'],
     queryFn: () => taskAPI.getTasks(),
+    retry: 3, // 실패 시 3번 재시도
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000), // 지수 백오프
+    onError: (error) => {
+      console.error('⚠️ 태스크를 가져오는데 실패했습니다:', error);
+    },
+    onSuccess: (data) => {
+      console.log('✅ 태스크 로드 성공! 총 개수:', data.length);
+    }
   });
 
   const { data: users = [], isLoading: usersLoading, error: usersError } = useQuery({

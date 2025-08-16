@@ -922,12 +922,20 @@ app.get('/api/tasks',
   authenticateUser,
   async (req, res) => {
     try {
+      console.log('📋 /api/tasks API 호출됨');
+      console.log('👤 인증된 사용자:', req.user);
+      
       const tenantId = req.user?.tenantId;
       const userId = req.user?.id; // 로그인한 사용자 ID
       
       if (!tenantId || !userId) {
+        console.log('❌ 인증 실패: tenantId 또는 userId 없음');
         return res.status(401).json({ error: 'Unauthorized' });
       }
+      
+      console.log('✅ tenantId:', tenantId);
+      console.log('✅ userId:', userId);
+      
       const { status, assigneeId, priority, myTasksOnly } = req.query;
       
       // 기본적으로 같은 tenant의 모든 작업을 표시
@@ -974,6 +982,13 @@ app.get('/api/tasks',
       });
 
       console.log(`📋 Tenant ${tenantId}의 작업 ${tasks.length}개 조회됨 (요청자: ${userId}, 내 작업만: ${myTasksOnly === 'true' ? '예' : '아니오'})`);
+      
+      // 각 태스크의 assigneeId 확인
+      const assigneeIds = tasks.map(t => t.assigneeId);
+      const uniqueAssigneeIds = [...new Set(assigneeIds)];
+      console.log(`📋 고유한 assigneeId 개수: ${uniqueAssigneeIds.length}`);
+      console.log(`📋 assigneeId 목록:`, uniqueAssigneeIds);
+      
       return res.json(tasks);
     } catch (error) {
       console.error('Tasks fetch error:', error);
@@ -3392,9 +3407,11 @@ process.on('SIGTERM', async () => {
 app.get('/tasks', async (req, res) => {
   try {
     console.log('📋 /tasks API 호출됨');
+    console.log('📋 요청 헤더:', req.headers);
     
     // Authorization 헤더에서 토큰 추출
     const authHeader = req.headers.authorization;
+    console.log('🔑 Authorization 헤더:', authHeader);
     const token = authHeader?.split(' ')[1];
     
     let userId = null;
@@ -3404,8 +3421,11 @@ app.get('/tasks', async (req, res) => {
         userId = decoded.id;
         console.log('🔑 토큰에서 추출한 사용자 ID:', userId);
       } catch (err) {
+        console.log('⚠️ 토큰 검증 실패:', err);
         console.log('⚠️ 토큰 검증 실패, 전체 태스크 반환');
       }
+    } else {
+      console.log('⚠️ 토큰이 없음');
     }
     
     // Prisma 연결 테스트
@@ -3457,6 +3477,13 @@ app.get('/tasks', async (req, res) => {
     });
     
     console.log(`✅ ${tasks.length}개의 태스크 조회 성공 (Tenant: ${tenantId || '전체'})`);
+    
+    // 각 태스크의 assigneeId 로깅
+    const assigneeIds = tasks.map(t => t.assigneeId);
+    const uniqueAssigneeIds = [...new Set(assigneeIds)];
+    console.log(`✅ 고유한 assigneeId 개수: ${uniqueAssigneeIds.length}`);
+    console.log(`✅ assigneeId 목록:`, uniqueAssigneeIds);
+    
     res.json(tasks);
   } catch (error) {
     console.error('❌ /tasks API 오류 상세:', {

@@ -31,6 +31,9 @@ apiClient.interceptors.request.use(
     const token = localStorage.getItem('token');
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
+      console.log('🔐 Request with token to:', config.url);
+    } else {
+      console.log('⚠️ Request without token to:', config.url);
     }
     return config;
   },
@@ -252,76 +255,36 @@ export const taskAPI = {
       
       // 임시로 public endpoint 사용 (인증 없이 테스트)
       console.log('🔍 /tasks API 호출 시작...');
-      const response = await apiClient.get<Task[]>('/tasks', {
+      console.log('🔍 필터:', cleanFilters);
+      console.log('🔍 현재 토큰:', localStorage.getItem('token')?.substring(0, 20) + '...');
+      
+      // /api/tasks 엔드포인트 사용 (인증 필요)
+      const response = await apiClient.get<Task[]>('/api/tasks', {
         params: Object.keys(cleanFilters).length > 0 ? cleanFilters : undefined,
       });
+      
       console.log('✅ /tasks API 응답:', response.data);
       console.log('✅ 반환된 태스크 개수:', response.data.length);
+      
+      // 응답 데이터의 assigneeId들을 확인
+      const uniqueAssignees = [...new Set(response.data.map(task => task.assigneeId))];
+      console.log('✅ 고유한 assigneeId 목록:', uniqueAssignees);
+      
       return response.data;
-    } catch (error) {
-      console.error('Failed to fetch tasks:', error);
-      // Fallback: DB에 있는 샘플 데이터와 동일한 구조로 반환
-      return [
-        {
-          id: 'task-001',
-          title: '요구사항 정의서 작성',
-          description: '상세 기능 명세서 작성 및 비즈니스 요구사항 분석',
-          status: 'DONE',
-          priority: 'HIGH',
-          assigneeId: 'test-user-id-123',
-          assignee: {
-            id: 'test-user-id-123',
-            name: '테스트 사용자',
-            email: 'test@example.com',
-            role: 'MEMBER'
-          },
-          dueDate: '2025-01-15',
-          complexity: 'MEDIUM'
-        },
-        {
-          id: 'task-002',
-          title: 'UI/UX 디자인 시안 작성',
-          description: '사용자 인터페이스 디자인 및 프로토타입 제작',
-          status: 'IN_PROGRESS',
-          priority: 'HIGH',
-          assigneeId: 'test-user-id-123',
-          assignee: {
-            id: 'test-user-id-123',
-            name: '테스트 사용자',
-            email: 'test@example.com',
-            role: 'MEMBER'
-          },
-          dueDate: '2025-01-18',
-          complexity: 'HIGH'
-        },
-        {
-          id: 'task-003',
-          title: '데이터베이스 스키마 설계',
-          description: 'ERD 작성 및 테이블 구조 정의',
-          status: 'TODO',
-          priority: 'MEDIUM',
-          dueDate: '2025-01-20',
-          complexity: 'MEDIUM'
-        },
-        {
-          id: 'task-004',
-          title: 'API 명세서 작성',
-          description: 'RESTful API 엔드포인트 정의 및 문서화',
-          status: 'TODO',
-          priority: 'MEDIUM',
-          dueDate: '2025-01-22',
-          complexity: 'LOW'
-        },
-        {
-          id: 'task-005',
-          title: '백엔드 API 개발',
-          description: 'Node.js/Express 서버 구현',
-          status: 'TODO',
-          priority: 'HIGH',
-          dueDate: '2025-01-25',
-          complexity: 'HIGH'
-        }
-      ] as Task[];
+    } catch (error: any) {
+      console.error('❌ Failed to fetch tasks:', error);
+      console.error('❌ Error details:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        url: error.config?.url,
+        headers: error.config?.headers
+      });
+      
+      // Fallback 데이터를 반환하지 않고 빈 배열 반환
+      // 이렇게 하면 실제 문제를 파악할 수 있음
+      console.error('⚠️ API 에러로 인해 태스크를 가져올 수 없습니다!');
+      return []; // fallback 데이터 대신 빈 배열 반환
     }
   },
 
