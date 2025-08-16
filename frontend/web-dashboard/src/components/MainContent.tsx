@@ -235,6 +235,9 @@ const MainContent = () => {
     queryFn: () => taskAPI.getTasks(),
     retry: 3, // 실패 시 3번 재시도
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000), // 지수 백오프
+    staleTime: 0, // 데이터를 즉시 stale로 표시
+    cacheTime: 0, // 캐시를 사용하지 않음
+    refetchOnMount: 'always', // 마운트 시 항상 새로 가져오기
     onError: (error) => {
       console.error('⚠️ 태스크를 가져오는데 실패했습니다:', error);
     },

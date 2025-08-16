@@ -3483,13 +3483,21 @@ app.get('/tasks', async (req, res) => {
       },
     });
     
-    console.log(`✅ ${tasks.length}개의 태스크 조회 성공 (Tenant: ${tenantId || '전체'})`);
+    // 조회 결과 상세 로깅
+    console.log(`✅ /tasks 엔드포인트 - ${tasks.length}개의 태스크 조회 성공`);
+    console.log(`📋 조회 조건: tenantId=${tenantId}, userId=${userId}`);
     
     // 각 태스크의 assigneeId 로깅
     const assigneeIds = tasks.map(t => t.assigneeId);
     const uniqueAssigneeIds = [...new Set(assigneeIds)];
-    console.log(`✅ 고유한 assigneeId 개수: ${uniqueAssigneeIds.length}`);
-    console.log(`✅ assigneeId 목록:`, uniqueAssigneeIds);
+    console.log(`📋 고유한 assigneeId 개수: ${uniqueAssigneeIds.length}`);
+    console.log(`📋 assigneeId 목록:`, uniqueAssigneeIds);
+    
+    // 실제 태스크 목록 로깅 (처음 5개만)
+    console.log('📋 조회된 태스크 (처음 5개):');
+    tasks.slice(0, 5).forEach((task, i) => {
+      console.log(`  ${i+1}. ${task.title} (담당: ${task.assignee?.name || '미지정'}, 상태: ${task.status})`);
+    });
     
     res.json(tasks);
   } catch (error) {
