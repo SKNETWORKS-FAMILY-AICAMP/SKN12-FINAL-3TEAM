@@ -798,6 +798,7 @@ class AIService {
     fileName: string;
     projectName: string;
     userId: string;
+    tenantId?: string;
   }): Promise<any> {
     try {
       console.log(`🎤 Processing audio file from Slack: ${params.fileName}`);
@@ -818,20 +819,10 @@ class AIService {
       if (result.success) {
         console.log(`✅ Audio processing completed for project: ${params.projectName}`);
         
-        // Notion과 JIRA URL 생성
-        // DB에서 실제 생성된 프로젝트 정보를 가져와서 URL 구성 (추후 구현)
-        // 현재는 워크스페이스 기본 URL 반환
-        const notionWorkspaceUrl = process.env.NOTION_WORKSPACE_URL || 'https://www.notion.so';
-        const jiraSiteUrl = process.env.JIRA_SITE_URL || 'https://your-domain.atlassian.net';
-        
-        // 실제 생성된 페이지/이슈가 있다면 해당 URL을 사용하도록 개선 필요
-        const notionUrl = `${notionWorkspaceUrl}/${params.projectName.replace(/\s+/g, '-').toLowerCase()}`;
-        const jiraUrl = `${jiraSiteUrl}/jira/software/projects`;
-        
+        // 사용자의 실제 연동 정보를 반환 (DB 조회는 slack-handler에서 처리)
         return {
           projectName: params.projectName,
-          notionUrl: notionUrl,
-          jiraUrl: jiraUrl,
+          needsIntegrationInfo: true, // slack-handler가 DB 조회하도록 플래그 설정
           ...result
         };
       } else {

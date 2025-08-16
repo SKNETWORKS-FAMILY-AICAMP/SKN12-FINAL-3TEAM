@@ -4775,6 +4775,16 @@ async function processUploadedFile(file, projectName, client, userId) {
       throw new Error('파일 다운로드 URL을 가져올 수 없습니다.');
     }
     
+    // 사용자 정보 조회 (Slack userId로 DB 사용자 찾기)
+    const user = await prisma.user.findFirst({
+      where: { slackUserId: userId },
+      include: { tenant: true }
+    });
+    
+    if (!user) {
+      throw new Error('사용자 정보를 찾을 수 없습니다.');
+    }
+    
     // 상태 업데이트
     await client.chat.postMessage({
       channel: userId,
@@ -4787,7 +4797,131 @@ async function processUploadedFile(file, projectName, client, userId) {
         fileUrl: fileInfo.file.url_private_download,
         fileName: file.name,
         projectName: projectName,
-        userId: userId
+        userId: userId,
+        tenantId: user.tenantId
+      });
+      
+      // 사용자의 실제 Integration 정보 조회
+      const notionIntegration = await prisma.integration.findFirst({
+        where: {
+          tenantId: user.tenantId,
+          userId: user.id,
+          serviceType: 'NOTION',
+          isActive: true
+        }
+      });
+      
+      const jiraIntegration = await prisma.integration.findFirst({
+        where: {
+          tenantId: user.tenantId,
+          userId: user.id,
+          serviceType: 'JIRA',
+          isActive: true
+        }
+      });
+      
+      // 실제 Notion 페이지와 JIRA 이슈 생성
+      let notionPageUrl = null;
+      let jiraIssueUrl = null;
+      let notionWorkspaceUrl = null;
+      let jiraSiteUrl = null;
+      
+      // Notion 페이지 생성
+      if (notionIntegration && result.stage2?.task_master_prd) {
+        try {
+          const NotionService = require('../services/notion-service').NotionService;
+          const notionService = await NotionService.createForUser(user.tenantId, user.id);
+          
+          if (notionService) {
+            // AI가 생성한 데이터를 Notion 페이지로 변환
+            const notionData = {
+              summary: result.stage1?.notion_project?.title || projectName,
+              action_items: result.stage2.task_master_prd.tasks?.map((task, index) => ({
+                id: index + 1,
+                title: task.title || task.task,
+                description: task.description,
+                details: task.details,
+                priority: task.priority?.toUpperCase() || 'MEDIUM',
+                status: 'pending',
+                assignee: task.assignee || '미지정',
+                start_date: task.startDate || task.start_date || new Date().toISOString().split('T')[0],
+                deadline: task.dueDate || task.due_date || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                estimated_hours: task.estimated_hours || 8,
+                complexity: task.complexity || 5,
+                dependencies: task.dependencies || [],
+                test_strategy: task.test_strategy || '',
+                acceptance_criteria: task.acceptance_criteria || [],
+                subtasks: task.subtasks || [],
+                tags: task.tags || [],
+                created_at: new Date().toISOString(),
+                updated_at: null
+              })) || []
+            };
+            
+            const notionPage = await notionService.createMeetingPage(notionData);
+            notionPageUrl = notionPage.url;
+            console.log('✅ Notion 페이지 생성 성공:', notionPageUrl);
+          }
+        } catch (error) {
+          console.error('❌ Notion 페이지 생성 실패:', error);
+        }
+        
+        // Notion 워크스페이스 URL 구성
+        const notionConfig = notionIntegration.config;
+        if (notionConfig.workspace_id) {
+          notionWorkspaceUrl = `https://www.notion.so/${notionConfig.workspace_id}`;
+        } else if (notionConfig.workspace_url) {
+          notionWorkspaceUrl = notionConfig.workspace_url;
+        } else if (notionConfig.workspace_domain) {
+          notionWorkspaceUrl = `https://${notionConfig.workspace_domain}.notion.site`;
+        }
+      }
+      
+      // JIRA 이슈 생성
+      if (jiraIntegration && result.stage2?.task_master_prd?.tasks) {
+        try {
+          const JiraService = require('../services/jira-service').default;
+          const jiraService = new JiraService(prisma);
+          
+          // 첫 번째 태스크를 메인 이슈로 생성 (나머지는 서브태스크로)
+          const mainTask = result.stage2.task_master_prd.tasks[0];
+          if (mainTask) {
+            const jiraIssue = await jiraService.createJiraIssue(
+              user.tenantId,
+              user.id,
+              {
+                summary: mainTask.title || mainTask.task || projectName,
+                description: mainTask.description || '',
+                issueType: 'Task',
+                priority: mainTask.priority?.toLowerCase() === 'high' ? 'High' : 
+                         mainTask.priority?.toLowerCase() === 'low' ? 'Low' : 'Medium',
+                startDate: mainTask.startDate || mainTask.start_date,
+                dueDate: mainTask.dueDate || mainTask.due_date
+              }
+            );
+            
+            // JIRA 사이트 URL 구성
+            const jiraConfig = jiraIntegration.config;
+            if (jiraConfig.site_url) {
+              jiraSiteUrl = jiraConfig.site_url;
+              jiraIssueUrl = `${jiraConfig.site_url}/browse/${jiraIssue.key}`;
+            } else if (jiraConfig.cloud_id && jiraConfig.site_name) {
+              jiraSiteUrl = `https://${jiraConfig.site_name}.atlassian.net`;
+              jiraIssueUrl = `https://${jiraConfig.site_name}.atlassian.net/browse/${jiraIssue.key}`;
+            }
+            
+            console.log('✅ JIRA 이슈 생성 성공:', jiraIssue.key, jiraIssueUrl);
+          }
+        } catch (error) {
+          console.error('❌ JIRA 이슈 생성 실패:', error);
+        }
+      }
+      
+      console.log('🔗 생성된 링크:', {
+        notionPageUrl,
+        jiraIssueUrl,
+        notionWorkspaceUrl,
+        jiraSiteUrl
       });
       
       // 결과 전송
@@ -4803,26 +4937,50 @@ async function processUploadedFile(file, projectName, client, userId) {
       
       // URL이 있을 때만 버튼 추가
       const buttons = [];
-      if (result.notionUrl && result.notionUrl !== '#') {
+      
+      // 실제 생성된 페이지/이슈 링크 우선 표시
+      if (notionPageUrl) {
         buttons.push({
           type: 'button',
           text: {
             type: 'plain_text',
-            text: '📋 Notion 페이지 보기'
+            text: '📋 생성된 Notion 페이지 보기'
           },
-          url: result.notionUrl,
+          url: notionPageUrl,
+          action_id: 'view_notion_page',
+          style: 'primary'
+        });
+      } else if (notionWorkspaceUrl) {
+        buttons.push({
+          type: 'button',
+          text: {
+            type: 'plain_text',
+            text: '📋 Notion 워크스페이스로 이동'
+          },
+          url: notionWorkspaceUrl,
           action_id: 'view_notion'
         });
       }
       
-      if (result.jiraUrl && result.jiraUrl !== '#') {
+      if (jiraIssueUrl) {
         buttons.push({
           type: 'button',
           text: {
             type: 'plain_text',
-            text: '🎫 JIRA 이슈 보기'
+            text: '🎫 생성된 JIRA 이슈 보기'
           },
-          url: result.jiraUrl,
+          url: jiraIssueUrl,
+          action_id: 'view_jira_issue',
+          style: 'primary'
+        });
+      } else if (jiraSiteUrl) {
+        buttons.push({
+          type: 'button',
+          text: {
+            type: 'plain_text',
+            text: '🎫 JIRA 사이트로 이동'
+          },
+          url: jiraSiteUrl,
           action_id: 'view_jira'
         });
       }
@@ -4838,40 +4996,78 @@ async function processUploadedFile(file, projectName, client, userId) {
       // 개인 DM에도 Notion/JIRA 링크 추가
       const dmBlocks = [...resultBlocks];
       
-      // 실제 생성된 프로젝트 정보에서 URL 가져오기 (나중에 구현 예정)
-      let actualNotionUrl = result.notionUrl;
-      let actualJiraUrl = result.jiraUrl;
-      
-      // 환경변수에서 기본 워크스페이스 URL 가져오기
-      if (!actualNotionUrl || actualNotionUrl === '#') {
-        actualNotionUrl = process.env.NOTION_WORKSPACE_URL || 'https://www.notion.so';
+      // 연동되지 않은 서비스에 대한 안내 추가
+      if (!notionIntegration) {
+        dmBlocks.push({
+          type: 'context',
+          elements: [{
+            type: 'mrkdwn',
+            text: '⚠️ Notion이 연동되지 않았습니다. 연동 페이지에서 설정해주세요.'
+          }]
+        });
       }
-      if (!actualJiraUrl || actualJiraUrl === '#') {
-        actualJiraUrl = process.env.JIRA_SITE_URL ? `${process.env.JIRA_SITE_URL}/jira/software/projects` : 'https://your-domain.atlassian.net';
+      
+      if (!jiraIntegration) {
+        dmBlocks.push({
+          type: 'context',
+          elements: [{
+            type: 'mrkdwn',
+            text: '⚠️ JIRA가 연동되지 않았습니다. 연동 페이지에서 설정해주세요.'
+          }]
+        });
       }
       
-      // Notion과 JIRA 버튼 추가
+      // Notion과 JIRA 버튼 추가 (연동된 경우에만)
       const dmButtons = [];
-      if (actualNotionUrl) {
+      
+      // 실제 생성된 페이지/이슈 링크 우선 표시
+      if (notionPageUrl) {
         dmButtons.push({
           type: 'button',
           text: {
             type: 'plain_text',
-            text: '📋 Notion 워크스페이스 열기'
+            text: '📋 생성된 Notion 페이지 열기'
           },
-          url: actualNotionUrl,
+          url: notionPageUrl,
+          action_id: 'open_notion_page',
+          style: 'primary'
+        });
+      }
+      
+      if (jiraIssueUrl) {
+        dmButtons.push({
+          type: 'button',
+          text: {
+            type: 'plain_text',
+            text: '🎫 생성된 JIRA 이슈 열기'
+          },
+          url: jiraIssueUrl,
+          action_id: 'open_jira_issue',
+          style: 'primary'
+        });
+      }
+      
+      // 워크스페이스 링크도 추가 (보조 버튼으로)
+      if (notionWorkspaceUrl && !notionPageUrl) {
+        dmButtons.push({
+          type: 'button',
+          text: {
+            type: 'plain_text',
+            text: '📋 Notion 워크스페이스로 이동'
+          },
+          url: notionWorkspaceUrl,
           action_id: 'open_notion_workspace'
         });
       }
       
-      if (actualJiraUrl) {
+      if (jiraSiteUrl && !jiraIssueUrl) {
         dmButtons.push({
           type: 'button',
           text: {
             type: 'plain_text',
-            text: '🎫 JIRA 워크스페이스 열기'
+            text: '🎫 JIRA 사이트로 이동'
           },
-          url: actualJiraUrl,
+          url: jiraSiteUrl,
           action_id: 'open_jira_workspace'
         });
       }
