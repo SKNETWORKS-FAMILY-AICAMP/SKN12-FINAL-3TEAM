@@ -4796,7 +4796,7 @@ async function processUploadedFile(file, projectName, client, userId) {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: `🎯 *${projectName}*\n\n✅ 업무가 성공적으로 생성되었습니다.`
+            text: `🎯 *${projectName}*\n\n✅ 업무가 성공적으로 생성되었습니다.\n\n📊 생성된 항목:\n• 📋 Notion 프로젝트 문서\n• 🎫 JIRA 이슈 및 서브태스크\n• 📌 ${result.stage2?.task_master_prd?.tasks?.length || 0}개의 업무`
           }
         }
       ];
@@ -4838,28 +4838,40 @@ async function processUploadedFile(file, projectName, client, userId) {
       // 개인 DM에도 Notion/JIRA 링크 추가
       const dmBlocks = [...resultBlocks];
       
+      // 실제 생성된 프로젝트 정보에서 URL 가져오기 (나중에 구현 예정)
+      let actualNotionUrl = result.notionUrl;
+      let actualJiraUrl = result.jiraUrl;
+      
+      // 환경변수에서 기본 워크스페이스 URL 가져오기
+      if (!actualNotionUrl || actualNotionUrl === '#') {
+        actualNotionUrl = process.env.NOTION_WORKSPACE_URL || 'https://www.notion.so';
+      }
+      if (!actualJiraUrl || actualJiraUrl === '#') {
+        actualJiraUrl = process.env.JIRA_SITE_URL ? `${process.env.JIRA_SITE_URL}/jira/software/projects` : 'https://your-domain.atlassian.net';
+      }
+      
       // Notion과 JIRA 버튼 추가
       const dmButtons = [];
-      if (result.notionUrl && result.notionUrl !== '#') {
+      if (actualNotionUrl) {
         dmButtons.push({
           type: 'button',
           text: {
             type: 'plain_text',
             text: '📋 Notion 워크스페이스 열기'
           },
-          url: result.notionUrl,
+          url: actualNotionUrl,
           action_id: 'open_notion_workspace'
         });
       }
       
-      if (result.jiraUrl && result.jiraUrl !== '#') {
+      if (actualJiraUrl) {
         dmButtons.push({
           type: 'button',
           text: {
             type: 'plain_text',
             text: '🎫 JIRA 워크스페이스 열기'
           },
-          url: result.jiraUrl,
+          url: actualJiraUrl,
           action_id: 'open_jira_workspace'
         });
       }
