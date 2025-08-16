@@ -5,6 +5,13 @@ WhisperX 전용 서버 (포트 8001)
 """
 
 import os
+import sys
+
+# cuDNN 라이브러리 경로 추가
+torch_lib_path = "/workspace/SKN12-FINAL-3TEAM/ai-engine-dev/venv_whisperx/lib/python3.10/site-packages/torch/lib"
+if os.path.exists(torch_lib_path):
+    os.environ['LD_LIBRARY_PATH'] = f"{torch_lib_path}:{os.environ.get('LD_LIBRARY_PATH', '')}"
+
 import tempfile
 import logging
 from typing import Optional, Dict, Any

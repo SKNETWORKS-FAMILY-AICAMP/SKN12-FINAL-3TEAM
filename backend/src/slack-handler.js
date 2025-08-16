@@ -3783,21 +3783,23 @@ async function processTranscriptWithAI(transcript, client, channelId) {
             tenantId: tenant.id,
             projectId: createdProject.id,
             taskNumber,
-            title: taskItem.task || 'Untitled Task',
+            title: taskItem.title || 'Untitled Task',  // task -> title로 수정
             description: taskItem.description || '',
             status: 'TODO',
             priority: taskItem.priority === 'high' ? 'HIGH' : 
                      taskItem.priority === 'low' ? 'LOW' : 'MEDIUM',
             assigneeId: user.id,
+            startDate: taskItem.start_date ? new Date(taskItem.start_date) : null,  // 시작일 추가
             dueDate: taskItem.deadline && taskItem.deadline !== 'TBD' 
               ? new Date(taskItem.deadline) 
               : null,
+            complexity: taskItem.complexity ? String(taskItem.complexity) : '5',  // 복잡도 추가
             metadata: {
               create: {
-                estimatedHours: 0,
+                estimatedHours: taskItem.estimated_hours || 8,  // 실제 예상시간 사용
                 actualHours: 0,
-                labels: [],
-                customFields: {}
+                requiredSkills: taskItem.tags || [],  // tags를 skills로 사용
+                taskType: taskItem.details ? 'detailed' : 'standard'
               }
             }
           }
@@ -3807,6 +3809,18 @@ async function processTranscriptWithAI(transcript, client, channelId) {
       }
       
       console.log(`✅ 태스크 ${createdTasks.length}개 생성 완료`);
+      
+      // 생성된 태스크 상세 로그
+      for (const task of createdTasks) {
+        console.log(`📌 생성된 태스크:`, {
+          id: task.id,
+          title: task.title,
+          complexity: task.complexity,
+          startDate: task.startDate,
+          dueDate: task.dueDate,
+          estimatedHours: task.metadata?.estimatedHours || 'N/A'
+        });
+      }
       
       // SlackInput 상태 업데이트
       await prisma.slackInput.update({
@@ -4821,10 +4835,57 @@ async function processUploadedFile(file, projectName, client, userId) {
         });
       }
       
+      // 개인 DM에도 Notion/JIRA 링크 추가
+      const dmBlocks = [...resultBlocks];
+      
+      // Notion과 JIRA 버튼 추가
+      const dmButtons = [];
+      if (result.notionUrl && result.notionUrl !== '#') {
+        dmButtons.push({
+          type: 'button',
+          text: {
+            type: 'plain_text',
+            text: '📋 Notion 워크스페이스 열기'
+          },
+          url: result.notionUrl,
+          action_id: 'open_notion_workspace'
+        });
+      }
+      
+      if (result.jiraUrl && result.jiraUrl !== '#') {
+        dmButtons.push({
+          type: 'button',
+          text: {
+            type: 'plain_text',
+            text: '🎫 JIRA 워크스페이스 열기'
+          },
+          url: result.jiraUrl,
+          action_id: 'open_jira_workspace'
+        });
+      }
+      
+      // 버튼이 있으면 actions 블록 추가
+      if (dmButtons.length > 0) {
+        dmBlocks.push({
+          type: 'divider'
+        });
+        dmBlocks.push({
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: '📌 *생성된 워크스페이스로 이동:*'
+          }
+        });
+        dmBlocks.push({
+          type: 'actions',
+          elements: dmButtons
+        });
+      }
+      
       await client.chat.postMessage({
         channel: userId,
         text: '✅ 프로젝트 생성이 완료되었습니다!',
-        blocks: resultBlocks
+        blocks: dmBlocks
       });
     } else {
       throw new Error('AI 서비스가 초기화되지 않았습니다.');

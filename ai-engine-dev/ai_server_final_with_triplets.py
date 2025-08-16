@@ -167,6 +167,12 @@ RESPOND WITH JSON ONLY (한국어로 작성):"""
                     details=task_info.get("details", ""),
                     priority=task_info.get("priority", "medium"),
                     status=task_info.get("status", "pending"),
+                    assignee=task_info.get("assignee", None),
+                    start_date=task_info.get("start_date", None),
+                    deadline=task_info.get("deadline", None),
+                    due_date=task_info.get("due_date", None),
+                    estimated_hours=task_info.get("estimated_hours", 8),
+                    complexity=task_info.get("complexity", 5),
                     dependencies=task_info.get("dependencies", []),
                     test_strategy=task_info.get("testStrategy", ""),
                     subtasks=[]  # 서브태스크는 나중에 복잡도 분석 후 생성
@@ -193,6 +199,12 @@ RESPOND WITH JSON ONLY (한국어로 작성):"""
                 details="상세 구현 내용",
                 priority="high" if i == 0 else "medium",
                 status="pending",
+                assignee=None,
+                start_date=None,
+                deadline=None,
+                due_date=None,
+                estimated_hours=(i + 1) * 8,  # 태스크별로 다른 시간
+                complexity=7 + i if i < 3 else 5,  # 복잡도도 다양하게
                 dependencies=[],
                 test_strategy="단위 테스트 및 통합 테스트",
                 subtasks=[]
@@ -300,6 +312,17 @@ async def generate_subtasks_for_all_tasks(task_items: List[TaskItem], complexity
                 # 기본값 설정
                 complexity_score = task_analysis.get('complexityScore', 5)
                 recommended_subtasks = task_analysis.get('recommendedSubtasks', 3)
+                
+                # 태스크에 복잡도 정보 업데이트
+                task.complexity = complexity_score
+                task.estimated_hours = task_analysis.get('estimatedHours', complexity_score * 8)
+                
+                # 날짜 설정 (시작일과 마감일)
+                from datetime import datetime, timedelta
+                today = datetime.now()
+                task.start_date = today.strftime('%Y-%m-%d')
+                task.due_date = (today + timedelta(days=7 * complexity_score)).strftime('%Y-%m-%d')
+                task.deadline = task.due_date
                 
                 # 서브태스크 ID 시작점
                 next_subtask_id = 1

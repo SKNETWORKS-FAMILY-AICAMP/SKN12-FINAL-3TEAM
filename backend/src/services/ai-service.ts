@@ -783,8 +783,21 @@ class AIService {
       
       if (result.success) {
         console.log(`✅ Audio processing completed for project: ${params.projectName}`);
+        
+        // Notion과 JIRA URL 생성
+        // DB에서 실제 생성된 프로젝트 정보를 가져와서 URL 구성 (추후 구현)
+        // 현재는 워크스페이스 기본 URL 반환
+        const notionWorkspaceUrl = process.env.NOTION_WORKSPACE_URL || 'https://www.notion.so';
+        const jiraSiteUrl = process.env.JIRA_SITE_URL || 'https://your-domain.atlassian.net';
+        
+        // 실제 생성된 페이지/이슈가 있다면 해당 URL을 사용하도록 개선 필요
+        const notionUrl = `${notionWorkspaceUrl}/${params.projectName.replace(/\s+/g, '-').toLowerCase()}`;
+        const jiraUrl = `${jiraSiteUrl}/jira/software/projects`;
+        
         return {
           projectName: params.projectName,
+          notionUrl: notionUrl,
+          jiraUrl: jiraUrl,
           ...result
         };
       } else {

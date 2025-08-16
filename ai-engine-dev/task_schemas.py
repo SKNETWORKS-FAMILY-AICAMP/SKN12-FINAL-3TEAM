@@ -46,7 +46,9 @@ class TaskItem(BaseModel):
     
     # 할당 및 일정
     assignee: Optional[str] = Field(None, description="담당자")
+    start_date: Optional[str] = Field(None, description="시작일")  # 추가
     deadline: Optional[str] = Field(None, description="마감일")
+    due_date: Optional[str] = Field(None, description="마감일 (DB 호환)")  # 추가
     estimated_hours: Optional[int] = Field(None, ge=0, description="예상 소요 시간")
     
     # 복잡도 및 의존성
