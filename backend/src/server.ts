@@ -938,6 +938,8 @@ app.get('/api/tasks',
       
       const { status, assigneeId, priority, myTasksOnly } = req.query;
       
+      console.log('📋 쿼리 파라미터:', { status, assigneeId, priority, myTasksOnly });
+      
       // 기본적으로 같은 tenant의 모든 작업을 표시
       const where: any = {
         tenantId
@@ -945,15 +947,20 @@ app.get('/api/tasks',
       
       // myTasksOnly 파라미터가 true일 때만 내 작업만 필터링
       if (myTasksOnly === 'true') {
+        console.log('⚠️ myTasksOnly=true - 내 작업만 필터링합니다!');
         where.OR = [
           { assigneeId: userId },        // 나에게 할당된 작업
           { assigneeId: null }            // 미할당 작업
         ];
+      } else {
+        console.log('✅ 모든 팀 작업을 반환합니다');
       }
       
       if (status) where.status = status;
       if (assigneeId) where.assigneeId = assigneeId;
       if (priority) where.priority = priority;
+
+      console.log('📋 최종 DB 조회 조건:', JSON.stringify(where, null, 2));
 
       const tasks = await prisma.task.findMany({
         where,

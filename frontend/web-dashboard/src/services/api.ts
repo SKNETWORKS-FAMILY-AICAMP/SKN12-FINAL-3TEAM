@@ -253,15 +253,19 @@ export const taskAPI = {
         });
       }
       
-      // 임시로 public endpoint 사용 (인증 없이 테스트)
-      console.log('🔍 /tasks API 호출 시작...');
+      // /api/tasks 엔드포인트 사용 (인증 필요)
+      console.log('🔍 /api/tasks API 호출 시작...');
       console.log('🔍 필터:', cleanFilters);
       console.log('🔍 현재 토큰:', localStorage.getItem('token')?.substring(0, 20) + '...');
       
-      // /api/tasks 엔드포인트 사용 (인증 필요)
-      const response = await apiClient.get<Task[]>('/api/tasks', {
+      const url = '/api/tasks';
+      console.log('🔍 요청 URL:', `${API_BASE_URL}${url}`);
+      
+      const response = await apiClient.get<Task[]>(url, {
         params: Object.keys(cleanFilters).length > 0 ? cleanFilters : undefined,
       });
+      
+      console.log('📡 API 응답 상태:', response.status);
       
       console.log('✅ /api/tasks API 응답 받음!');
       console.log('✅ 반환된 태스크 개수:', response.data.length);
