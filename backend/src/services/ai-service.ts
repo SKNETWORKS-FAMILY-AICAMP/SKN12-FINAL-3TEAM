@@ -670,6 +670,19 @@ class AIService {
 
           // AI 서버 응답을 백엔드 형식으로 변환
           const aiResponse = response.data;
+          
+          // stage3_tasks가 배열인 경우와 객체인 경우 모두 처리
+          let tasks = [];
+          if (aiResponse.stage3_tasks) {
+            if (Array.isArray(aiResponse.stage3_tasks)) {
+              tasks = aiResponse.stage3_tasks;
+            } else if (aiResponse.stage3_tasks.tasks) {
+              tasks = aiResponse.stage3_tasks.tasks;
+            } else if (aiResponse.stage3_tasks.task_items) {
+              tasks = aiResponse.stage3_tasks.task_items;
+            }
+          }
+          
           result = {
             success: aiResponse.success,
             stage1: {
@@ -679,7 +692,7 @@ class AIService {
             stage2: {
               task_master_prd: {
                 ...aiResponse.stage2_prd,
-                tasks: aiResponse.stage3_tasks?.tasks || []
+                tasks: tasks
               }
             }
           };
@@ -701,6 +714,32 @@ class AIService {
 
           // AI 서버 응답을 백엔드 형식으로 변환
           const aiResponse = response.data;
+          
+          // 디버깅: AI 응답 구조 확인
+          console.log('🔍 AI 서버 원본 응답 구조:', {
+            hasStage1Notion: !!aiResponse.stage1_notion,
+            hasStage2PRD: !!aiResponse.stage2_prd,
+            hasStage3Tasks: !!aiResponse.stage3_tasks,
+            stage3TasksType: typeof aiResponse.stage3_tasks,
+            stage3TasksKeys: aiResponse.stage3_tasks ? Object.keys(aiResponse.stage3_tasks) : [],
+            taskCount: aiResponse.stage3_tasks?.tasks?.length || 
+                       aiResponse.stage3_tasks?.length || 0
+          });
+          
+          // stage3_tasks가 배열인 경우와 객체인 경우 모두 처리
+          let tasks = [];
+          if (aiResponse.stage3_tasks) {
+            if (Array.isArray(aiResponse.stage3_tasks)) {
+              tasks = aiResponse.stage3_tasks;
+            } else if (aiResponse.stage3_tasks.tasks) {
+              tasks = aiResponse.stage3_tasks.tasks;
+            } else if (aiResponse.stage3_tasks.task_items) {
+              tasks = aiResponse.stage3_tasks.task_items;
+            }
+          }
+          
+          console.log(`✅ 추출된 업무: ${tasks.length}개`);
+          
           result = {
             success: aiResponse.success,
             stage1: {
@@ -710,7 +749,7 @@ class AIService {
             stage2: {
               task_master_prd: {
                 ...aiResponse.stage2_prd,
-                tasks: aiResponse.stage3_tasks?.tasks || []
+                tasks: tasks
               }
             }
           };

@@ -4851,7 +4851,7 @@ async function processUploadedFile(file, projectName, client, userId) {
       // Notion 페이지 생성
       if (notionIntegration && result.stage2?.task_master_prd) {
         try {
-          const NotionService = require('../services/notion-service').NotionService;
+          const NotionService = require('./services/notion-service').NotionService;
           const notionService = await NotionService.createForUser(user.tenantId, user.id);
           
           if (notionService) {
@@ -4902,7 +4902,7 @@ async function processUploadedFile(file, projectName, client, userId) {
       // JIRA 이슈 생성
       if (jiraIntegration && result.stage2?.task_master_prd?.tasks) {
         try {
-          const JiraService = require('../services/jira-service').default;
+          const JiraService = require('./services/jira-service').default;
           const jiraService = new JiraService(prisma);
           
           // 첫 번째 태스크를 메인 이슈로 생성 (나머지는 서브태스크로)
