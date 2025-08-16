@@ -84,6 +84,7 @@ model Task {
   description    String?
   status         TaskStatus          @default(TODO)
   assigneeId     String?             @map("assignee_id")
+  startDate      DateTime?           @map("start_date")
   dueDate        DateTime?           @map("due_date")
   createdAt      DateTime            @default(now()) @map("created_at")
   updatedAt      DateTime            @updatedAt @map("updated_at")

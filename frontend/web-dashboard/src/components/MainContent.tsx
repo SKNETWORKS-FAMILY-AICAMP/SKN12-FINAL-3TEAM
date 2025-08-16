@@ -240,6 +240,13 @@ const MainContent = () => {
     queryFn: userAPI.getUsers,
   });
 
+  // 사용자 목록 디버깅
+  useEffect(() => {
+    if (users && users.length > 0) {
+      console.log('👥 사용자 목록 로드됨:', users);
+    }
+  }, [users]);
+
 
   // 실시간 업데이트 구독
   useEffect(() => {
@@ -543,6 +550,15 @@ const MainContent = () => {
   // 업무 추가 함수
   const addNewTask = async (taskData: any) => {
     try {
+      console.log('📋 원본 taskData:', taskData);
+      console.log('👤 선택된 담당자 ID:', taskData.assignee);
+      
+      // 선택된 담당자 정보 확인
+      if (taskData.assignee) {
+        const selectedUser = users.find((u: any) => u.id === taskData.assignee);
+        console.log('✅ 선택된 담당자 정보:', selectedUser);
+      }
+      
       // API로 업무 생성
       const newTaskData = {
         title: taskData.title,
@@ -557,6 +573,8 @@ const MainContent = () => {
       };
       
       console.log('📝 새 업무 생성 요청:', newTaskData);
+      console.log('🔑 assigneeId 타입:', typeof newTaskData.assigneeId);
+      console.log('🔑 assigneeId 값:', newTaskData.assigneeId);
       
       const createdTask = await taskAPI.createTask(newTaskData);
       console.log('✅ 업무 생성 성공:', createdTask);

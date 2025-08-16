@@ -134,9 +134,22 @@ const Settings = () => {
     }
 
     if (editingMember) {
-      // 수정 - API 호출
+      // 수정 - 이메일로 실제 User 찾기
+      const actualUser = users.find(u => u.email === editingMember.email);
+      if (!actualUser) {
+        toast.error('사용자를 찾을 수 없습니다.');
+        return;
+      }
+      
+      console.log('수정할 사용자 ID:', actualUser.id);
+      console.log('수정 데이터:', {
+        name: memberFormData.name,
+        email: memberFormData.email
+      });
+      
+      // API 호출
       updateUserMutation.mutate({
-        userId: editingMember.id.toString(),
+        userId: actualUser.id,
         updates: {
           name: memberFormData.name,
           email: memberFormData.email,
@@ -191,10 +204,17 @@ const Settings = () => {
   });
 
   const deleteMember = (id: number) => {
-    // User API의 User.id는 string이므로 변환 필요
-    const userId = users.find(user => teamMembers.find(tm => tm.id === id)?.email === user.email)?.id;
-    if (userId) {
-      deleteUserMutation.mutate(userId);
+    // id로 teamMember 찾고, 그 email로 실제 user 찾기
+    const teamMember = teamMembers.find(tm => tm.id === id);
+    if (!teamMember) {
+      toast.error('팀원을 찾을 수 없습니다.');
+      return;
+    }
+    
+    const actualUser = users.find(user => user.email === teamMember.email);
+    if (actualUser) {
+      console.log('삭제할 사용자 ID:', actualUser.id);
+      deleteUserMutation.mutate(actualUser.id);
     } else {
       toast.error('사용자를 찾을 수 없습니다.');
     }

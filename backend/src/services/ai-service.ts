@@ -406,6 +406,8 @@ class AIService {
         date.setDate(date.getDate() + daysFromToday);
         return date.toISOString().split('T')[0];
       };
+      
+      console.log(`📅 일정 생성 기준일: ${today.toISOString().split('T')[0]} (사용자가 명령어 입력한 날짜)`);
 
       const dummyTasks = [
         {
@@ -414,29 +416,29 @@ class AIService {
           priority: "high",
           estimated_hours: 24,
           complexity: "HIGH",
-          startDate: formatDate(1), // 내일부터 시작
-          dueDate: formatDate(15), // 15일 후 완료
+          startDate: formatDate(0), // 오늘부터 시작
+          dueDate: formatDate(14), // 14일 후 완료 (2주)
           subtasks: [
             {
               title: "회원가입 API 개발",
               description: "이메일 인증을 포함한 회원가입 기능",
               estimated_hours: 8,
-              startDate: formatDate(1),
-              dueDate: formatDate(5)
+              startDate: formatDate(0),
+              dueDate: formatDate(4)
             },
             {
               title: "로그인/로그아웃 구현",
               description: "JWT 토큰 기반 인증 시스템",
               estimated_hours: 8,
-              startDate: formatDate(6),
-              dueDate: formatDate(10)
+              startDate: formatDate(5),
+              dueDate: formatDate(9)
             },
             {
               title: "OAuth 소셜 로그인",
               description: "구글, 페이스북, 카카오 로그인 연동",
               estimated_hours: 8,
-              startDate: formatDate(11),
-              dueDate: formatDate(15)
+              startDate: formatDate(10),
+              dueDate: formatDate(14)
             }
           ],
           dependencies: [],
@@ -453,36 +455,36 @@ class AIService {
           priority: "high",
           estimated_hours: 32,
           complexity: "HIGH",
-          startDate: formatDate(16), // 인증 시스템 완료 후
-          dueDate: formatDate(35), // 20일간 진행
+          startDate: formatDate(15), // 인증 시스템 완료 후
+          dueDate: formatDate(34), // 20일간 진행
           subtasks: [
             {
               title: "상품 CRUD API",
               description: "상품 생성, 조회, 수정, 삭제 API",
               estimated_hours: 12,
-              startDate: formatDate(16),
-              dueDate: formatDate(22)
+              startDate: formatDate(15),
+              dueDate: formatDate(21)
             },
             {
               title: "카테고리 관리",
               description: "상품 카테고리 분류 시스템",
               estimated_hours: 8,
-              startDate: formatDate(23),
-              dueDate: formatDate(27)
+              startDate: formatDate(22),
+              dueDate: formatDate(26)
             },
             {
               title: "이미지 업로드",
               description: "상품 이미지 업로드 및 관리",
               estimated_hours: 8,
-              startDate: formatDate(28),
-              dueDate: formatDate(32)
+              startDate: formatDate(27),
+              dueDate: formatDate(31)
             },
             {
               title: "재고 관리",
               description: "상품 재고 추적 및 알림",
               estimated_hours: 4,
-              startDate: formatDate(33),
-              dueDate: formatDate(35)
+              startDate: formatDate(32),
+              dueDate: formatDate(34)
             }
           ],
           dependencies: ["사용자 인증 시스템"],

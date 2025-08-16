@@ -1058,6 +1058,154 @@ class JiraService {
       };
     }
   }
+
+  /**
+   * AI 결과를 JIRA에 업로드하는 메서드
+   * action_items를 JIRA Task로 생성하고, subtasks가 있으면 Sub-task로 생성
+   */
+  async createTasksFromAI(
+    tenantId: string,
+    userId: string,
+    aiData: {
+      summary: string;
+      action_items: Array<{
+        id: number;
+        title: string;
+        description: string;
+        priority: string;
+        status: string;
+        assignee: string;
+        start_date: string;
+        deadline: string;
+        estimated_hours: number;
+        subtasks?: Array<{
+          title: string;
+          description: string;
+          estimated_hours: number;
+        }>;
+      }>;
+    }
+  ): Promise<{
+    success: boolean;
+    tasksCreated: number;
+    subtasksCreated: number;
+    projectKey?: string;
+    issues?: Array<{ key: string; title: string; subtasks?: string[] }>;
+    error?: string;
+  }> {
+    try {
+      console.log('🎫 AI 결과를 JIRA에 업로드 시작');
+      
+      // JIRA 연동 확인
+      const integration = await this.getJiraIntegration(tenantId, userId);
+      if (!integration) {
+        return {
+          success: false,
+          tasksCreated: 0,
+          subtasksCreated: 0,
+          error: 'JIRA 연동이 설정되지 않았습니다'
+        };
+      }
+
+      // 프로젝트 설정 가져오기
+      const config = integration.config as any || {};
+      const projectKey = config.defaultProjectKey || 'TK';
+      
+      console.log(`📋 프로젝트 키: ${projectKey}`);
+      
+      const createdIssues = [];
+      let taskCount = 0;
+      let subtaskCount = 0;
+
+      // 각 action_item을 JIRA Task로 생성
+      for (const item of aiData.action_items) {
+        try {
+          // 우선순위 매핑
+          const priorityMap: { [key: string]: string } = {
+            'high': 'HIGH',
+            'medium': 'MEDIUM',
+            'low': 'LOW'
+          };
+          
+          const priority = priorityMap[item.priority.toLowerCase()] || 'MEDIUM';
+          
+          // 메인 Task 생성
+          const parentTask = await this.createJiraIssue(tenantId, userId, {
+            summary: item.title,
+            description: item.description || '',
+            issueType: 'Task',
+            priority: priority,
+            projectKey: projectKey,
+            startDate: item.start_date,
+            dueDate: item.deadline
+          });
+          
+          taskCount++;
+          console.log(`✅ JIRA Task 생성: ${parentTask.key} - ${item.title}`);
+          
+          const issueData: any = {
+            key: parentTask.key,
+            title: item.title
+          };
+          
+          // Subtasks가 있으면 생성
+          if (item.subtasks && item.subtasks.length > 0) {
+            issueData.subtasks = [];
+            console.log(`📂 ${item.subtasks.length}개의 서브태스크 생성 시작...`);
+            
+            for (const subtask of item.subtasks) {
+              try {
+                // Sub-task 생성 (parent 지정, 부모와 동일한 날짜 사용)
+                const subtaskIssue = await this.createJiraIssue(tenantId, userId, {
+                  summary: subtask.title,
+                  description: subtask.description || '',
+                  issueType: 'Sub-task',
+                  priority: 'MEDIUM',
+                  projectKey: projectKey,
+                  parentKey: parentTask.key,
+                  startDate: item.start_date,  // 부모 Task와 동일한 시작일
+                  dueDate: item.deadline       // 부모 Task와 동일한 마감일
+                });
+                
+                issueData.subtasks.push(subtaskIssue.key);
+                subtaskCount++;
+                console.log(`   ✅ Sub-task 생성: ${subtaskIssue.key} - ${subtask.title}`);
+              } catch (subtaskError) {
+                console.error(`   ❌ Sub-task 생성 실패 (${subtask.title}):`, subtaskError);
+                // Sub-task 실패는 무시하고 계속 진행
+              }
+            }
+          }
+          
+          createdIssues.push(issueData);
+          
+        } catch (error) {
+          console.error(`❌ Task 생성 실패 (${item.title}):`, error);
+          // 개별 실패는 무시하고 계속 진행
+        }
+      }
+
+      console.log(`📊 JIRA 생성 완료: Task ${taskCount}개, Sub-task ${subtaskCount}개`);
+
+      return {
+        success: taskCount > 0,
+        tasksCreated: taskCount,
+        subtasksCreated: subtaskCount,
+        projectKey: projectKey,
+        issues: createdIssues,
+        error: taskCount === 0 ? '모든 Task 생성 실패' : undefined
+      };
+      
+    } catch (error) {
+      console.error('❌ JIRA 업로드 전체 실패:', error);
+      return {
+        success: false,
+        tasksCreated: 0,
+        subtasksCreated: 0,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
 }
 
 export { JiraService };

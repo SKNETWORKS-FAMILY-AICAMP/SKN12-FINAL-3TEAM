@@ -3928,50 +3928,23 @@ async function processTranscriptWithAI(transcript, client, channelId) {
       const tasks = aiData.action_items;
       
       if (jiraStatus.connected && tasks && tasks.length > 0) {
-        console.log('🎫 JIRA 계층적 이슈 생성 시도...');
+        console.log('🎫 JIRA 이슈 생성 시도...');
         
-        let projectKey = 'TK'; // fallback
-        try {
-          const jiraService = new JiraService(prisma);
-          const integration = await jiraService.getJiraIntegration(tenant.id, user.id);
-          projectKey = integration?.config?.defaultProjectKey || 'TK284743';
-        } catch (error) {
-          console.log('프로젝트 키 조회 실패, 기본값 사용');
-        }
-
-        // JIRA 형식에 맞게 데이터 변환
-        const jiraTaskData = {
-          title: projectTitle,
-          overview: projectSummary,
-          projectKey: projectKey,
-          tasks: tasks.map(task => ({
-            title: task.title || task.task,  // title 또는 task 필드 사용
-            description: task.description || '',
-            priority: task.priority || 'medium',
-            estimated_hours: task.estimated_hours || 8,
-            complexity: task.complexity || 'medium',
-            start_date: task.start_date || task.startDate,
-            deadline: task.deadline || task.dueDate,
-            subtasks: task.subtasks ? task.subtasks.map(sub => ({
-              title: sub.title,
-              description: sub.description || '',
-              estimated_hours: sub.estimated_hours || 4,
-              startDate: sub.start_date,
-              dueDate: sub.due_date
-            })) : []
-          }))
-        };
-        
-        const jiraResult = await jiraService.syncTaskMasterToJira(
-          tenant.id, 
-          user.id, 
-          jiraTaskData
+        // 새로운 createTasksFromAI 메서드 사용
+        jiraResult = await jiraService.createTasksFromAI(
+          tenant.id,
+          user.id,
+          {
+            summary: aiData.summary,
+            action_items: aiData.action_items
+          }
         );
         
         if (jiraResult.success) {
-          console.log(`✅ TaskMaster → JIRA 매핑 완료: Epic ${jiraResult.epicsCreated}개, Task ${jiraResult.tasksCreated}개`);
+          console.log(`✅ JIRA 이슈 생성 완료: ${jiraResult.tasksCreated}개 Task 생성됨`);
+          console.log('🎫 생성된 이슈들:', jiraResult.issues);
         } else {
-          console.error('❌ TaskMaster → JIRA 매핑 실패:', jiraResult.error);
+          console.error('❌ JIRA 이슈 생성 실패:', jiraResult.error);
         }
       } else {
         console.log('ℹ️ JIRA 연동 조건 미충족:', {
@@ -4037,14 +4010,14 @@ async function processTranscriptWithAI(transcript, client, channelId) {
           
           if (integration?.config?.site_url) {
             // JIRA 연동 성공한 경우
-            if (jiraResult?.success && jiraResult.epics && jiraResult.epics.length > 0) {
-              if (jiraResult.epics.length === 1) {
-                jiraUrl = `${integration.config.site_url}/browse/${jiraResult.epics[0]}`;
-                jiraButtonText = '🎫 Epic 보기';
+            if (jiraResult?.success && jiraResult.issues && jiraResult.issues.length > 0) {
+              if (jiraResult.issues.length === 1) {
+                jiraUrl = `${integration.config.site_url}/browse/${jiraResult.issues[0].key}`;
+                jiraButtonText = '🎫 JIRA Task 보기';
               } else {
                 const projectKey = jiraResult.projectKey || integration?.config?.defaultProjectKey || 'TK';
-                jiraUrl = `${integration.config.site_url}/jira/software/projects/${projectKey}/timeline`;
-                jiraButtonText = '🎫 JIRA 타임라인 보기';
+                jiraUrl = `${integration.config.site_url}/jira/software/projects/${projectKey}/list`;
+                jiraButtonText = '🎫 JIRA 프로젝트 보기';
               }
             } else {
               const projectKey = jiraResult?.projectKey || integration?.config?.defaultProjectKey || 'TK';
@@ -4093,7 +4066,7 @@ async function processTranscriptWithAI(transcript, client, channelId) {
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: `*✨ 처리 완료된 항목:*\n• ✅ 회의록 분석\n• ✅ PRD 생성\n• ✅ 업무 생성\n• ✅ 담당자 배정${notionPageUrl ? '\n• ✅ Notion 페이지 생성' : ''}${jiraResult?.success ? `\n• ✅ JIRA Epic ${jiraResult.epicsCreated}개, Task ${jiraResult.tasksCreated}개 생성` : ''}`
+          text: `*✨ 처리 완료된 항목:*\n• ✅ 회의록 분석\n• ✅ PRD 생성\n• ✅ 업무 생성\n• ✅ 담당자 배정${notionPageUrl ? '\n• ✅ Notion 페이지 생성' : ''}${jiraResult?.success ? `\n• ✅ JIRA Task ${jiraResult.tasksCreated}개, Sub-task ${jiraResult.subtasksCreated || 0}개 생성` : ''}`
         }
       }
     ];

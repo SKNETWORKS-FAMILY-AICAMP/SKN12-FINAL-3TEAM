@@ -1188,6 +1188,25 @@ app.post('/api/tasks',
         assigneeId 
       });
       
+      // assigneeId가 있으면 해당 사용자가 같은 tenant인지 확인
+      if (assigneeId) {
+        const assigneeUser = await prisma.user.findFirst({
+          where: {
+            id: assigneeId,
+            tenantId: tenantId
+          }
+        });
+        
+        if (!assigneeUser) {
+          console.error('❌ Invalid assigneeId:', assigneeId, 'not found in tenant:', tenantId);
+          return res.status(400).json({ 
+            error: 'Invalid assignee', 
+            details: 'The assigned user does not exist or is not in the same organization' 
+          });
+        }
+        console.log('✅ Assignee 확인 완료:', { id: assigneeUser.id, name: assigneeUser.name });
+      }
+
       const newTask = await prisma.task.create({
         data: {
           tenantId,
@@ -1251,6 +1270,25 @@ app.patch('/api/tasks/:id',
 
       if (!existingTask) {
         return res.status(404).json({ error: 'Task not found' });
+      }
+
+      // assigneeId가 변경되었고 값이 있으면 해당 사용자가 같은 tenant인지 확인
+      if (assigneeId !== undefined && assigneeId) {
+        const assigneeUser = await prisma.user.findFirst({
+          where: {
+            id: assigneeId,
+            tenantId: tenantId
+          }
+        });
+        
+        if (!assigneeUser) {
+          console.error('❌ Invalid assigneeId:', assigneeId, 'not found in tenant:', tenantId);
+          return res.status(400).json({ 
+            error: 'Invalid assignee', 
+            details: 'The assigned user does not exist or is not in the same organization' 
+          });
+        }
+        console.log('✅ Assignee 확인 완료:', { id: assigneeUser.id, name: assigneeUser.name });
       }
 
       // 업무 수정
@@ -1412,12 +1450,18 @@ app.post('/api/users',
 
 // 사용자 수정 API
 app.patch('/api/users/:id',
-  tenantMiddleware.createDevTenant,
+  authenticateUser,
   async (req, res) => {
     try {
       const { id } = req.params;
-      const tenantId = req.tenantId!;
+      const tenantId = req.user?.tenantId;
+      
+      if (!tenantId) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
       const { name, email, role, skills, availableHours, experienceLevel } = req.body;
+      
+      console.log('👤 사용자 수정 요청:', { id, tenantId, name, email });
 
       // 사용자 존재 확인
       const existingUser = await prisma.user.findFirst({
@@ -1425,7 +1469,17 @@ app.patch('/api/users/:id',
       });
 
       if (!existingUser) {
+        console.error('❌ 사용자를 찾을 수 없음:', id);
         return res.status(404).json({ error: 'User not found' });
+      }
+      
+      // 권한 체크: 자기 자신이거나 OWNER/ADMIN만 수정 가능
+      const currentUserId = req.user?.id;
+      const currentUserRole = req.user?.role;
+      
+      if (currentUserId !== id && currentUserRole !== 'OWNER' && currentUserRole !== 'ADMIN') {
+        console.error('❌ 권한 없음:', currentUserId, '→', id);
+        return res.status(403).json({ error: 'Permission denied' });
       }
 
       // 이메일 중복 검사 (다른 사용자와의 중복)
@@ -1477,11 +1531,17 @@ app.patch('/api/users/:id',
 
 // 사용자 삭제 API
 app.delete('/api/users/:id',
-  tenantMiddleware.createDevTenant,
+  authenticateUser,
   async (req, res) => {
     try {
       const { id } = req.params;
-      const tenantId = req.tenantId!;
+      const tenantId = req.user?.tenantId;
+      
+      if (!tenantId) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      console.log('🗑️ 사용자 삭제 요청:', { id, tenantId });
 
       // 사용자 존재 확인
       const existingUser = await prisma.user.findFirst({
@@ -1489,7 +1549,16 @@ app.delete('/api/users/:id',
       });
 
       if (!existingUser) {
+        console.error('❌ 사용자를 찾을 수 없음:', id);
         return res.status(404).json({ error: 'User not found' });
+      }
+      
+      // 권한 체크: OWNER/ADMIN만 삭제 가능
+      const currentUserRole = req.user?.role;
+      
+      if (currentUserRole !== 'OWNER' && currentUserRole !== 'ADMIN') {
+        console.error('❌ 삭제 권한 없음:', req.user?.id);
+        return res.status(403).json({ error: 'Permission denied' });
       }
 
       // 할당된 작업이 있는지 확인

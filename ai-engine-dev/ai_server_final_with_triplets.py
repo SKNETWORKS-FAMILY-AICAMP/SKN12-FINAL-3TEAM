@@ -92,10 +92,12 @@ async def generate_tasks_from_prd(prd_data: dict, num_tasks: int = 5) -> List[Ta
 - DO NOT provide any explanations or thinking process
 - START your response directly with a JSON object
 - ONLY output valid JSON, nothing else
+- ALL task titles, descriptions, and details MUST be in Korean (한국어)
+- Technical terms can remain in English where appropriate
 
 {user_prompt}
 
-RESPOND WITH JSON ONLY:"""
+RESPOND WITH JSON ONLY (한국어로 작성):"""
         
         # Qwen 모델로 태스크 생성
         messages = [{"role": "user", "content": json_enforced_prompt}]
@@ -540,6 +542,7 @@ class TwoStageAnalysisRequest(BaseModel):
     transcript: str
     generate_notion: bool = True
     generate_tasks: bool = True
+    generate_subtasks: bool = True  # Stage 4 서브태스크 생성 여부
     num_tasks: int = 5
     additional_context: Optional[str] = None
     auto_expand_tasks: bool = True  # 🚀 자동 서브태스크 생성 기본값을 True로 설정
@@ -549,6 +552,7 @@ class TwoStageAnalysisResponse(BaseModel):
     stage1_notion: Optional[Dict[str, Any]] = None
     stage2_prd: Optional[Dict[str, Any]] = None
     stage3_tasks: Optional[MeetingAnalysisResult] = None
+    stage4_subtasks: Optional[List[Dict[str, Any]]] = None  # Stage 4 서브태스크 결과
     formatted_notion: Optional[str] = None
     formatted_prd: Optional[str] = None
     processing_time: Optional[float] = None
@@ -570,6 +574,7 @@ class EnhancedTwoStageResult(BaseModel):
     stage1_notion: Optional[Dict[str, Any]] = None
     stage2_prd: Optional[Dict[str, Any]] = None
     stage3_tasks: Optional[MeetingAnalysisResult] = None
+    stage4_subtasks: Optional[List[Dict[str, Any]]] = None  # Stage 4 서브태스크 결과
     formatted_notion: Optional[str] = None
     formatted_prd: Optional[str] = None
     original_transcript_length: Optional[int] = None
@@ -1405,9 +1410,18 @@ async def generate_notion_project(request: AnalysisRequest):
     try:
         logger.info("📝 Stage 1: Generating Notion project document...")
         
-        # 프롬프트 생성
+        # 프롬프트 생성 - generate_meeting_analysis_prompts 사용
+        from meeting_analysis_prompts import (
+            generate_meeting_analysis_system_prompt,
+            generate_meeting_analysis_user_prompt
+        )
+        
+        # 회의 분석용 프롬프트 생성
         system_prompt = generate_meeting_analysis_system_prompt()
-        user_prompt = generate_meeting_analysis_user_prompt(request.transcript)
+        user_prompt = generate_meeting_analysis_user_prompt(
+            request.transcript, 
+            request.additional_context or ""
+        )
         
         # 구조화된 응답 생성
         result = generate_structured_response(
@@ -1715,9 +1729,15 @@ async def enhanced_two_stage_pipeline_text(request: dict):
         stage1_notion = None
         if request.get("generate_notion", True):
             try:
-                # 기존 generate_notion_project 함수 로직 사용
-                system_prompt = generate_notion_project_prompt()
-                user_prompt = f"다음 회의록을 바탕으로 노션 기획안을 작성해주세요:\n\n{filtered_transcript}"
+                # generate_meeting_analysis_prompts 함수 사용
+                from meeting_analysis_prompts import (
+                    generate_meeting_analysis_system_prompt,
+                    generate_meeting_analysis_user_prompt
+                )
+                
+                # 회의 분석용 프롬프트 생성
+                system_prompt = generate_meeting_analysis_system_prompt()
+                user_prompt = generate_meeting_analysis_user_prompt(filtered_transcript)
                 
                 if use_vllm and qwen_model and qwen_tokenizer:
                     from vllm import SamplingParams
@@ -1753,8 +1773,14 @@ async def enhanced_two_stage_pipeline_text(request: dict):
         stage2_prd = None
         if stage1_notion and request.get("generate_prd", True):
             try:
-                system_prompt = generate_task_master_prd_prompt()
-                user_prompt = f"다음 노션 프로젝트를 바탕으로 Task Master PRD를 작성해주세요:\n\n{json.dumps(stage1_notion, ensure_ascii=False, indent=2)}"
+                from prd_generation_prompts import generate_task_master_prd_prompt
+                
+                # generate_task_master_prd_prompt는 노션 프로젝트 딕셔너리를 받음
+                full_prompt = generate_task_master_prd_prompt(stage1_notion)
+                
+                # 시스템 프롬프트와 사용자 프롬프트 분리
+                system_prompt = "당신은 프로젝트 기획안을 상세한 PRD(Product Requirements Document)로 변환하는 전문가입니다."
+                user_prompt = full_prompt
                 
                 if use_vllm and qwen_model and qwen_tokenizer:
                     from vllm import SamplingParams
@@ -1789,14 +1815,16 @@ async def enhanced_two_stage_pipeline_text(request: dict):
         stage3_tasks = None
         if stage2_prd and request.get("generate_tasks", True):
             try:
-                system_prompt = generate_meeting_analysis_system_prompt()
-                user_prompt = f"다음 PRD를 바탕으로 업무 태스크들을 생성해주세요:\n\n{json.dumps(stage2_prd, ensure_ascii=False, indent=2)}"
+                # PRD를 태스크로 변환
+                num_tasks = request.get("num_tasks", 5)
+                system_prompt = generate_prd_to_tasks_system_prompt(num_tasks)
+                user_prompt = generate_prd_to_tasks_user_prompt(stage2_prd, num_tasks)
                 
                 if use_vllm and qwen_model and qwen_tokenizer:
                     from vllm import SamplingParams
                     sampling_params = SamplingParams(
                         temperature=0.3,
-                        max_tokens=2048,
+                        max_tokens=4096,
                         stop=["<|im_end|>", "<|endoftext|>"]
                     )
                     
@@ -1815,11 +1843,109 @@ async def enhanced_two_stage_pipeline_text(request: dict):
                     try:
                         stage3_tasks = json.loads(result_text)
                     except:
-                        stage3_tasks = {"action_items": []}
+                        stage3_tasks = {"tasks": []}
                         
             except Exception as e:
                 logger.error(f"업무 생성 실패: {e}")
                 stage3_tasks = None
+        
+        # Stage 4: 복잡도 분석 및 서브태스크 생성
+        stage4_subtasks = None
+        if stage3_tasks and stage3_tasks.get("tasks") and request.get("generate_subtasks", True):
+            try:
+                logger.info("🔍 Stage 4: 태스크 복잡도 분석 및 서브태스크 생성...")
+                
+                # 복잡도 분석
+                complexity_system_prompt = generate_complexity_analysis_system_prompt()
+                complexity_user_prompt = generate_complexity_analysis_prompt(stage3_tasks)
+                
+                if use_vllm and qwen_model and qwen_tokenizer:
+                    from vllm import SamplingParams
+                    sampling_params = SamplingParams(
+                        temperature=0.2,
+                        max_tokens=2048,
+                        stop=["<|im_end|>", "<|endoftext|>"]
+                    )
+                    
+                    messages = [
+                        {"role": "system", "content": complexity_system_prompt},
+                        {"role": "user", "content": complexity_user_prompt}
+                    ]
+                    
+                    formatted_prompt = qwen_tokenizer.apply_chat_template(
+                        messages, tokenize=False, add_generation_prompt=True
+                    )
+                    
+                    outputs = qwen_model.generate([formatted_prompt], sampling_params)
+                    complexity_result = outputs[0].outputs[0].text.strip()
+                    
+                    try:
+                        complexity_analysis = json.loads(complexity_result)
+                        logger.info(f"✅ 복잡도 분석 완료: {len(complexity_analysis)}개 태스크 분석됨")
+                        
+                        # 각 태스크에 대한 서브태스크 생성
+                        stage4_subtasks = []
+                        for task_idx, task in enumerate(stage3_tasks.get("tasks", [])):
+                            # 해당 태스크의 복잡도 분석 찾기
+                            task_analysis = next(
+                                (a for a in complexity_analysis if a.get("taskId") == task.get("id")),
+                                {"complexityScore": 5, "recommendedSubtasks": 3}
+                            )
+                            
+                            # 복잡도가 높은 태스크만 서브태스크 생성 (복잡도 5 이상)
+                            if task_analysis.get("complexityScore", 5) >= 5:
+                                logger.info(f"📝 태스크 '{task.get('title', '')}' 서브태스크 생성 중...")
+                                
+                                # 서브태스크 생성
+                                subtask_prompt = generate_complexity_based_subtask_prompt(
+                                    task, 
+                                    task_analysis, 
+                                    next_subtask_id=task.get("id", 1) * 100 + 1
+                                )
+                                
+                                subtask_system_prompt = generate_complexity_based_subtask_system_prompt(
+                                    task_analysis.get("recommendedSubtasks", 3),
+                                    task.get("id", 1) * 100 + 1
+                                )
+                                
+                                messages = [
+                                    {"role": "system", "content": subtask_system_prompt},
+                                    {"role": "user", "content": subtask_prompt}
+                                ]
+                                
+                                formatted_prompt = qwen_tokenizer.apply_chat_template(
+                                    messages, tokenize=False, add_generation_prompt=True
+                                )
+                                
+                                outputs = qwen_model.generate([formatted_prompt], sampling_params)
+                                subtask_result = outputs[0].outputs[0].text.strip()
+                                
+                                try:
+                                    subtasks = json.loads(subtask_result)
+                                    task["subtasks"] = subtasks.get("subtasks", [])
+                                    task["complexityScore"] = task_analysis.get("complexityScore")
+                                    task["complexityReasoning"] = task_analysis.get("reasoning", "")
+                                    stage4_subtasks.append({
+                                        "taskId": task.get("id"),
+                                        "taskTitle": task.get("title"),
+                                        "subtasks": subtasks.get("subtasks", []),
+                                        "complexityScore": task_analysis.get("complexityScore"),
+                                        "reasoning": task_analysis.get("reasoning", "")
+                                    })
+                                    logger.info(f"✅ {len(subtasks.get('subtasks', []))}개 서브태스크 생성됨")
+                                except Exception as e:
+                                    logger.warning(f"서브태스크 파싱 실패: {e}")
+                                    task["subtasks"] = []
+                            else:
+                                logger.info(f"⏭️ 태스크 '{task.get('title', '')}' 복잡도 낮음 ({task_analysis.get('complexityScore', 0)}) - 서브태스크 생략")
+                    
+                    except Exception as e:
+                        logger.error(f"복잡도 분석 파싱 실패: {e}")
+                        complexity_analysis = []
+                        
+            except Exception as e:
+                logger.error(f"Stage 4 (서브태스크 생성) 실패: {e}")
+                stage4_subtasks = None
         
         return EnhancedTwoStageResult(
             success=True,
@@ -1828,6 +1954,7 @@ async def enhanced_two_stage_pipeline_text(request: dict):
             stage1_notion=stage1_notion,
             stage2_prd=stage2_prd,
             stage3_tasks=stage3_tasks,
+            stage4_subtasks=stage4_subtasks if 'stage4_subtasks' in locals() else None,
             formatted_notion=format_notion_project(stage1_notion) if stage1_notion else None,
             formatted_prd=format_task_master_prd(stage2_prd) if stage2_prd else None,
             original_transcript_length=len(transcript),
@@ -2013,6 +2140,7 @@ async def final_pipeline(
             transcript=full_text,
             generate_notion=generate_notion,
             generate_tasks=generate_tasks,
+            generate_subtasks=True,  # 서브태스크 생성 활성화
             num_tasks=num_tasks
         )
         analysis_result = await two_stage_analysis(analysis_request)
@@ -2031,6 +2159,91 @@ async def final_pipeline(
             # 음성 입력의 경우 실제 transcription 정보 사용
             transcription_info = transcribe_result.transcription
 
+        # 🔥 생성 완료 로그 - 회의록과 태스크 상세 출력
+        logger.info("=" * 80)
+        logger.info("🎉 AI 파이프라인 처리 완료!")
+        logger.info("=" * 80)
+        
+        # 1. 회의록 요약 출력 (stage1_notion에서 정보 추출)
+        if analysis_result.stage1_notion:
+            logger.info("\n📋 [Stage 1: Notion 프로젝트 분석]")
+            logger.info(f"제목: {analysis_result.stage1_notion.get('title', 'N/A')}")
+            logger.info(f"개요: {analysis_result.stage1_notion.get('overview', 'N/A')[:200]}...")
+            if 'objectives' in analysis_result.stage1_notion:
+                logger.info(f"목표: {len(analysis_result.stage1_notion.get('objectives', []))}개")
+            if 'key_features' in analysis_result.stage1_notion:
+                logger.info(f"주요 기능: {len(analysis_result.stage1_notion.get('key_features', []))}개")
+        
+        # 2. PRD 정보 출력
+        if analysis_result.stage2_prd:
+            logger.info("\n📄 [Stage 2: Task Master PRD]")
+            logger.info(f"제목: {analysis_result.stage2_prd.get('title', 'N/A')}")
+            logger.info(f"프로젝트 범위: {analysis_result.stage2_prd.get('scope', 'N/A')[:200]}...")
+            if 'requirements' in analysis_result.stage2_prd:
+                logger.info(f"요구사항: {len(analysis_result.stage2_prd.get('requirements', []))}개")
+        
+        # 3. 생성된 태스크 목록 출력
+        if analysis_result.stage3_tasks:
+            logger.info("\n📌 [Stage 3: 생성된 태스크 목록]")
+            
+            # stage3_tasks가 dict이고 action_items 키가 있는 경우
+            if isinstance(analysis_result.stage3_tasks, dict) and 'action_items' in analysis_result.stage3_tasks:
+                tasks = analysis_result.stage3_tasks['action_items']
+                logger.info(f"총 {len(tasks)}개 태스크 생성")
+                
+                # 요약 정보가 있으면 출력
+                if 'summary' in analysis_result.stage3_tasks:
+                    logger.info(f"프로젝트 요약: {analysis_result.stage3_tasks['summary'][:100]}...")
+            # stage3_tasks가 바로 리스트인 경우
+            elif isinstance(analysis_result.stage3_tasks, list):
+                tasks = analysis_result.stage3_tasks
+                logger.info(f"총 {len(tasks)}개 태스크 생성")
+            else:
+                tasks = []
+                logger.info("태스크 구조 확인 필요")
+            
+            logger.info("-" * 60)
+            
+            for idx, task in enumerate(tasks, 1):
+                logger.info(f"\n태스크 {idx}: {task.get('title', 'N/A')}")
+                logger.info(f"  📝 설명: {task.get('description', 'N/A')[:100]}...")
+                logger.info(f"  🎯 우선순위: {task.get('priority', 'N/A')}")
+                logger.info(f"  📅 시작일: {task.get('start_date', 'N/A')}")
+                logger.info(f"  📅 마감일: {task.get('deadline', 'N/A')}")
+                logger.info(f"  ⏱️ 예상시간: {task.get('estimated_hours', 0)}시간")
+                logger.info(f"  💼 담당자: {task.get('assignee', '미배정')}")
+                
+                # 서브태스크가 있으면 표시
+                subtasks = task.get('subtasks', [])
+                if subtasks:
+                    logger.info(f"  📂 서브태스크: {len(subtasks)}개")
+                    for sub_idx, subtask in enumerate(subtasks[:3], 1):  # 처음 3개만 표시
+                        logger.info(f"    - {subtask.get('title', 'N/A')}")
+                    if len(subtasks) > 3:
+                        logger.info(f"    ... 외 {len(subtasks)-3}개")
+        
+        # 4. 처리 시간 및 통계
+        logger.info("\n⏰ [처리 시간 및 통계]")
+        logger.info(f"총 처리시간: {total_time:.2f}초")
+        
+        # tasks 변수가 정의되어 있으면 통계 출력
+        if 'tasks' in locals() and tasks:
+            total_subtasks = sum(len(task.get('subtasks', [])) for task in tasks)
+            logger.info(f"생성 항목: 태스크 {len(tasks)}개, 서브태스크 {total_subtasks}개")
+            
+            # 우선순위별 통계
+            high_priority = sum(1 for task in tasks if task.get('priority', '').lower() == 'high')
+            medium_priority = sum(1 for task in tasks if task.get('priority', '').lower() == 'medium')
+            low_priority = sum(1 for task in tasks if task.get('priority', '').lower() == 'low')
+            logger.info(f"우선순위: High({high_priority}), Medium({medium_priority}), Low({low_priority})")
+            
+            # 총 예상 시간
+            total_hours = sum(task.get('estimated_hours', 0) for task in tasks)
+            logger.info(f"총 예상 작업시간: {total_hours}시간")
+        
+        logger.info("=" * 80)
+        
+        # 결과 반환
         return {
             "success": True,
             "step": "completed",

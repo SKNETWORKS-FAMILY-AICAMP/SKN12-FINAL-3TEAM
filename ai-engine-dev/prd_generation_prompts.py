@@ -282,18 +282,20 @@ Assign sequential IDs starting from {next_id}. Infer title, description, details
 
 Set status to 'pending', dependencies to an empty array [], and priority to 'medium' initially for all tasks.
 
+IMPORTANT: All task titles, descriptions, details, and test strategies MUST be written in Korean (한국어). Technical terms can remain in English where appropriate.
+
 Respond ONLY with a valid JSON object containing a single key "tasks", where the value is an array of task objects adhering to the provided schema. Do not include any explanation or markdown formatting.
 
 Each task should follow this JSON structure:
 {{
     "id": number,
-    "title": string,
-    "description": string,
+    "title": string (한국어로 작성),
+    "description": string (한국어로 작성),
     "status": "pending",
     "dependencies": number[] (IDs of tasks this depends on),
     "priority": "high" | "medium" | "low", 
-    "details": string (implementation details),
-    "testStrategy": string (validation approach)
+    "details": string (한국어로 구현 세부사항 작성),
+    "testStrategy": string (한국어로 검증 방법 작성)
 }}
 
 Guidelines:
@@ -317,23 +319,23 @@ def generate_prd_to_tasks_user_prompt(prd_data: dict, num_tasks: int, next_id: i
 
 {prd_content}
 
-Return your response in this format:
+Return your response in this format (모든 내용은 한국어로 작성):
 {{
     "tasks": [
         {{
             "id": {next_id},
-            "title": "Setup Project Repository", 
-            "description": "...",
+            "title": "프로젝트 저장소 설정", 
+            "description": "Git 저장소 초기화 및 기본 구조 설정",
             "status": "pending",
             "dependencies": [],
             "priority": "high",
-            "details": "Implementation guidance...",
-            "testStrategy": "Validation approach..."
+            "details": "Git 저장소 생성, .gitignore 설정, README 작성, 브랜치 전략 수립...",
+            "testStrategy": "저장소 접근 권한 확인, 브랜치 생성 테스트..."
         }},
         ...
     ],
     "metadata": {{
-        "projectName": "PRD Implementation",
+        "projectName": "PRD 구현",
         "totalTasks": {num_tasks},
         "sourceFile": "PRD",
         "generatedAt": "{datetime.now().isoformat()}"
@@ -390,13 +392,13 @@ def generate_complexity_based_subtask_prompt(task: dict, task_analysis: dict, ne
 {task_analysis.get('reasoning', '')}
 
 **응답 형식:**
-다음 JSON 형식으로 정확히 {num_subtasks}개의 서브태스크를 생성하세요:
+다음 JSON 형식으로 정확히 {num_subtasks}개의 서브태스크를 생성하세요 (모든 내용은 한국어로 작성):
 {{
     "subtasks": [
         {{
             "id": {next_subtask_id},
-            "title": "서브태스크 제목",
-            "description": "구체적인 작업 내용",
+            "title": "서브태스크 제목 (한국어)",
+            "description": "구체적인 작업 내용 (한국어)",
             "priority": "high/medium/low",
             "estimated_hours": 숫자,
             "dependencies": [],
