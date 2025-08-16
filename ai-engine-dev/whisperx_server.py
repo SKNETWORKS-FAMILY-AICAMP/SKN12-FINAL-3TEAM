@@ -112,8 +112,9 @@ async def transcribe_audio(audio: UploadFile = File(...)):
         try:
             # faster-whisper transcribe
             # GPU 사용 확인 로깅
-            logger.info(f"🖥️ Using device: {model.device}")
-            logger.info(f"📊 Model compute type: {model.model.compute_type if hasattr(model.model, 'compute_type') else 'unknown'}")
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            logger.info(f"🖥️ Using device: {device}")
+            logger.info(f"📊 CUDA available: {torch.cuda.is_available()}")
             
             segments_generator, info = model.transcribe(
                 temp_path,
