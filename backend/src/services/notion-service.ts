@@ -514,9 +514,19 @@ async createMeetingPage(inputData: InputData | string): Promise<{ id: string; ur
     
     console.log('✅ Notion 페이지 생성 완료');
     
+    // Notion 페이지 URL 생성 (공개 URL 형식)
+    const pageUrl = (response as any).url || 
+                    (response as any).public_url ||
+                    `https://www.notion.so/${response.id.replace(/-/g, '')}`;
+    
+    console.log('📝 생성된 Notion 페이지:', {
+      id: response.id,
+      url: pageUrl
+    });
+    
     return {
       id: response.id,
-      url: (response as any).url || `https://notion.so/${response.id.replace(/-/g, '')}`
+      url: pageUrl
     };
     
   } catch (error) {

@@ -155,7 +155,38 @@ RESPOND WITH JSON ONLY (한국어로 작성):"""
                         logger.error(f"❌ No JSON found in response")
                         return []
             
-            task_data = json.loads(json_content)
+            # JSON 정리 및 일반적인 오류 수정
+            import re
+            
+            # 1. 뒤따르는 쉼표 제거 (배열이나 객체 끝)
+            json_content = re.sub(r',\s*}', '}', json_content)
+            json_content = re.sub(r',\s*]', ']', json_content)
+            
+            # 2. 작은따옴표를 큰따옴표로 변경 (JSON은 큰따옴표만 허용)
+            # 단, 값 내부의 작은따옴표는 유지
+            json_content = re.sub(r"'([^']*)'(?=\s*:)", r'"\1"', json_content)
+            
+            # 3. 키에 따옴표가 없는 경우 추가 (예: {key: "value"} -> {"key": "value"})
+            json_content = re.sub(r'([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:', r'\1"\2":', json_content)
+            
+            # 4. undefined, null 처리
+            json_content = json_content.replace('undefined', 'null')
+            
+            # 5. 불완전한 JSON 끝 처리
+            open_braces = json_content.count('{') - json_content.count('}')
+            open_brackets = json_content.count('[') - json_content.count(']')
+            
+            if open_braces > 0:
+                json_content += '}' * open_braces
+            if open_brackets > 0:
+                json_content += ']' * open_brackets
+            
+            try:
+                task_data = json.loads(json_content)
+            except json.JSONDecodeError as e:
+                logger.error(f"❌ JSON parse error after cleaning: {e}")
+                logger.error(f"📝 Cleaned JSON content: {json_content[:500]}...")
+                raise
             
             # TaskItem 객체로 변환
             task_items = []

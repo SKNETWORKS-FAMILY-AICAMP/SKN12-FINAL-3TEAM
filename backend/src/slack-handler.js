@@ -4804,6 +4804,25 @@ async function processUploadedFile(file, projectName, client, userId) {
         tenantId: user.tenantId
       });
       
+      // 디버깅: AI 응답 확인
+      console.log('🔍 AI 서비스 응답:', {
+        success: result.success,
+        hasStage1: !!result.stage1,
+        hasStage2: !!result.stage2,
+        hasTasks: !!result.stage2?.task_master_prd?.tasks,
+        taskCount: result.stage2?.task_master_prd?.tasks?.length || 0,
+        error: result.error
+      });
+      
+      if (result.stage2?.task_master_prd?.tasks) {
+        console.log('📝 생성된 업무 목록:', 
+          result.stage2.task_master_prd.tasks.map(t => ({
+            title: t.title || t.task,
+            priority: t.priority
+          }))
+        );
+      }
+      
       // 사용자의 실제 Integration 정보 조회
       const notionIntegration = await prisma.integration.findFirst({
         where: {
