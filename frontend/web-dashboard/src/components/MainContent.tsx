@@ -250,20 +250,38 @@ const MainContent = () => {
 
   // 태스크 목록 디버깅
   useEffect(() => {
-    if (tasks) {
+    if (tasks && tasks.length > 0) {
       console.log('📋 칸반보드 - 전체 태스크 목록:', tasks);
       console.log('📋 태스크 개수:', tasks.length);
       const currentUser = localStorage.getItem('user');
-      console.log('📋 현재 사용자 정보:', currentUser);
       if (currentUser) {
         const user = JSON.parse(currentUser);
         console.log('📋 현재 사용자 ID:', user.id);
         console.log('📋 현재 사용자 tenantId:', user.tenantId);
         
         // 각 태스크의 assigneeId 확인
-        tasks.forEach(task => {
-          console.log(`태스크 "${task.title}": assigneeId=${task.assigneeId}, assignee.name=${task.assignee?.name}`);
+        console.log('📋 === 태스크 상세 정보 ===');
+        tasks.forEach((task, index) => {
+          console.log(`태스크 ${index + 1}:`, {
+            title: task.title,
+            status: task.status,
+            assigneeId: task.assigneeId,
+            assigneeName: task.assignee?.name,
+            dueDate: task.dueDate
+          });
         });
+        
+        // assigneeId별 통계
+        const assigneeStats = tasks.reduce((acc, task) => {
+          const id = task.assigneeId || 'unassigned';
+          acc[id] = (acc[id] || 0) + 1;
+          return acc;
+        }, {} as Record<string, number>);
+        console.log('📋 assigneeId별 태스크 개수:', assigneeStats);
+        
+        // 현재 사용자의 태스크만 필터링되고 있는지 확인
+        const myTasks = tasks.filter(task => task.assigneeId === user.id);
+        console.log(`📋 내 태스크: ${myTasks.length}개 / 전체: ${tasks.length}개`);
       }
     }
   }, [tasks]);

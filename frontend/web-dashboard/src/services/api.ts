@@ -263,12 +263,26 @@ export const taskAPI = {
         params: Object.keys(cleanFilters).length > 0 ? cleanFilters : undefined,
       });
       
-      console.log('✅ /tasks API 응답:', response.data);
+      console.log('✅ /api/tasks API 응답 받음!');
       console.log('✅ 반환된 태스크 개수:', response.data.length);
       
       // 응답 데이터의 assigneeId들을 확인
       const uniqueAssignees = [...new Set(response.data.map(task => task.assigneeId))];
       console.log('✅ 고유한 assigneeId 목록:', uniqueAssignees);
+      console.log('✅ 고유한 assigneeId 개수:', uniqueAssignees.length);
+      
+      // 각 태스크 상태별 개수
+      const statusCount = response.data.reduce((acc, task) => {
+        acc[task.status] = (acc[task.status] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+      console.log('✅ 상태별 태스크 개수:', statusCount);
+      
+      // 전체 태스크 목록 (간단히)
+      console.log('✅ 전체 태스크 목록:');
+      response.data.forEach((task, index) => {
+        console.log(`  ${index + 1}. ${task.title} (담당: ${task.assignee?.name || '미지정'}, 상태: ${task.status})`);
+      });
       
       return response.data;
     } catch (error: any) {
