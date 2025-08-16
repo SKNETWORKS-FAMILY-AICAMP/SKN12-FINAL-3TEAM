@@ -1631,7 +1631,7 @@ async def two_stage_analysis(request: TwoStageAnalysisRequest):
                                 logger.info(f"   📅 마감일: {task.due_date or '미정'}")
                                 
                                 if hasattr(task, 'dependencies') and task.dependencies:
-                                    logger.info(f"   🔗 의존성: {', '.join(task.dependencies)}")
+                                    logger.info(f"   🔗 의존성: {', '.join(map(str, task.dependencies))}")
                                 
                                 if hasattr(task, 'acceptance_criteria') and task.acceptance_criteria:
                                     logger.info(f"   ✅ 수락 기준:")
@@ -1639,7 +1639,7 @@ async def two_stage_analysis(request: TwoStageAnalysisRequest):
                                         logger.info(f"      - {criteria}")
                                 
                                 if hasattr(task, 'tags') and task.tags:
-                                    logger.info(f"   🏷️ 태그: {', '.join(task.tags)}")
+                                    logger.info(f"   🏷️ 태그: {', '.join(map(str, task.tags))}")
                                 
                                 if hasattr(task, 'subtasks') and task.subtasks:
                                     logger.info(f"   📂 서브태스크 ({len(task.subtasks)}개):")
