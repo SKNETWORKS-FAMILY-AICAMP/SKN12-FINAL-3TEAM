@@ -971,8 +971,7 @@ app.get('/api/tasks',
           project: {
             select: { 
               id: true, 
-              title: true, 
-              status: true,
+              title: true,
               createdAt: true
             }
           },
