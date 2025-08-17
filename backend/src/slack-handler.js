@@ -2808,16 +2808,38 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
             type: 'input',
             block_id: 'member_skills_input',
             element: {
-              type: 'plain_text_input',
+              type: 'multi_static_select',
               action_id: 'member_skills',
               placeholder: {
                 type: 'plain_text',
-                text: '예: React, Node.js, Python, AWS'
-              }
+                text: '기술 스택을 선택하세요'
+              },
+              options: [
+                { text: { type: 'plain_text', text: 'JavaScript' }, value: 'JavaScript' },
+                { text: { type: 'plain_text', text: 'TypeScript' }, value: 'TypeScript' },
+                { text: { type: 'plain_text', text: 'Python' }, value: 'Python' },
+                { text: { type: 'plain_text', text: 'Java' }, value: 'Java' },
+                { text: { type: 'plain_text', text: 'React' }, value: 'React' },
+                { text: { type: 'plain_text', text: 'Vue.js' }, value: 'Vue.js' },
+                { text: { type: 'plain_text', text: 'Node.js' }, value: 'Node.js' },
+                { text: { type: 'plain_text', text: 'Spring' }, value: 'Spring' },
+                { text: { type: 'plain_text', text: 'Django' }, value: 'Django' },
+                { text: { type: 'plain_text', text: 'MongoDB' }, value: 'MongoDB' },
+                { text: { type: 'plain_text', text: 'PostgreSQL' }, value: 'PostgreSQL' },
+                { text: { type: 'plain_text', text: 'MySQL' }, value: 'MySQL' },
+                { text: { type: 'plain_text', text: 'AWS' }, value: 'AWS' },
+                { text: { type: 'plain_text', text: 'Docker' }, value: 'Docker' },
+                { text: { type: 'plain_text', text: 'Kubernetes' }, value: 'Kubernetes' },
+                { text: { type: 'plain_text', text: 'Git' }, value: 'Git' },
+                { text: { type: 'plain_text', text: 'AI/ML' }, value: 'AI/ML' },
+                { text: { type: 'plain_text', text: 'Flutter' }, value: 'Flutter' },
+                { text: { type: 'plain_text', text: 'Swift' }, value: 'Swift' },
+                { text: { type: 'plain_text', text: 'Kotlin' }, value: 'Kotlin' }
+              ]
             },
             label: {
               type: 'plain_text',
-              text: '💻 보유 기술 (쉼표로 구분)'
+              text: '💻 보유 기술 (여러 개 선택 가능)'
             },
             optional: true
           },
@@ -2825,16 +2847,33 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
             type: 'input',
             block_id: 'member_preferred_input',
             element: {
-              type: 'plain_text_input',
+              type: 'multi_static_select',
               action_id: 'member_preferred',
               placeholder: {
                 type: 'plain_text',
-                text: '예: 프론트엔드, 백엔드, 인프라, 데이터분석'
-              }
+                text: '선호하는 작업 유형을 선택하세요'
+              },
+              options: [
+                { text: { type: 'plain_text', text: '프론트엔드 개발' }, value: 'frontend' },
+                { text: { type: 'plain_text', text: '백엔드 개발' }, value: 'backend' },
+                { text: { type: 'plain_text', text: '풀스택 개발' }, value: 'fullstack' },
+                { text: { type: 'plain_text', text: '모바일 개발' }, value: 'mobile' },
+                { text: { type: 'plain_text', text: 'UI/UX 디자인' }, value: 'design' },
+                { text: { type: 'plain_text', text: '데이터베이스 설계' }, value: 'database' },
+                { text: { type: 'plain_text', text: '인프라/DevOps' }, value: 'devops' },
+                { text: { type: 'plain_text', text: '클라우드 아키텍처' }, value: 'cloud' },
+                { text: { type: 'plain_text', text: '데이터 분석' }, value: 'data' },
+                { text: { type: 'plain_text', text: 'AI/ML 개발' }, value: 'ai' },
+                { text: { type: 'plain_text', text: '테스트/QA' }, value: 'testing' },
+                { text: { type: 'plain_text', text: '문서화' }, value: 'documentation' },
+                { text: { type: 'plain_text', text: '프로젝트 관리' }, value: 'pm' },
+                { text: { type: 'plain_text', text: '보안' }, value: 'security' },
+                { text: { type: 'plain_text', text: '성능 최적화' }, value: 'optimization' }
+              ]
             },
             label: {
               type: 'plain_text',
-              text: '🎯 선호 작업 유형 (쉼표로 구분)'
+              text: '🎯 선호 작업 유형 (여러 개 선택 가능)'
             },
             optional: true
           }
@@ -2877,8 +2916,9 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
       role: view.state.values.member_role_input.member_role.selected_option.value,
       experienceLevel: view.state.values.member_exp_input.member_exp.selected_option.value,
       availableHours: parseFloat(view.state.values.member_hours_input.member_hours.value),
-      skills: view.state.values.member_skills_input.member_skills.value || '',
-      preferredTypes: view.state.values.member_preferred_input.member_preferred.value || ''
+      // multi_static_select에서 선택된 옵션들 배열로 받기
+      skills: view.state.values.member_skills_input.member_skills.selected_options?.map(opt => opt.value) || [],
+      preferredTypes: view.state.values.member_preferred_input.member_preferred.selected_options?.map(opt => opt.value) || []
     };
     
     metadata.memberData.push(memberInfo);
@@ -2997,16 +3037,38 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
               type: 'input',
               block_id: 'member_skills_input',
               element: {
-                type: 'plain_text_input',
+                type: 'multi_static_select',
                 action_id: 'member_skills',
                 placeholder: {
                   type: 'plain_text',
-                  text: '예: React, Node.js, Python, AWS'
-                }
+                  text: '기술 스택을 선택하세요'
+                },
+                options: [
+                  { text: { type: 'plain_text', text: 'JavaScript' }, value: 'JavaScript' },
+                  { text: { type: 'plain_text', text: 'TypeScript' }, value: 'TypeScript' },
+                  { text: { type: 'plain_text', text: 'Python' }, value: 'Python' },
+                  { text: { type: 'plain_text', text: 'Java' }, value: 'Java' },
+                  { text: { type: 'plain_text', text: 'React' }, value: 'React' },
+                  { text: { type: 'plain_text', text: 'Vue.js' }, value: 'Vue.js' },
+                  { text: { type: 'plain_text', text: 'Node.js' }, value: 'Node.js' },
+                  { text: { type: 'plain_text', text: 'Spring' }, value: 'Spring' },
+                  { text: { type: 'plain_text', text: 'Django' }, value: 'Django' },
+                  { text: { type: 'plain_text', text: 'MongoDB' }, value: 'MongoDB' },
+                  { text: { type: 'plain_text', text: 'PostgreSQL' }, value: 'PostgreSQL' },
+                  { text: { type: 'plain_text', text: 'MySQL' }, value: 'MySQL' },
+                  { text: { type: 'plain_text', text: 'AWS' }, value: 'AWS' },
+                  { text: { type: 'plain_text', text: 'Docker' }, value: 'Docker' },
+                  { text: { type: 'plain_text', text: 'Kubernetes' }, value: 'Kubernetes' },
+                  { text: { type: 'plain_text', text: 'Git' }, value: 'Git' },
+                  { text: { type: 'plain_text', text: 'AI/ML' }, value: 'AI/ML' },
+                  { text: { type: 'plain_text', text: 'Flutter' }, value: 'Flutter' },
+                  { text: { type: 'plain_text', text: 'Swift' }, value: 'Swift' },
+                  { text: { type: 'plain_text', text: 'Kotlin' }, value: 'Kotlin' }
+                ]
               },
               label: {
                 type: 'plain_text',
-                text: '💻 보유 기술 (쉼표로 구분)'
+                text: '💻 보유 기술 (여러 개 선택 가능)'
               },
               optional: true
             },
@@ -3014,16 +3076,33 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
               type: 'input',
               block_id: 'member_preferred_input',
               element: {
-                type: 'plain_text_input',
+                type: 'multi_static_select',
                 action_id: 'member_preferred',
                 placeholder: {
                   type: 'plain_text',
-                  text: '예: 프론트엔드, 백엔드, 인프라, 데이터분석'
-                }
+                  text: '선호하는 작업 유형을 선택하세요'
+                },
+                options: [
+                  { text: { type: 'plain_text', text: '프론트엔드 개발' }, value: 'frontend' },
+                  { text: { type: 'plain_text', text: '백엔드 개발' }, value: 'backend' },
+                  { text: { type: 'plain_text', text: '풀스택 개발' }, value: 'fullstack' },
+                  { text: { type: 'plain_text', text: '모바일 개발' }, value: 'mobile' },
+                  { text: { type: 'plain_text', text: 'UI/UX 디자인' }, value: 'design' },
+                  { text: { type: 'plain_text', text: '데이터베이스 설계' }, value: 'database' },
+                  { text: { type: 'plain_text', text: '인프라/DevOps' }, value: 'devops' },
+                  { text: { type: 'plain_text', text: '클라우드 아키텍처' }, value: 'cloud' },
+                  { text: { type: 'plain_text', text: '데이터 분석' }, value: 'data' },
+                  { text: { type: 'plain_text', text: 'AI/ML 개발' }, value: 'ai' },
+                  { text: { type: 'plain_text', text: '테스트/QA' }, value: 'testing' },
+                  { text: { type: 'plain_text', text: '문서화' }, value: 'documentation' },
+                  { text: { type: 'plain_text', text: '프로젝트 관리' }, value: 'pm' },
+                  { text: { type: 'plain_text', text: '보안' }, value: 'security' },
+                  { text: { type: 'plain_text', text: '성능 최적화' }, value: 'optimization' }
+                ]
               },
               label: {
                 type: 'plain_text',
-                text: '🎯 선호 작업 유형 (쉼표로 구분)'
+                text: '🎯 선호 작업 유형 (여러 개 선택 가능)'
               },
               optional: true
             }

@@ -547,7 +547,7 @@ class JiraService {
       // 고유한 프로젝트 키 생성 (타임스탬프 사용)
       const timestamp = Date.now().toString().slice(-6); // 마지막 6자리
       const projectKey = `TK${timestamp}`;
-      const projectName = `TtalKkak_${timestamp}`;
+      const projectName = projectData.title || `TtalKkak_${timestamp}`;  // 프로젝트 제목 사용
       
       console.log('🎫 생성할 프로젝트:', { key: projectKey, name: projectName });
       
@@ -620,7 +620,7 @@ class JiraService {
         try {
           // 1. TaskMaster TASK → JIRA Epic 생성 (타임라인 표시를 위해)
           const epicIssue = await this.createJiraIssue(tenantId, userId, {
-            summary: task.title,
+            summary: task.title,  // 프로젝트 키 없이 제목만
             description: task.description,
             issueType: 'Epic',  // 명시적으로 Epic 타입 사용
             priority: task.priority || 'MEDIUM',
@@ -646,7 +646,7 @@ class JiraService {
               try {
                 // Task 타입으로 생성하여 타임라인에 표시 (Epic에 연결)
                 const jiraTaskIssue = await this.createJiraIssue(tenantId, userId, {
-                  summary: `[${task.title}] ${subtask.title}`, // Epic 제목 포함
+                  summary: subtask.title,  // 종속 표시 없이 서브태스크 제목만
                   description: subtask.description,
                   issueType: 'Task', // Task 타입으로 변경 (타임라인 표시용)
                   priority: 'MEDIUM',
