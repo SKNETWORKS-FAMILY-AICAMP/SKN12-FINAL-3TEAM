@@ -4,6 +4,7 @@ import axios from 'axios';
 import { Menu, Bell, ChevronDown, LayoutGrid, CheckSquare, Mic, Settings, LogOut, Home } from 'lucide-react';
 import MobileNavbarV2 from '../../components/mobile/MobileNavbarV2';
 import MobileKanbanBoardV2 from '../../components/mobile/MobileKanbanBoardV2';
+import { Task } from '../../services/api';
 import '../../styles/mobile-v2.css';
 
 // API 기본 설정
@@ -134,7 +135,7 @@ const MobileDashboardV2: React.FC = () => {
         
         {/* Kanban Board */}
         <MobileKanbanBoardV2
-          tasks={tasks}
+          tasks={tasks as Task[]}
           onStatusUpdate={handleStatusUpdate}
         />
       </div>

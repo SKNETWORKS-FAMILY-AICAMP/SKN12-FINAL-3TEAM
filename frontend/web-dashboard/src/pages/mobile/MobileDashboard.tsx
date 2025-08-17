@@ -4,6 +4,7 @@ import axios from 'axios';
 import MobileNavbar from '../../components/mobile/MobileNavbar';
 import MobileKanbanBoard from '../../components/mobile/MobileKanbanBoard';
 import MobileProjectSelector from '../../components/mobile/MobileProjectSelector';
+import { Task, Project } from '../../services/api';
 import '../../styles/mobile.css';
 
 // API 기본 설정
@@ -97,13 +98,13 @@ const MobileDashboard: React.FC = () => {
       
       <div className="mobile-content">
         <MobileProjectSelector
-          projects={projects}
+          projects={projects as Project[]}
           selectedProjectId={selectedProjectId}
           onProjectChange={setSelectedProjectId}
         />
         
         <MobileKanbanBoard
-          tasks={tasks}
+          tasks={tasks as Task[]}
           onStatusUpdate={handleStatusUpdate}
         />
       </div>
