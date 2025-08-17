@@ -128,9 +128,19 @@ const TaskCard = ({ task, columnId, onTaskSelect, isOverTarget }: any) => {
       <div className="px-6 py-6 w-full">
         <div className="flex items-start justify-between">
           <div className="flex-1 min-w-0">
+            {/* 서브태스크인 경우 시각적 구분 */}
+            {task.content.startsWith('[') && (
+              <div className="text-xs text-blue-600 font-medium mb-1">
+                {task.content.substring(1, task.content.indexOf(']'))}
+              </div>
+            )}
             <div className="flex items-center gap-2">
-              <div className="w-1 h-4 bg-current opacity-30 rounded-full group-hover:opacity-60 transition-opacity" />
-              <span className="font-medium text-sm text-gray-900 line-clamp-2">{task.content}</span>
+              <div className={`w-1 h-4 ${task.content.startsWith('[') ? 'bg-blue-400' : 'bg-current'} opacity-30 rounded-full group-hover:opacity-60 transition-opacity`} />
+              <span className="font-medium text-sm text-gray-900 line-clamp-2">
+                {task.content.startsWith('[') 
+                  ? task.content.substring(task.content.indexOf(']') + 2) 
+                  : task.content}
+              </span>
             </div>
             <div className="flex items-center justify-between mt-3">
               <span className={`text-xs ${isOverdue(task.date, columnId) ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>
@@ -422,21 +432,22 @@ const MainContent = () => {
         done: { name: '완료', items: [] }
       };
 
-      tasks.forEach(task => {
-        // 날짜 포맷팅 함수
-        const formatDate = (dateString?: string) => {
-          if (!dateString) return '미정';
-          try {
-            const date = new Date(dateString);
-            const month = (date.getMonth() + 1).toString().padStart(2, '0');
-            const day = date.getDate().toString().padStart(2, '0');
-            return `${month}.${day}`;
-          } catch (error) {
-            return '미정';
-          }
-        };
+      // 날짜 포맷팅 함수
+      const formatDate = (dateString?: string) => {
+        if (!dateString) return '미정';
+        try {
+          const date = new Date(dateString);
+          const month = (date.getMonth() + 1).toString().padStart(2, '0');
+          const day = date.getDate().toString().padStart(2, '0');
+          return `${month}.${day}`;
+        } catch (error) {
+          return '미정';
+        }
+      };
 
-        const kanbanItem: KanbanItem = {
+      tasksToDisplay.forEach(task => {
+        // 메인 태스크 처리
+        const mainKanbanItem: KanbanItem = {
           id: task.id,
           content: task.title,
           date: formatDate(task.dueDate),
@@ -447,11 +458,34 @@ const MainContent = () => {
 
         // 백엔드 상태를 칸반 컬럼에 매핑
         if (task.status === 'TODO') {
-          newColumns.todo.items.push(kanbanItem);
+          newColumns.todo.items.push(mainKanbanItem);
         } else if (task.status === 'IN_PROGRESS') {
-          newColumns.progress.items.push(kanbanItem);
+          newColumns.progress.items.push(mainKanbanItem);
         } else if (task.status === 'DONE') {
-          newColumns.done.items.push(kanbanItem);
+          newColumns.done.items.push(mainKanbanItem);
+        }
+
+        // 서브태스크(children) 처리
+        if (task.children && task.children.length > 0) {
+          task.children.forEach(subtask => {
+            const subtaskItem: KanbanItem = {
+              id: subtask.id,
+              content: `[${task.title}] ${subtask.title}`, // 메인태스크 이름 포함
+              date: formatDate(subtask.dueDate),
+              assignee: subtask.assignee?.name || '미지정',
+              priority: subtask.priority?.toLowerCase() || 'medium',
+              originalTask: subtask
+            };
+
+            // 서브태스크의 상태에 따라 배치
+            if (subtask.status === 'TODO') {
+              newColumns.todo.items.push(subtaskItem);
+            } else if (subtask.status === 'IN_PROGRESS') {
+              newColumns.progress.items.push(subtaskItem);
+            } else if (subtask.status === 'DONE') {
+              newColumns.done.items.push(subtaskItem);
+            }
+          });
         }
       });
 
