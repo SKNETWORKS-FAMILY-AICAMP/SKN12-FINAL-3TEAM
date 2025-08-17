@@ -3776,10 +3776,12 @@ async function processTranscriptWithAI(transcript, client, channelId) {
       
       // 태스크 생성
       for (const [index, taskItem] of aiData.action_items.entries()) {
-        const taskNumber = `TK-${Date.now()}-${index + 1}`;
+        // 더 짧은 taskNumber 생성 (timestamp 대신 짧은 ID 사용)
+        const shortId = Date.now().toString().slice(-6);  // 마지막 6자리만
+        const taskNumber = `TK${shortId}-${index + 1}`.substring(0, 20);  // task_number는 20자 제한
         
         // 문자열 길이 제한 적용 (DB 스키마에 맞춤)
-        const taskTitle = (taskItem.title || 'Untitled Task').substring(0, 500);  // DB는 500자 제한
+        const taskTitle = (taskItem.title || 'Untitled Task').substring(0, 500);  // DB는 500자로 확장됨
         const taskDescription = (taskItem.description || '').substring(0, 2000);
         
         const createdTask = await prisma.task.create({
@@ -5158,10 +5160,12 @@ async function processUploadedFile(file, projectName, client, userId) {
           // Tasks 생성
           const tasks = result.stage2?.task_master_prd?.tasks || [];
           for (const [index, taskItem] of tasks.entries()) {
-            const taskNumber = `TK-${Date.now()}-${index + 1}`;
+            // 더 짧은 taskNumber 생성 (timestamp 대신 짧은 ID 사용)
+        const shortId = Date.now().toString().slice(-6);  // 마지막 6자리만
+        const taskNumber = `TK${shortId}-${index + 1}`.substring(0, 20);  // task_number는 20자 제한
             
             // 문자열 길이 제한 적용 (DB 스키마에 맞춤)
-            const taskTitle = (taskItem.title || taskItem.task || 'Untitled Task').substring(0, 500);  // DB는 500자 제한
+            const taskTitle = (taskItem.title || taskItem.task || 'Untitled Task').substring(0, 500);  // DB는 500자로 확장됨
             const taskDescription = (taskItem.description || '').substring(0, 2000);
             
             const createdTask = await prisma.task.create({
@@ -5212,10 +5216,10 @@ async function processUploadedFile(file, projectName, client, userId) {
               console.log(`📌 ${subtasksToSave.length}개의 서브태스크 저장 시작...`);
               
               for (const [subIndex, subtask] of subtasksToSave.entries()) {
-                const subtaskNumber = `${taskNumber}-SUB${subIndex + 1}`;
+                const subtaskNumber = `${taskNumber}S${subIndex + 1}`.substring(0, 20);  // 더 짧게 S로 표시
                 
                 // 문자열 길이 제한 (DB 스키마에 맞춤)
-                const subtaskTitle = (subtask.title || 'Untitled Subtask').substring(0, 500);  // DB는 500자 제한
+                const subtaskTitle = (subtask.title || 'Untitled Subtask').substring(0, 500);  // DB는 500자로 확장됨
                 const subtaskDescription = (subtask.description || '').substring(0, 2000);
                 
                 const createdSubtask = await prisma.task.create({
