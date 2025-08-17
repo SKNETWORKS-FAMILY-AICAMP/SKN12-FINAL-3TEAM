@@ -923,6 +923,74 @@ class JiraService {
   }
 
   /**
+   * JIRA 이슈 상태 업데이트
+   */
+  async updateIssueStatus(tenantId: string, userId: string, issueKey: string, status: string) {
+    const integration = await this.getJiraIntegration(tenantId, userId);
+    if (!integration) {
+      return { success: false, error: 'Integration not found' };
+    }
+
+    try {
+      console.log(`🔄 JIRA 이슈 ${issueKey} 상태를 ${status}로 변경 시도`);
+      
+      // 먼저 이슈의 가능한 트랜지션 조회
+      const transitions: any = await this.callJiraAPI(
+        integration, 
+        `/issue/${issueKey}/transitions`
+      );
+      
+      console.log('📋 가능한 트랜지션:', transitions.transitions?.map((t: any) => ({
+        id: t.id,
+        name: t.name,
+        to: t.to?.name
+      })));
+      
+      // 목표 상태로 가는 트랜지션 찾기
+      const targetTransition = transitions.transitions?.find((t: any) => 
+        t.to?.name?.toLowerCase() === status.toLowerCase() ||
+        t.name?.toLowerCase() === status.toLowerCase()
+      );
+      
+      if (!targetTransition) {
+        console.warn(`⚠️ ${status}로 가는 트랜지션을 찾을 수 없음`);
+        return { 
+          success: false, 
+          error: `No transition available to ${status}` 
+        };
+      }
+      
+      console.log(`✅ 트랜지션 발견: ${targetTransition.name} (ID: ${targetTransition.id})`);
+      
+      // 트랜지션 실행
+      await this.callJiraAPI(
+        integration,
+        `/issue/${issueKey}/transitions`,
+        'POST',
+        {
+          transition: {
+            id: targetTransition.id
+          }
+        }
+      );
+      
+      console.log(`✅ JIRA 이슈 ${issueKey} 상태가 ${status}로 변경됨`);
+      
+      return { 
+        success: true, 
+        message: `Issue ${issueKey} status updated to ${status}` 
+      };
+      
+    } catch (error) {
+      console.error('❌ JIRA 상태 업데이트 실패:', error);
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      };
+    }
+  }
+
+  /**
    * 프로젝트의 이슈 타입 목록 조회
    */
   async getProjectIssueTypes(tenantId: string, userId: string, projectKey: string) {

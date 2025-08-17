@@ -1078,21 +1078,81 @@ app.patch('/api/tasks/:id/status',
       const { id } = req.params;
       const { status } = req.body;
       const tenantId = req.user?.tenantId;
+      const userId = req.user?.id;
       
       if (!tenantId) {
         return res.status(401).json({ error: 'Unauthorized' });
       }
 
-      const task = await prisma.task.updateMany({
+      // 먼저 태스크와 메타데이터 조회
+      const taskWithMetadata = await prisma.task.findFirst({
         where: { id: id!, tenantId },
-        data: { status }
+        include: {
+          metadata: true
+        }
       });
 
-      if (task.count === 0) {
+      if (!taskWithMetadata) {
         return res.status(404).json({ error: 'Task not found' });
       }
 
-      return res.json({ success: true, message: 'Task status updated' });
+      // 태스크 상태 업데이트
+      const task = await prisma.task.update({
+        where: { id: id! },
+        data: { status }
+      });
+
+      // JIRA 이슈가 연결되어 있으면 JIRA도 업데이트
+      if (taskWithMetadata.metadata?.jiraIssueKey) {
+        try {
+          console.log('🔄 JIRA 상태 동기화 시작:', taskWithMetadata.metadata.jiraIssueKey);
+          
+          const { JiraService } = await import('./services/jira-service');
+          const jiraService = new JiraService(prisma);
+          
+          // 상태 매핑 (대시보드 상태 -> JIRA 상태)
+          const jiraStatusMap: { [key: string]: string } = {
+            'TODO': 'To Do',
+            'IN_PROGRESS': 'In Progress',
+            'DONE': 'Done'
+          };
+          
+          const jiraStatus = jiraStatusMap[status] || 'To Do';
+          
+          // JIRA 이슈 상태 업데이트
+          const jiraResult = await jiraService.updateIssueStatus(
+            tenantId,
+            userId!,
+            taskWithMetadata.metadata.jiraIssueKey,
+            jiraStatus
+          );
+          
+          if (jiraResult.success) {
+            console.log('✅ JIRA 상태 동기화 성공:', jiraStatus);
+            
+            // 메타데이터에 동기화 정보 업데이트
+            await prisma.taskMetadata.update({
+              where: { taskId: id! },
+              data: { 
+                jiraStatus: jiraStatus,
+                lastSyncedAt: new Date()
+              }
+            });
+          } else {
+            console.error('❌ JIRA 상태 동기화 실패:', jiraResult.error);
+            // JIRA 동기화 실패해도 대시보드 업데이트는 성공으로 처리
+          }
+        } catch (jiraError) {
+          console.error('❌ JIRA 동기화 에러:', jiraError);
+          // JIRA 에러가 있어도 대시보드 업데이트는 유지
+        }
+      }
+
+      return res.json({ 
+        success: true, 
+        message: 'Task status updated',
+        jiraSynced: !!taskWithMetadata.metadata?.jiraIssueKey
+      });
     } catch (error) {
       console.error('Task status update error:', error);
       return res.status(500).json({ error: 'Failed to update task status' });

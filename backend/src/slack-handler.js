@@ -3892,7 +3892,11 @@ async function processTranscriptWithAI(transcript, client, channelId) {
           } : 'NONE'
         });
         
-        const notionPage = await notionService.createMeetingPage(notionInputData);
+        // 프로젝트 이름을 함께 전달
+        const notionPage = await notionService.createMeetingPage(
+          notionInputData,
+          projectName || notionInputData.summary
+        );
         
         notionPageUrl = notionPage.url;
         console.log('✅ Notion 페이지 생성 성공:', notionPageUrl);
@@ -4995,7 +4999,11 @@ async function processUploadedFile(file, projectName, client, userId) {
               })) || []
             };
             
-            const notionPage = await notionService.createMeetingPage(notionData);
+            // 프로젝트 이름을 함께 전달
+            const notionPage = await notionService.createMeetingPage(
+              notionData,
+              projectName || notionData.summary
+            );
             notionPageUrl = notionPage.url;
             console.log('✅ Notion 페이지 생성 성공:', notionPageUrl);
           }
@@ -5121,6 +5129,16 @@ async function processUploadedFile(file, projectName, client, userId) {
             }
           });
           
+          // JIRA 결과와 매핑하기 위한 맵 생성
+          const jiraIssueMap = {};
+          if (jiraResult && jiraResult.results) {
+            jiraResult.results.forEach(result => {
+              if (result.success && result.key) {
+                jiraIssueMap[result.title] = result.key;
+              }
+            });
+          }
+          
           // Tasks 생성
           const tasks = result.stage2?.task_master_prd?.tasks || [];
           for (const [index, taskItem] of tasks.entries()) {
@@ -5144,20 +5162,75 @@ async function processUploadedFile(file, projectName, client, userId) {
             });
             
             // TaskMetadata 생성
-            if (taskItem.estimated_hours || taskItem.tags?.length > 0) {
+            const jiraKey = jiraIssueMap[taskItem.title || taskItem.task];
+            if (taskItem.estimated_hours || taskItem.tags?.length > 0 || jiraKey) {
               await prisma.taskMetadata.create({
                 data: {
                   taskId: createdTask.id,
                   estimatedHours: taskItem.estimated_hours || taskItem.estimatedHours || 8,
                   requiredSkills: taskItem.tags || [],
                   taskType: taskItem.issueType || 'feature',
-                  jiraIssueKey: jiraIssueUrl ? jiraIssueUrl.split('/').pop() : null,
-                  jiraStatus: jiraIssueUrl ? 'CREATED' : null
+                  jiraIssueKey: jiraKey || null,
+                  jiraStatus: jiraKey ? 'To Do' : null
                 }
               });
             }
             
             console.log(`✅ Task 저장 완료: ${createdTask.taskNumber} - ${createdTask.title}`);
+            
+            // 서브태스크 저장 - AI 분석 결과의 subtasks 필드 확인
+            const subtasksToSave = taskItem.subtasks || taskItem.sub_tasks || [];
+            console.log(`📌 서브태스크 확인:`, {
+              hasSubtasks: !!taskItem.subtasks,
+              hasSubTasks: !!taskItem.sub_tasks,
+              subtasksLength: subtasksToSave.length,
+              taskTitle: taskItem.title || taskItem.task,
+              rawSubtasks: JSON.stringify(subtasksToSave).substring(0, 200)
+            });
+            
+            if (subtasksToSave.length > 0) {
+              console.log(`📌 ${subtasksToSave.length}개의 서브태스크 저장 시작...`);
+              
+              for (const [subIndex, subtask] of subtasksToSave.entries()) {
+                const subtaskNumber = `${taskNumber}-SUB${subIndex + 1}`;
+                
+                const createdSubtask = await prisma.task.create({
+                  data: {
+                    tenantId: user.tenantId,
+                    projectId: createdProject.id,
+                    parentId: createdTask.id, // 부모 태스크 ID 연결
+                    taskNumber: subtaskNumber,
+                    title: subtask.title || 'Untitled Subtask',
+                    description: subtask.description || '',
+                    status: 'TODO',
+                    priority: subtask.priority?.toUpperCase() === 'HIGH' ? 'HIGH' : 
+                             subtask.priority?.toUpperCase() === 'LOW' ? 'LOW' : 'MEDIUM',
+                    startDate: subtask.startDate || subtask.start_date || taskItem.startDate || taskItem.start_date ? 
+                              new Date(subtask.startDate || subtask.start_date || taskItem.startDate || taskItem.start_date) : null,
+                    dueDate: subtask.dueDate || subtask.due_date || taskItem.dueDate || taskItem.due_date ? 
+                            new Date(subtask.dueDate || subtask.due_date || taskItem.dueDate || taskItem.due_date) : null,
+                    complexity: subtask.complexity ? String(subtask.complexity) : '3',
+                    assigneeId: null
+                  }
+                });
+                
+                // 서브태스크 메타데이터 생성
+                const subtaskJiraKey = jiraIssueMap[subtask.title];
+                if (subtask.estimated_hours || subtaskJiraKey) {
+                  await prisma.taskMetadata.create({
+                    data: {
+                      taskId: createdSubtask.id,
+                      estimatedHours: subtask.estimated_hours || subtask.estimatedHours || 4,
+                      taskType: 'subtask',
+                      jiraIssueKey: subtaskJiraKey || null,
+                      jiraStatus: subtaskJiraKey ? 'To Do' : null
+                    }
+                  });
+                }
+                
+                console.log(`  ✅ 서브태스크 저장: ${createdSubtask.taskNumber} - ${createdSubtask.title}`);
+              }
+            }
           }
           
           console.log(`✅ DB 저장 완료: Project ${createdProject.id}, ${tasks.length}개 업무`);
@@ -5632,8 +5705,11 @@ async function checkRecentFiles(client, userId, projectName) {
               actionItemsCount: meetingData.action_items ? meetingData.action_items.length : 0
             });
             
-            // Notion 페이지 생성
-            const notionPage = await notionService.createMeetingPage(aiData);
+            // Notion 페이지 생성 - 프로젝트 이름을 함께 전달
+            const notionPage = await notionService.createMeetingPage(
+              aiData,
+              projectName || aiData.summary
+            );
             
             notionUrl = notionPage.url;
             notionButtonText = '📋 Notion에서 보기';

@@ -14,6 +14,11 @@ import IntegrationSuccess from './pages/JiraSuccess';
 import NotionSuccess from './pages/NotionSuccess';
 import Integration from './pages/Integration';
 import ProtectedRoute from './components/ProtectedRoute';
+import MobileDashboard from './pages/mobile/MobileDashboard';
+import MobileDashboardV2 from './pages/mobile/MobileDashboardV2';
+import MobileTasks from './pages/mobile/MobileTasks';
+import MobileMeeting from './pages/mobile/MobileMeeting';
+import MobileSettings from './pages/mobile/MobileSettings';
 // import { connectSocket, disconnectSocket } from './services/api';
 import './App.css';
 
@@ -79,6 +84,12 @@ function App() {
             <Route path="/integration-success" element={<IntegrationSuccess />} />
             <Route path="/jira-success" element={<IntegrationSuccess />} />
             <Route path="/notion-success" element={<NotionSuccess />} />
+            
+            {/* 모바일 라우트 - V2 디자인 */}
+            <Route path="/mobile" element={<MobileDashboardV2 />} />
+            <Route path="/mobile/tasks" element={<MobileTasks />} />
+            <Route path="/mobile/meeting" element={<MobileMeeting />} />
+            <Route path="/mobile/settings" element={<MobileSettings />} />
 
           </Routes>
           <Toaster

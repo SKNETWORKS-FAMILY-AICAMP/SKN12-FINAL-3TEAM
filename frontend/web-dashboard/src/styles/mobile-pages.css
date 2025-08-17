@@ -1,0 +1,271 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 업무 관리 페이지 스타일 */
+.mobile-filter-tabs {
+  @apply flex gap-2 mb-5 p-1 bg-white rounded-xl shadow-soft;
+}
+
+.filter-tab {
+  @apply flex-1 px-3 py-2.5 bg-transparent rounded-lg text-sm font-medium text-neutral-600 cursor-pointer transition-all flex items-center justify-center gap-1.5;
+}
+
+.filter-tab.active {
+  @apply bg-brand-500 text-white shadow-sm;
+}
+
+.filter-count {
+  @apply bg-white/20 px-1.5 py-0.5 rounded-md text-xs font-semibold;
+}
+
+.filter-tab.active .filter-count {
+  @apply bg-white/30;
+}
+
+.mobile-task-list {
+  @apply flex flex-col gap-3;
+}
+
+.mobile-task-item {
+  @apply bg-white rounded-xl p-4 shadow-soft border border-neutral-200;
+}
+
+.task-item-header {
+  @apply flex justify-between items-start mb-3;
+}
+
+.task-item-title {
+  @apply text-base font-semibold text-neutral-900 m-0 flex-1 mr-3;
+}
+
+.task-status-badge {
+  @apply px-2.5 py-1 rounded-lg text-white text-xs font-semibold whitespace-nowrap;
+}
+
+.task-item-description {
+  @apply text-neutral-600 text-sm m-0 mb-3 leading-relaxed;
+}
+
+.task-item-meta {
+  @apply flex gap-3 flex-wrap;
+}
+
+.task-meta-item {
+  @apply flex items-center gap-1 text-xs text-neutral-500;
+}
+
+.meta-icon {
+  @apply text-sm;
+}
+
+.task-parent-info {
+  @apply mt-3 pt-3 border-t border-neutral-100 text-xs text-brand-600 font-medium;
+}
+
+.empty-tasks {
+  @apply text-center py-16 px-5 bg-white rounded-xl text-neutral-400 shadow-soft;
+}
+
+/* 회의 분석 페이지 스타일 */
+.mobile-recording-section {
+  @apply mb-6;
+}
+
+.recording-card {
+  @apply bg-white rounded-2xl p-5 shadow-soft border border-neutral-200;
+}
+
+.recording-title {
+  @apply text-lg font-bold text-neutral-900 m-0 mb-2;
+}
+
+.recording-description {
+  @apply text-neutral-600 text-sm m-0 mb-5;
+}
+
+.recording-controls {
+  @apply flex justify-center items-center min-h-[60px];
+}
+
+.recording-button {
+  @apply px-6 py-3 rounded-xl text-base font-semibold cursor-pointer flex items-center gap-2 transition-all;
+}
+
+.recording-button.start {
+  @apply bg-brand-500 text-white hover:bg-brand-600 active:scale-95;
+}
+
+.recording-button.stop {
+  @apply bg-accent-red text-white hover:bg-red-600 active:scale-95;
+}
+
+.recording-indicator {
+  @apply flex items-center gap-2 text-accent-red font-semibold mr-4;
+}
+
+.recording-dot {
+  @apply w-3 h-3 bg-accent-red rounded-full animate-pulse;
+}
+
+.mobile-recent-meetings {
+  @apply mt-6;
+}
+
+.section-title {
+  @apply text-base font-bold text-neutral-900 m-0 mb-4;
+}
+
+.meeting-list {
+  @apply flex flex-col gap-3;
+}
+
+.meeting-card {
+  @apply bg-white rounded-xl p-4 shadow-soft border border-neutral-200;
+}
+
+.meeting-header {
+  @apply flex justify-between items-start mb-2;
+}
+
+.meeting-title {
+  @apply text-base font-semibold text-neutral-900 m-0;
+}
+
+.meeting-date {
+  @apply text-xs text-neutral-500 font-medium;
+}
+
+.meeting-summary {
+  @apply text-neutral-600 text-sm m-0 mb-3;
+}
+
+.meeting-meta {
+  @apply flex gap-4 mb-3;
+}
+
+.meeting-actions {
+  @apply flex gap-2;
+}
+
+.action-button {
+  @apply flex-1 px-3 py-2 bg-brand-50 border border-brand-200 rounded-lg text-brand-600 text-xs font-semibold cursor-pointer transition-all flex items-center justify-center gap-1 hover:bg-brand-100;
+}
+
+/* 설정 페이지 스타일 */
+.mobile-profile-card {
+  @apply bg-white rounded-2xl p-5 flex items-center gap-4 mb-6 shadow-soft border border-neutral-200;
+}
+
+.profile-avatar {
+  @apply w-14 h-14 bg-brand-500 rounded-full flex items-center justify-center text-white text-xl font-bold;
+}
+
+.profile-info {
+  @apply flex-1;
+}
+
+.profile-name {
+  @apply text-lg font-bold text-neutral-900 m-0 mb-1;
+}
+
+.profile-email {
+  @apply text-sm text-neutral-600 m-0;
+}
+
+.mobile-settings-sections {
+  @apply flex flex-col gap-4 mb-6;
+}
+
+.settings-section {
+  @apply bg-white rounded-xl p-4 shadow-soft border border-neutral-200;
+}
+
+.section-header {
+  @apply flex items-center gap-2 mb-4 pb-3 border-b border-neutral-100;
+}
+
+.section-icon {
+  @apply text-xl;
+}
+
+.section-title {
+  @apply text-base font-bold text-neutral-900 m-0;
+}
+
+.settings-items {
+  @apply flex flex-col gap-3;
+}
+
+.setting-item {
+  @apply flex justify-between items-center py-2;
+}
+
+.setting-label {
+  @apply text-sm text-neutral-700 font-medium;
+}
+
+.toggle-switch {
+  @apply relative w-12 h-6;
+}
+
+.toggle-switch input {
+  @apply hidden;
+}
+
+.toggle-slider {
+  @apply absolute cursor-pointer inset-0 bg-neutral-300 rounded-full transition-all;
+}
+
+.toggle-slider::before {
+  content: "";
+  @apply absolute h-4 w-4 left-1 bottom-1 bg-white rounded-full transition-all;
+}
+
+.toggle-switch input:checked + .toggle-slider {
+  @apply bg-brand-500;
+}
+
+.toggle-switch input:checked + .toggle-slider::before {
+  @apply translate-x-6;
+}
+
+.status-badge {
+  @apply px-2.5 py-1 rounded-lg text-xs font-semibold;
+}
+
+.status-badge.connected {
+  @apply bg-accent-green/10 text-accent-green;
+}
+
+.status-badge.disconnected {
+  @apply bg-accent-red/10 text-accent-red;
+}
+
+.setting-value {
+  @apply flex items-center gap-1 text-neutral-600 text-sm;
+}
+
+.chevron {
+  @apply text-lg text-neutral-400;
+}
+
+.mobile-logout-section {
+  @apply my-6;
+}
+
+.logout-button {
+  @apply w-full py-3 bg-accent-red/10 border border-accent-red/20 rounded-xl text-accent-red text-base font-semibold cursor-pointer flex items-center justify-center gap-2 transition-all hover:bg-accent-red/15;
+}
+
+.mobile-app-info {
+  @apply text-center py-5 text-neutral-500;
+}
+
+.app-version {
+  @apply text-sm font-semibold m-0 mb-1;
+}
+
+.app-copyright {
+  @apply text-xs m-0;
+}

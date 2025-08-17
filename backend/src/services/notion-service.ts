@@ -78,7 +78,7 @@ export class NotionService {
   }
   
 
-async createMeetingPage(inputData: InputData | string): Promise<{ id: string; url: string }> {
+async createMeetingPage(inputData: InputData | string, projectName?: string): Promise<{ id: string; url: string }> {
   // JSON 파싱
   let parsedData: InputData;
   if (typeof inputData === 'string') {
@@ -89,23 +89,33 @@ async createMeetingPage(inputData: InputData | string): Promise<{ id: string; ur
 
   try {
     console.log('📝 Notion 페이지 생성 시작');
+    console.log('📌 프로젝트 이름:', projectName || '없음');
     
-    // 부모 페이지 찾기
-    const search = await this.notion.search({
-      query: '',
-      filter: { value: 'page', property: 'object' },
-      page_size: 1
+    // 프로젝트 이름으로 개인 페이지 생성 (워크스페이스 루트에)
+    const pageTitle = projectName || `딸깍 - ${parsedData.summary}`;
+    
+    // 워크스페이스 루트에 새로운 독립 페이지 생성
+    const parent = { type: 'workspace' as const, workspace: true };
+
+    // 프로젝트 이름으로 메인 페이지 생성
+    const mainPageResponse = await this.notion.pages.create({
+      parent,
+      icon: { emoji: '📋' },
+      properties: {
+        title: {
+          title: [{ 
+            text: { content: pageTitle } 
+          }]
+        }
+      },
+      children: []
     });
     
-    // 첫 번째 결과 확인
-    const firstResult = search.results[0];
-    if (!firstResult?.id) {
-      throw new Error('부모 페이지를 찾을 수 없습니다');
-    }
+    console.log(`✅ 개인 페이지 생성 완료: "${pageTitle}"`);
 
-    // 데이터베이스 생성
+    // 데이터베이스를 새로 생성된 페이지 안에 생성
     const database = await this.notion.databases.create({
-      parent: { page_id: firstResult.id },
+      parent: { page_id: mainPageResponse.id },
       title: [{ text: { content: "딸깍 회의 데이터베이스" } }],
       properties: {
         "제목": { title: {} },
@@ -130,21 +140,9 @@ async createMeetingPage(inputData: InputData | string): Promise<{ id: string; ur
       });
     }
 
-    // 페이지 부모 (기존 로직 유지)
-    const parent = { page_id: firstResult.id };
-    
-    // 페이지 생성
-    const response = await this.notion.pages.create({
-      parent,
-      icon: { emoji: '🔔' },
-      properties: {
-        title: {
-          title: [{ 
-            text: { content: `딸깍 - ${parsedData.summary}` } 
-          }]
-        }
-      },
-      
+    // 메인 페이지에 콘텐츠 블록 추가
+    await this.notion.blocks.children.append({
+      block_id: mainPageResponse.id,
       children: [
         // 🎈SKN 12기 Final Project 3팀
         {
@@ -509,23 +507,22 @@ async createMeetingPage(inputData: InputData | string): Promise<{ id: string; ur
           }
         }
       ]
-      
     });
     
     console.log('✅ Notion 페이지 생성 완료');
     
     // Notion 페이지 URL 생성 (공개 URL 형식)
-    const pageUrl = (response as any).url || 
-                    (response as any).public_url ||
-                    `https://www.notion.so/${response.id.replace(/-/g, '')}`;
+    const pageUrl = (mainPageResponse as any).url || 
+                    (mainPageResponse as any).public_url ||
+                    `https://www.notion.so/${mainPageResponse.id.replace(/-/g, '')}`;
     
     console.log('📝 생성된 Notion 페이지:', {
-      id: response.id,
+      id: mainPageResponse.id,
       url: pageUrl
     });
     
     return {
-      id: response.id,
+      id: mainPageResponse.id,
       url: pageUrl
     };
     
