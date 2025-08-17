@@ -446,7 +446,15 @@ const MainContent = () => {
       };
 
       tasksToDisplay.forEach(task => {
-        // 메인 태스크 처리
+        console.log('📋 태스크 처리:', {
+          id: task.id,
+          title: task.title,
+          hasChildren: !!task.children,
+          childrenCount: task.children?.length || 0,
+          children: task.children
+        });
+
+        // 메인 태스크 처리 (일단 다시 표시)
         const mainKanbanItem: KanbanItem = {
           id: task.id,
           content: task.title,
@@ -467,6 +475,7 @@ const MainContent = () => {
 
         // 서브태스크(children) 처리
         if (task.children && task.children.length > 0) {
+          console.log('✅ 서브태스크 발견:', task.children.length, '개');
           task.children.forEach(subtask => {
             const subtaskItem: KanbanItem = {
               id: subtask.id,
@@ -477,6 +486,8 @@ const MainContent = () => {
               originalTask: subtask
             };
 
+            console.log('📌 서브태스크 추가:', subtaskItem);
+
             // 서브태스크의 상태에 따라 배치
             if (subtask.status === 'TODO') {
               newColumns.todo.items.push(subtaskItem);
@@ -486,6 +497,8 @@ const MainContent = () => {
               newColumns.done.items.push(subtaskItem);
             }
           });
+        } else {
+          console.log('❌ 서브태스크 없음');
         }
       });
 

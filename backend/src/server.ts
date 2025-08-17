@@ -940,9 +940,10 @@ app.get('/api/tasks',
       
       console.log('📋 쿼리 파라미터:', { status, assigneeId, priority, myTasksOnly });
       
-      // 기본적으로 같은 tenant의 모든 작업을 표시
+      // 기본적으로 같은 tenant의 메인 태스크만 표시 (parentId가 null인 것)
       const where: any = {
-        tenantId
+        tenantId,
+        parentId: null  // 메인 태스크만 가져오기 (서브태스크는 children으로 포함됨)
       };
       
       // myTasksOnly 파라미터가 true일 때만 내 작업만 필터링
@@ -988,6 +989,13 @@ app.get('/api/tasks',
             include: {
               assignee: {
                 select: { id: true, name: true, email: true }
+              },
+              project: {
+                select: { 
+                  id: true, 
+                  title: true,
+                  createdAt: true
+                }
               }
             }
           }
@@ -1034,6 +1042,13 @@ app.get('/api/tasks/:id',
             include: {
               assignee: {
                 select: { id: true, name: true, email: true }
+              },
+              project: {
+                select: { 
+                  id: true, 
+                  title: true,
+                  createdAt: true
+                }
               }
             }
           },
