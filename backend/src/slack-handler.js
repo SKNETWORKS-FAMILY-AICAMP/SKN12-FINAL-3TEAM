@@ -5067,10 +5067,10 @@ async function processUploadedFile(file, projectName, client, userId) {
             const jiraConfig = jiraIntegration.config;
             if (jiraConfig.site_url) {
               jiraSiteUrl = jiraConfig.site_url;
-              jiraIssueUrl = `${jiraConfig.site_url}/jira/software/projects/${jiraResult.projectKey}/boards`;
+              jiraIssueUrl = `${jiraConfig.site_url}/jira/software/c/projects/${jiraResult.projectKey}/summary`;
             } else if (jiraConfig.cloud_id && jiraConfig.site_name) {
               jiraSiteUrl = `https://${jiraConfig.site_name}.atlassian.net`;
-              jiraIssueUrl = `https://${jiraConfig.site_name}.atlassian.net/jira/software/projects/${jiraResult.projectKey}/boards`;
+              jiraIssueUrl = `https://${jiraConfig.site_name}.atlassian.net/jira/software/c/projects/${jiraResult.projectKey}/summary`;
             }
             
             console.log('✅ JIRA 프로젝트 및 이슈 생성 성공:', jiraResult.projectKey, jiraIssueUrl);
