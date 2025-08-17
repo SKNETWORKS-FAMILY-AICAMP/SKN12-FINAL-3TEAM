@@ -49,7 +49,9 @@ const TaskCard: React.FC<{
   isInsertAfter?: boolean;
   shouldPushDown?: boolean;
   index: number;
-}> = ({ task, isDragging, isOver = false, isInsertAfter = false, shouldPushDown = false }) => {
+  parentColor?: string;
+  parentTask?: Task;
+}> = ({ task, isDragging, isOver = false, isInsertAfter = false, shouldPushDown = false, parentColor = '#3B82F6', parentTask }) => {
   const {
     attributes,
     listeners,
@@ -99,7 +101,7 @@ const TaskCard: React.FC<{
         duration: shouldPushDown ? 0.2 : 0.2,
         ease: shouldPushDown ? 'easeOut' : 'easeInOut'
       }}
-      className={`bg-white rounded-2xl p-4 shadow-soft border border-neutral-200 cursor-grab active:cursor-grabbing transition-all duration-200 hover:shadow-medium ${
+      className={`bg-white rounded-2xl p-4 shadow-soft border-2 cursor-grab active:cursor-grabbing transition-all duration-200 hover:shadow-medium relative ${
         isDragging || isSortableDragging ? 'opacity-90 rotate-1 scale-105 shadow-xl z-[100]' : ''
       } ${
         isOver ? 'ring-2 ring-blue-400 ring-offset-2 bg-blue-50 border-blue-300' : ''
@@ -108,7 +110,25 @@ const TaskCard: React.FC<{
       } ${
         shouldPushDown ? 'opacity-50 z-10' : ''
       }`}
+      style={{
+        borderLeftWidth: '4px',
+        borderLeftColor: parentColor,
+        borderColor: parentColor + '30'
+      }}
     >
+      {/* 부모 태스크 정보 */}
+      {parentTask && (
+        <div className="flex items-center gap-1 mb-2">
+          <div 
+            className="w-2 h-2 rounded-full" 
+            style={{ backgroundColor: parentColor }}
+          />
+          <span className="text-xs font-medium" style={{ color: parentColor }}>
+            {parentTask.title}
+          </span>
+        </div>
+      )}
+      
       {/* 태스크 헤더 */}
       <div className="flex items-start justify-between mb-3">
         <h4 className="font-semibold text-neutral-900 text-sm leading-tight flex-1 pr-2">
@@ -171,13 +191,17 @@ const KanbanColumn: React.FC<{
   overTaskId?: string | null;
   insertAfter?: string | null;
   dragOverIndex?: number | null;
+  parentColorMap?: Map<string, string>;
+  allTasks?: Task[];
 }> = ({ 
   column, 
   onAddTask,
   isOver = false,
   overTaskId = null,
   insertAfter = null,
-  dragOverIndex = null
+  dragOverIndex = null,
+  parentColorMap = new Map(),
+  allTasks = []
 }) => {
   const {
     setNodeRef,
@@ -253,6 +277,8 @@ const KanbanColumn: React.FC<{
                   isOver={overTaskId === task.id}
                   isInsertAfter={insertAfter === task.id}
                   shouldPushDown={shouldPushDown}
+                  parentColor={task.parentId ? parentColorMap.get(task.parentId) : undefined}
+                  parentTask={task.parentId ? allTasks.find(t => t.id === task.parentId) : undefined}
                 />
                 {showInsertLineAfter && (
                   <motion.div
@@ -302,10 +328,32 @@ const KanbanBoard: React.FC = () => {
   const queryClient = useQueryClient();
 
   // 태스크 데이터 가져오기
-  const { data: tasks = [], isLoading } = useQuery({
+  const { data: allTasks = [], isLoading } = useQuery({
     queryKey: ['tasks'],
     queryFn: () => taskAPI.getTasks(),
   });
+
+  // 서브태스크만 필터링하고 메인태스크별로 색상 할당
+  const colorPalette = [
+    '#8B5CF6', // 보라
+    '#EC4899', // 핑크
+    '#3B82F6', // 파랑
+    '#10B981', // 초록
+    '#F59E0B', // 주황
+    '#EF4444', // 빨강
+    '#06B6D4', // 청록
+    '#6366F1', // 인디고
+  ];
+
+  // 메인태스크 ID별 색상 매핑
+  const parentColorMap = new Map<string, string>();
+  const mainTasks = allTasks.filter(task => !task.parentId);
+  mainTasks.forEach((task, index) => {
+    parentColorMap.set(task.id, colorPalette[index % colorPalette.length]);
+  });
+
+  // 서브태스크만 필터링
+  const tasks = allTasks.filter(task => task.parentId);
 
   // 태스크 상태 업데이트 mutation
   const updateTaskMutation = useMutation({
@@ -530,6 +578,8 @@ const KanbanBoard: React.FC = () => {
                 overTaskId={overTaskId}
                 insertAfter={insertAfter}
                 dragOverIndex={dragOverIndex}
+                parentColorMap={parentColorMap}
+                allTasks={allTasks}
               />
             </motion.div>
           ))}
@@ -540,7 +590,15 @@ const KanbanBoard: React.FC = () => {
           duration: 200,
           easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)',
         }}>
-          {activeTask ? <TaskCard task={activeTask} isDragging index={0} /> : null}
+          {activeTask ? (
+            <TaskCard 
+              task={activeTask} 
+              isDragging 
+              index={0}
+              parentColor={activeTask.parentId ? parentColorMap.get(activeTask.parentId) : undefined}
+              parentTask={activeTask.parentId ? allTasks.find(t => t.id === activeTask.parentId) : undefined}
+            />
+          ) : null}
         </DragOverlay>
       </DndContext>
     </div>
