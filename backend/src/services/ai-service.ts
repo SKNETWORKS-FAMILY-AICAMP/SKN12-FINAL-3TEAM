@@ -717,6 +717,29 @@ class AIService {
           // AI 서버 응답을 백엔드 형식으로 변환
           const aiResponse = response.data;
           
+          // 더 자세한 디버깅 로그 추가
+          console.log('🔍 AI 서버 전체 응답 키:', Object.keys(aiResponse));
+          console.log('🔍 AI 서버 success 값:', aiResponse.success);
+          
+          // stage3_tasks 상세 확인
+          if (aiResponse.stage3_tasks) {
+            console.log('📌 stage3_tasks 타입:', typeof aiResponse.stage3_tasks);
+            console.log('📌 stage3_tasks 키들:', Object.keys(aiResponse.stage3_tasks));
+            
+            if (aiResponse.stage3_tasks.action_items) {
+              console.log('✅ action_items 발견! 개수:', aiResponse.stage3_tasks.action_items.length);
+              if (aiResponse.stage3_tasks.action_items.length > 0) {
+                console.log('📋 첫 번째 태스크:', aiResponse.stage3_tasks.action_items[0]);
+              }
+            }
+          } else {
+            console.log('❌ stage3_tasks가 없음!');
+            // analysis 객체 확인
+            if (aiResponse.analysis?.generated_tasks) {
+              console.log('🔄 analysis.generated_tasks 확인:', typeof aiResponse.analysis.generated_tasks);
+            }
+          }
+          
           // 디버깅: AI 응답 구조 확인
           console.log('🔍 AI 서버 원본 응답 구조:', {
             hasStage1Notion: !!aiResponse.stage1_notion,
@@ -724,7 +747,8 @@ class AIService {
             hasStage3Tasks: !!aiResponse.stage3_tasks,
             stage3TasksType: typeof aiResponse.stage3_tasks,
             stage3TasksKeys: aiResponse.stage3_tasks ? Object.keys(aiResponse.stage3_tasks) : [],
-            taskCount: aiResponse.stage3_tasks?.tasks?.length || 
+            taskCount: aiResponse.stage3_tasks?.action_items?.length ||
+                       aiResponse.stage3_tasks?.tasks?.length || 
                        aiResponse.stage3_tasks?.length || 0
           });
           
