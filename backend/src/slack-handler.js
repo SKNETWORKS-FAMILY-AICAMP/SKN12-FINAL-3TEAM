@@ -5024,9 +5024,9 @@ async function processUploadedFile(file, projectName, client, userId) {
         }
       }
       
-      // JIRA 이슈 생성
+      // JIRA 프로젝트 생성 및 이슈 생성
       if (jiraIntegration && result.stage2?.task_master_prd?.tasks) {
-        console.log('🎫 JIRA 이슈 생성 시도:', {
+        console.log('🎫 JIRA 프로젝트 및 이슈 생성 시도:', {
           hasIntegration: !!jiraIntegration,
           taskCount: result.stage2?.task_master_prd?.tasks?.length || 0,
           jiraSiteUrl: jiraSiteUrl
@@ -5036,42 +5036,49 @@ async function processUploadedFile(file, projectName, client, userId) {
           const JiraService = require('./services/jira-service').default || require('./services/jira-service').JiraService;
           const jiraService = new JiraService(prisma);
           
-          // 첫 번째 태스크를 메인 이슈로 생성 (나머지는 서브태스크로)
-          const mainTask = result.stage2.task_master_prd.tasks[0];
-          console.log('📝 메인 태스크:', {
-            title: mainTask?.title || mainTask?.task,
-            hasMainTask: !!mainTask
-          });
+          // syncTaskMasterToJira를 사용하여 새 프로젝트 생성 및 이슈 추가
+          const jiraResult = await jiraService.syncTaskMasterToJira(
+            user.tenantId,
+            user.id,
+            {
+              title: projectName || 'TtalKkak Project',
+              overview: result.stage1?.notion_project?.overview || 'AI generated project',
+              tasks: result.stage2.task_master_prd.tasks.map(task => ({
+                title: task.title || task.task,
+                description: task.description || '',
+                priority: task.priority?.toLowerCase() || 'medium',
+                estimated_hours: task.estimated_hours || 8,
+                complexity: task.complexity || 'MEDIUM',
+                start_date: task.startDate || task.start_date,
+                deadline: task.dueDate || task.due_date || task.deadline,
+                subtasks: task.subtasks?.map(subtask => ({
+                  title: subtask.title,
+                  description: subtask.description || '',
+                  estimated_hours: subtask.estimated_hours || 2,
+                  startDate: subtask.startDate || subtask.start_date,
+                  dueDate: subtask.dueDate || subtask.due_date
+                })) || []
+              }))
+            }
+          );
           
-          if (mainTask) {
-            const jiraIssue = await jiraService.createJiraIssue(
-              user.tenantId,
-              user.id,
-              {
-                summary: mainTask.title || mainTask.task || projectName,
-                description: mainTask.description || '',
-                issueType: 'Task',
-                priority: mainTask.priority?.toLowerCase() === 'high' ? 'High' : 
-                         mainTask.priority?.toLowerCase() === 'low' ? 'Low' : 'Medium',
-                startDate: mainTask.startDate || mainTask.start_date,
-                dueDate: mainTask.dueDate || mainTask.due_date
-              }
-            );
-            
+          if (jiraResult.success && jiraResult.projectKey) {
             // JIRA 사이트 URL 구성
             const jiraConfig = jiraIntegration.config;
             if (jiraConfig.site_url) {
               jiraSiteUrl = jiraConfig.site_url;
-              jiraIssueUrl = `${jiraConfig.site_url}/browse/${jiraIssue.key}`;
+              jiraIssueUrl = `${jiraConfig.site_url}/jira/software/projects/${jiraResult.projectKey}/boards`;
             } else if (jiraConfig.cloud_id && jiraConfig.site_name) {
               jiraSiteUrl = `https://${jiraConfig.site_name}.atlassian.net`;
-              jiraIssueUrl = `https://${jiraConfig.site_name}.atlassian.net/browse/${jiraIssue.key}`;
+              jiraIssueUrl = `https://${jiraConfig.site_name}.atlassian.net/jira/software/projects/${jiraResult.projectKey}/boards`;
             }
             
-            console.log('✅ JIRA 이슈 생성 성공:', jiraIssue.key, jiraIssueUrl);
+            console.log('✅ JIRA 프로젝트 및 이슈 생성 성공:', jiraResult.projectKey, jiraIssueUrl);
+          } else {
+            console.error('❌ JIRA 프로젝트 생성 실패:', jiraResult.error);
           }
         } catch (error) {
-          console.error('❌ JIRA 이슈 생성 실패:', error);
+          console.error('❌ JIRA 프로젝트/이슈 생성 실패:', error);
         }
       }
       
