@@ -442,19 +442,12 @@ class JiraService {
       }
     }
 
-    // Epic의 경우 Epic Name 필드 추가 (타임라인 표시에 필수)
+    // Epic의 경우 Epic Name 필드 추가 시도 (선택사항 - 없어도 Epic 생성 가능)
     if (request.issueType === 'Epic' && request.epicName) {
-      // Epic Name 필드 - 여러 가능한 필드 ID 시도
-      const epicNameFields = ['customfield_10011', 'customfield_10012', 'customfield_10013'];
-      for (const fieldId of epicNameFields) {
-        try {
-          issueData.fields[fieldId] = request.epicName;
-          console.log(`✅ Epic Name 필드 설정: ${fieldId}`);
-          break; // 첫 번째 성공하면 중단
-        } catch (error) {
-          console.log(`⚠️ Epic Name 필드 ${fieldId} 설정 실패, 다음 시도...`);
-        }
-      }
+      // Epic Name은 선택사항 - 설정 실패해도 Epic 자체는 생성됨
+      console.log('📝 Epic Name 설정 시도 (선택사항)');
+      // Epic Name 필드는 JIRA 인스턴스마다 다르므로 설정하지 않음
+      // 일부 JIRA에서는 summary가 자동으로 Epic Name이 됨
     }
 
     // Sub-task의 경우에만 parent 필드 추가 (일반 Task는 parent 관계 없이 독립적으로 생성)
@@ -464,19 +457,12 @@ class JiraService {
       };
     }
     
-    // Epic Link 필드 추가 (타임라인에서 Epic과 연결)
+    // Epic Link 필드 추가 시도 (선택사항)
     if ((request as any).epicLink && request.issueType !== 'Epic') {
-      // Epic Link 필드 - 여러 가능한 필드 ID 시도
-      const epicLinkFields = ['customfield_10014', 'customfield_10008', 'customfield_10018'];
-      for (const fieldId of epicLinkFields) {
-        try {
-          issueData.fields[fieldId] = (request as any).epicLink;
-          console.log(`✅ Epic Link 필드 설정: ${fieldId}`);
-          break;
-        } catch (error) {
-          console.log(`⚠️ Epic Link 필드 ${fieldId} 설정 실패, 다음 시도...`);
-        }
-      }
+      // Epic Link는 선택사항 - parent 관계로도 충분
+      console.log('🔗 Epic Link 설정 시도 (선택사항)');
+      // Epic Link 필드는 JIRA 인스턴스마다 다르므로 설정하지 않음
+      // Sub-task의 parent 관계로 충분히 연결됨
     }
 
     console.log('🔗 이슈 생성 정보:', {
