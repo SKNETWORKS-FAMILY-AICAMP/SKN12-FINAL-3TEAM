@@ -266,21 +266,8 @@ async createMeetingPage(inputData: InputData | string, projectName?: string): Pr
                   ]
                 }
               },
-              // 실제 action_items 데이터로 행 생성
-              ...parsedData.action_items.map((item) => ({
-                object: 'block' as const,
-                type: 'table_row' as const,
-                table_row: {
-                  cells: [
-                    [{ type: 'text' as const, text: { content: item.id.toString() } }],
-                    [{ type: 'text' as const, text: { content: item.start_date } }],
-                    [{ type: 'text' as const, text: { content: item.deadline } }],
-                    [{ type: 'text' as const, text: { content: item.title } }],
-                    [{ type: 'text' as const, text: { content: this.getStatusBadge(item.status) } }],
-                    [{ type: 'text' as const, text: { content: item.assignee || '' } }]
-                  ]
-                }
-              }))
+              // 메인 태스크와 서브태스크 모두 표시
+              ...this.createTaskRowsWithSubtasks(parsedData.action_items)
             ]
           }
         },
@@ -388,19 +375,19 @@ async createMeetingPage(inputData: InputData | string, projectName?: string): Pr
                 paragraph: {
                   rich_text: [
                     { type: 'text' as const, text: { content: '프로젝트명' }, annotations: { bold: true } },
-                    { type: 'text' as const, text: { content: ': TtalKkac 모바일 앱 프로젝트' } }
+                    { type: 'text' as const, text: { content: `: ${this.extractProjectName(parsedData)}` } }
                   ]
                 }
               },
               
-              // 목적 (summary 사용)
+              // 목적 (AI 응답에서 목적 추출)
               {
                 object: 'block' as const,
                 type: 'paragraph' as const,
                 paragraph: {
                   rich_text: [
                     { type: 'text' as const, text: { content: '목적' }, annotations: { bold: true } },
-                    { type: 'text' as const, text: { content: `: ${parsedData.summary}` } }
+                    { type: 'text' as const, text: { content: `: ${this.extractPurposeFromSummary(parsedData)}` } }
                   ]
                 }
               },
@@ -481,7 +468,7 @@ async createMeetingPage(inputData: InputData | string, projectName?: string): Pr
                       paragraph: {
                         rich_text: [{ 
                           type: 'text' as const, 
-                          text: { content: parsedData.summary }
+                          text: { content: this.extractCoreIdea(parsedData) }
                         }]
                       }
                     }
@@ -535,17 +522,8 @@ async createMeetingPage(inputData: InputData | string, projectName?: string): Pr
                         }]
                       }
                     },
-                    // 각 action_item을 실행 단계로 표시
-                    ...parsedData.action_items.map((item, index) => ({
-                      object: 'block' as const,
-                      type: 'bulleted_list_item' as const,
-                      bulleted_list_item: {
-                        rich_text: [{ 
-                          type: 'text' as const, 
-                          text: { content: `${index + 1}단계: ${item.title} (${item.deadline})` }
-                        }]
-                      }
-                    }))
+                    // 각 메인 태스크를 실행 단계로 표시 (서브태스크 제외)
+                    ...this.createExecutionPlan(parsedData.action_items)
                   ]
                 }
               }
@@ -938,5 +916,148 @@ private createDetailedTaskToggles(actionItems: any[]): any[] {
         error: error instanceof Error ? error.message : 'Unknown error'
       };
     }
+  }
+
+  // 메인 태스크와 서브태스크를 테이블 행으로 변환
+  private createTaskRowsWithSubtasks(actionItems: any[]): any[] {
+    const rows: any[] = [];
+    
+    for (const item of actionItems) {
+      // 메인 태스크 행
+      rows.push({
+        object: 'block' as const,
+        type: 'table_row' as const,
+        table_row: {
+          cells: [
+            [{ type: 'text' as const, text: { content: item.id.toString() }, annotations: { bold: true } }],
+            [{ type: 'text' as const, text: { content: item.start_date } }],
+            [{ type: 'text' as const, text: { content: item.deadline } }],
+            [{ type: 'text' as const, text: { content: item.title }, annotations: { bold: true } }],
+            [{ type: 'text' as const, text: { content: this.getStatusBadge(item.status) } }],
+            [{ type: 'text' as const, text: { content: item.assignee || '' } }]
+          ]
+        }
+      });
+      
+      // 서브태스크가 있으면 추가
+      if (item.subtasks && Array.isArray(item.subtasks) && item.subtasks.length > 0) {
+        for (const subtask of item.subtasks) {
+          rows.push({
+            object: 'block' as const,
+            type: 'table_row' as const,
+            table_row: {
+              cells: [
+                [{ type: 'text' as const, text: { content: `  └ ${subtask.id || ''}` } }],
+                [{ type: 'text' as const, text: { content: subtask.start_date || item.start_date } }],
+                [{ type: 'text' as const, text: { content: subtask.deadline || item.deadline } }],
+                [{ type: 'text' as const, text: { content: `    ${subtask.title || subtask.description || '서브태스크'}` } }],
+                [{ type: 'text' as const, text: { content: this.getStatusBadge(subtask.status || 'pending') } }],
+                [{ type: 'text' as const, text: { content: subtask.assignee || item.assignee || '' } }]
+              ]
+            }
+          });
+        }
+      }
+    }
+    
+    return rows;
+  }
+
+  // AI 응답에서 목적 추출
+  private extractPurposeFromSummary(parsedData: InputData): string {
+    // AI 응답 형식에서 목적 부분 추출
+    const summary = parsedData.summary;
+    
+    // "목적: " 패턴 찾기
+    const purposeMatch = summary.match(/목적[:：]\s*([^\n]+)/);
+    if (purposeMatch) {
+      return purposeMatch[1].trim();
+    }
+    
+    // summary가 짧으면 전체를 목적으로 사용
+    if (summary.length < 100) {
+      return summary;
+    }
+    
+    // 첫 문장을 목적으로 사용
+    const firstSentence = summary.split(/[.。!?]/).filter(s => s.trim().length > 0)[0];
+    return firstSentence ? firstSentence.trim() : summary.substring(0, 100) + '...';
+  }
+
+  // 핵심 아이디어 추출
+  private extractCoreIdea(parsedData: InputData): string {
+    const summary = parsedData.summary;
+    
+    // "핵심 아이디어" 패턴 찾기
+    const ideaMatch = summary.match(/핵심\s*아이디어[:：]\s*([^\n]+)/);
+    if (ideaMatch) {
+      return ideaMatch[1].trim();
+    }
+    
+    // summary 전체 반환
+    return summary;
+  }
+
+  // 실행 계획 생성 (서브태스크 포함)
+  private createExecutionPlan(actionItems: any[]): any[] {
+    const planItems: any[] = [];
+    let stepNumber = 1;
+    
+    for (const item of actionItems) {
+      // 메인 태스크
+      planItems.push({
+        object: 'block' as const,
+        type: 'bulleted_list_item' as const,
+        bulleted_list_item: {
+          rich_text: [{ 
+            type: 'text' as const, 
+            text: { content: `${stepNumber}단계: ${item.title} (${item.deadline})` },
+            annotations: { bold: true }
+          }]
+        }
+      });
+      
+      // 서브태스크가 있으면 하위 항목으로 추가
+      if (item.subtasks && Array.isArray(item.subtasks) && item.subtasks.length > 0) {
+        for (const subtask of item.subtasks) {
+          planItems.push({
+            object: 'block' as const,
+            type: 'bulleted_list_item' as const,
+            bulleted_list_item: {
+              rich_text: [{ 
+                type: 'text' as const, 
+                text: { content: `  • ${subtask.title || subtask.description || '서브태스크'}` }
+              }]
+            }
+          });
+        }
+      }
+      
+      stepNumber++;
+    }
+    
+    return planItems;
+  }
+
+  // 프로젝트명 추출
+  private extractProjectName(parsedData: InputData): string {
+    const summary = parsedData.summary;
+    
+    // "프로젝트명: " 패턴 찾기
+    const projectMatch = summary.match(/프로젝트명[:：]\s*([^\n]+)/);
+    if (projectMatch) {
+      return projectMatch[1].trim();
+    }
+    
+    // 첫 번째 태스크에서 프로젝트 정보 찾기
+    if (parsedData.action_items && parsedData.action_items.length > 0) {
+      const firstTask = parsedData.action_items[0];
+      if (firstTask.tags && firstTask.tags.includes('project')) {
+        return firstTask.title;
+      }
+    }
+    
+    // 기본값
+    return 'TtalKkac 프로젝트';
   }
 }
