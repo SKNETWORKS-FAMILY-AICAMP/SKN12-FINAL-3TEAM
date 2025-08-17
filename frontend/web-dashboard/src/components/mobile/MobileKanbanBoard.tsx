@@ -2,19 +2,7 @@ import React, { useState } from 'react';
 import { useDrag, useDrop, DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { TouchBackend } from 'react-dnd-touch-backend';
-
-interface Task {
-  id: string;
-  title: string;
-  description?: string;
-  status: string;
-  assignee?: string;
-  priority?: string;
-  deadline?: string;
-  parentTask?: {
-    title: string;
-  };
-}
+import { Task } from '../../services/api';
 
 interface MobileKanbanBoardProps {
   tasks: Task[];
@@ -39,9 +27,9 @@ const TaskCard: React.FC<{ task: Task; onStatusUpdate: (taskId: string, newStatu
       className={`mobile-task-card ${isDragging ? 'dragging' : ''}`}
       style={{ opacity: isDragging ? 0.5 : 1 }}
     >
-      {task.parentTask && (
+      {task.parentId && (
         <div className="task-parent-badge">
-          {task.parentTask.title}
+          서브태스크
         </div>
       )}
       
@@ -53,17 +41,17 @@ const TaskCard: React.FC<{ task: Task; onStatusUpdate: (taskId: string, newStatu
       
       <div className="task-meta">
         {task.assignee && (
-          <span className="task-assignee">👤 {task.assignee}</span>
+          <span className="task-assignee">👤 {typeof task.assignee === 'string' ? task.assignee : task.assignee.name}</span>
         )}
         
         {task.priority && (
-          <span className={`task-priority priority-${task.priority}`}>
-            {task.priority === 'high' ? '🔴' : task.priority === 'medium' ? '🟡' : '🟢'}
+          <span className={`task-priority priority-${task.priority.toLowerCase()}`}>
+            {task.priority === 'HIGH' ? '🔴' : task.priority === 'MEDIUM' ? '🟡' : '🟢'}
           </span>
         )}
         
-        {task.deadline && (
-          <span className="task-deadline">📅 {new Date(task.deadline).toLocaleDateString('ko-KR')}</span>
+        {task.dueDate && (
+          <span className="task-deadline">📅 {new Date(task.dueDate).toLocaleDateString('ko-KR')}</span>
         )}
       </div>
     </div>

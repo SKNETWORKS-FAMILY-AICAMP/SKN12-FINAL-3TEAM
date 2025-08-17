@@ -1,9 +1,5 @@
 import React from 'react';
-
-interface Project {
-  id: string;
-  name: string;
-}
+import { Project } from '../../services/api';
 
 interface MobileProjectSelectorProps {
   projects: Project[];
@@ -31,7 +27,7 @@ const MobileProjectSelector: React.FC<MobileProjectSelectorProps> = ({
           <option value="all">전체 프로젝트</option>
           {projects.map((project) => (
             <option key={project.id} value={project.id}>
-              {project.name}
+              {project.name || project.id}
             </option>
           ))}
         </select>

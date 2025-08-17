@@ -3,19 +3,7 @@ import { useDrag, useDrop, DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { TouchBackend } from 'react-dnd-touch-backend';
 import { Clock, User, AlertCircle, CheckCircle, Circle } from 'lucide-react';
-
-interface Task {
-  id: string;
-  title: string;
-  description?: string;
-  status: string;
-  assignee?: string;
-  priority?: string;
-  deadline?: string;
-  parentTask?: {
-    title: string;
-  };
-}
+import { Task } from '../../services/api';
 
 interface MobileKanbanBoardV2Props {
   tasks: Task[];
@@ -27,8 +15,11 @@ const DndBackend = isTouchDevice ? TouchBackend : HTML5Backend;
 
 const getPriorityColor = (priority?: string) => {
   switch (priority) {
+    case 'HIGH':
     case 'high': return 'priority-high';
+    case 'MEDIUM':
     case 'medium': return 'priority-medium';
+    case 'LOW':
     case 'low': return 'priority-low';
     default: return 'priority-default';
   }
@@ -58,9 +49,9 @@ const TaskCard: React.FC<{ task: Task; onStatusUpdate: (taskId: string, newStatu
       className={`task-card-v2 ${isDragging ? 'dragging' : ''} ${getPriorityColor(task.priority)}`}
       style={{ opacity: isDragging ? 0.5 : 1 }}
     >
-      {task.parentTask && (
+      {task.parentId && (
         <div className="task-parent-v2">
-          {task.parentTask.title}
+          서브태스크
         </div>
       )}
       
@@ -74,14 +65,14 @@ const TaskCard: React.FC<{ task: Task; onStatusUpdate: (taskId: string, newStatu
         {task.assignee && (
           <div className="task-meta-item">
             <User size={14} />
-            <span>{task.assignee}</span>
+            <span>{typeof task.assignee === 'string' ? task.assignee : task.assignee.name}</span>
           </div>
         )}
         
-        {task.deadline && (
+        {task.dueDate && (
           <div className="task-meta-item">
             <Clock size={14} />
-            <span>{new Date(task.deadline).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })}</span>
+            <span>{new Date(task.dueDate).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })}</span>
           </div>
         )}
       </div>
