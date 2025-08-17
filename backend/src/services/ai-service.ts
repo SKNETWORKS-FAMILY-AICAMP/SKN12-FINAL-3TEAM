@@ -676,6 +676,8 @@ class AIService {
           if (aiResponse.stage3_tasks) {
             if (Array.isArray(aiResponse.stage3_tasks)) {
               tasks = aiResponse.stage3_tasks;
+            } else if (aiResponse.stage3_tasks.action_items) {
+              tasks = aiResponse.stage3_tasks.action_items;  // AI 서버가 실제로 보내는 키
             } else if (aiResponse.stage3_tasks.tasks) {
               tasks = aiResponse.stage3_tasks.tasks;
             } else if (aiResponse.stage3_tasks.task_items) {
@@ -731,6 +733,8 @@ class AIService {
           if (aiResponse.stage3_tasks) {
             if (Array.isArray(aiResponse.stage3_tasks)) {
               tasks = aiResponse.stage3_tasks;
+            } else if (aiResponse.stage3_tasks.action_items) {
+              tasks = aiResponse.stage3_tasks.action_items;  // AI 서버가 실제로 보내는 키
             } else if (aiResponse.stage3_tasks.tasks) {
               tasks = aiResponse.stage3_tasks.tasks;
             } else if (aiResponse.stage3_tasks.task_items) {
