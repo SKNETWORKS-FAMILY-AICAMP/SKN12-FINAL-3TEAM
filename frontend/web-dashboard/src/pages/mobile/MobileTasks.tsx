@@ -25,38 +25,43 @@ apiClient.interceptors.request.use((config) => {
 });
 
 const fetchTasks = async () => {
-  const response = await apiClient.get('/api/tasks');
-  return response.data;
+  try {
+    const response = await apiClient.get('/api/tasks');
+    return Array.isArray(response.data) ? response.data : [];
+  } catch (error) {
+    console.error('Failed to fetch tasks:', error);
+    return [];
+  }
 };
 
 const MobileTasks: React.FC = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [filter, setFilter] = useState<'all' | 'pending' | 'in_progress' | 'completed'>('all');
+  const [filter, setFilter] = useState<'all' | 'TODO' | 'IN_PROGRESS' | 'DONE'>('all');
 
   const { data: tasks = [], isLoading } = useQuery({
     queryKey: ['tasks'],
     queryFn: fetchTasks,
   });
 
-  const filteredTasks = (tasks as any[]).filter((task: any) => {
+  const filteredTasks = Array.isArray(tasks) ? tasks.filter((task: any) => {
     if (filter === 'all') return true;
     return task.status === filter;
-  });
+  }) : [];
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'pending': return '#fbbf24';
-      case 'in_progress': return '#3b82f6';
-      case 'completed': return '#10b981';
+      case 'TODO': return '#fbbf24';
+      case 'IN_PROGRESS': return '#3b82f6';
+      case 'DONE': return '#10b981';
       default: return '#6b7280';
     }
   };
 
   const getStatusText = (status: string) => {
     switch (status) {
-      case 'pending': return '대기 중';
-      case 'in_progress': return '진행 중';
-      case 'completed': return '완료';
+      case 'TODO': return '대기 중';
+      case 'IN_PROGRESS': return '진행 중';
+      case 'DONE': return '완료';
       default: return status;
     }
   };
@@ -86,28 +91,28 @@ const MobileTasks: React.FC = () => {
             onClick={() => setFilter('all')}
           >
             전체
-            <span className="filter-count">{(tasks as any[]).length}</span>
+            <span className="filter-count">{Array.isArray(tasks) ? tasks.length : 0}</span>
           </button>
           <button 
-            className={`filter-tab ${filter === 'pending' ? 'active' : ''}`}
-            onClick={() => setFilter('pending')}
+            className={`filter-tab ${filter === 'TODO' ? 'active' : ''}`}
+            onClick={() => setFilter('TODO')}
           >
             대기 중
-            <span className="filter-count">{(tasks as any[]).filter((t: any) => t.status === 'pending').length}</span>
+            <span className="filter-count">{Array.isArray(tasks) ? tasks.filter((t: any) => t.status === 'TODO').length : 0}</span>
           </button>
           <button 
-            className={`filter-tab ${filter === 'in_progress' ? 'active' : ''}`}
-            onClick={() => setFilter('in_progress')}
+            className={`filter-tab ${filter === 'IN_PROGRESS' ? 'active' : ''}`}
+            onClick={() => setFilter('IN_PROGRESS')}
           >
             진행 중
-            <span className="filter-count">{(tasks as any[]).filter((t: any) => t.status === 'in_progress').length}</span>
+            <span className="filter-count">{Array.isArray(tasks) ? tasks.filter((t: any) => t.status === 'IN_PROGRESS').length : 0}</span>
           </button>
           <button 
-            className={`filter-tab ${filter === 'completed' ? 'active' : ''}`}
-            onClick={() => setFilter('completed')}
+            className={`filter-tab ${filter === 'DONE' ? 'active' : ''}`}
+            onClick={() => setFilter('DONE')}
           >
             완료
-            <span className="filter-count">{(tasks as any[]).filter((t: any) => t.status === 'completed').length}</span>
+            <span className="filter-count">{Array.isArray(tasks) ? tasks.filter((t: any) => t.status === 'DONE').length : 0}</span>
           </button>
         </div>
 
@@ -134,7 +139,7 @@ const MobileTasks: React.FC = () => {
                   {task.assignee && (
                     <span className="task-meta-item">
                       <span className="meta-icon">👤</span>
-                      {task.assignee}
+                      {typeof task.assignee === 'string' ? task.assignee : task.assignee.name}
                     </span>
                   )}
                   {task.deadline && (
@@ -146,9 +151,9 @@ const MobileTasks: React.FC = () => {
                   {task.priority && (
                     <span className="task-meta-item">
                       <span className="meta-icon">
-                        {task.priority === 'high' ? '🔴' : task.priority === 'medium' ? '🟡' : '🟢'}
+                        {task.priority === 'HIGH' ? '🔴' : task.priority === 'MEDIUM' ? '🟡' : '🟢'}
                       </span>
-                      {task.priority}
+                      {task.priority === 'HIGH' ? '높음' : task.priority === 'MEDIUM' ? '보통' : '낮음'}
                     </span>
                   )}
                 </div>
