@@ -2297,11 +2297,18 @@ async def final_pipeline(
         
         logger.info("=" * 80)
         
-        # 결과 반환
+        # 결과 반환 - 백엔드가 기대하는 형식으로
         return {
             "success": True,
             "step": "completed",
             "transcription": transcription_info,
+            # 백엔드가 기대하는 최상위 필드들
+            "stage1_notion": analysis_result.stage1_notion,
+            "stage2_prd": analysis_result.stage2_prd,
+            "stage3_tasks": analysis_result.stage3_tasks,
+            "formatted_notion": analysis_result.formatted_notion,
+            "formatted_prd": analysis_result.formatted_prd,
+            # 추가 정보
             "analysis": {
                 "notion_project": analysis_result.stage1_notion,
                 "task_master_prd": analysis_result.stage2_prd,

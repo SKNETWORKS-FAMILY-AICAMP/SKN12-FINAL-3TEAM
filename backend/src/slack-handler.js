@@ -3942,23 +3942,40 @@ async function processTranscriptWithAI(transcript, client, channelId) {
       const tasks = aiData.action_items;
       
       if (jiraStatus.connected && tasks && tasks.length > 0) {
-        console.log('🎫 JIRA 이슈 생성 시도...');
+        console.log('🎫 JIRA 프로젝트 및 이슈 생성 시도...');
         
-        // 새로운 createTasksFromAI 메서드 사용
-        jiraResult = await jiraService.createTasksFromAI(
+        // syncTaskMasterToJira를 사용하여 새 프로젝트 생성
+        jiraResult = await jiraService.syncTaskMasterToJira(
           tenant.id,
           user.id,
           {
-            summary: aiData.summary,
-            action_items: aiData.action_items
+            title: aiData.summary || 'TtalKkak Project',
+            overview: aiData.overview || 'AI generated project',
+            tasks: aiData.action_items.map(item => ({
+              title: item.title,
+              description: item.description || '',
+              priority: item.priority?.toUpperCase() || 'MEDIUM',
+              estimated_hours: item.estimated_hours || 8,
+              complexity: item.complexity || 'medium',
+              start_date: item.start_date,
+              deadline: item.deadline,
+              subtasks: item.subtasks?.map(st => ({
+                title: st.title,
+                description: st.description || '',
+                estimated_hours: st.estimated_hours || 4,
+                startDate: item.start_date,
+                dueDate: item.deadline
+              })) || []
+            }))
           }
         );
         
         if (jiraResult.success) {
-          console.log(`✅ JIRA 이슈 생성 완료: ${jiraResult.tasksCreated}개 Task 생성됨`);
-          console.log('🎫 생성된 이슈들:', jiraResult.issues);
+          console.log(`✅ JIRA 프로젝트 생성 완료: ${jiraResult.projectKey}`);
+          console.log(`✅ Epic ${jiraResult.epicsCreated}개, Task ${jiraResult.tasksCreated}개 생성됨`);
+          console.log('🎫 생성된 이슈들:', jiraResult.results);
         } else {
-          console.error('❌ JIRA 이슈 생성 실패:', jiraResult.error);
+          console.error('❌ JIRA 프로젝트 생성 실패:', jiraResult.error);
         }
       } else {
         console.log('ℹ️ JIRA 연동 조건 미충족:', {
@@ -4024,17 +4041,24 @@ async function processTranscriptWithAI(transcript, client, channelId) {
           
           if (integration?.config?.site_url) {
             // JIRA 연동 성공한 경우
-            if (jiraResult?.success && jiraResult.issues && jiraResult.issues.length > 0) {
-              if (jiraResult.issues.length === 1) {
-                jiraUrl = `${integration.config.site_url}/browse/${jiraResult.issues[0].key}`;
+            if (jiraResult?.success && jiraResult.projectKey) {
+              // 새로 생성된 프로젝트로 이동
+              const projectKey = jiraResult.projectKey;
+              jiraUrl = `${integration.config.site_url}/jira/software/projects/${projectKey}/timeline`;
+              jiraButtonText = '🎫 JIRA 프로젝트 보기';
+            } else if (jiraResult?.success && jiraResult.results && jiraResult.results.length > 0) {
+              // 기존 프로젝트에 생성된 경우
+              const firstSuccessfulResult = jiraResult.results.find(r => r.success);
+              if (firstSuccessfulResult) {
+                jiraUrl = `${integration.config.site_url}/browse/${firstSuccessfulResult.key}`;
                 jiraButtonText = '🎫 JIRA Task 보기';
               } else {
-                const projectKey = jiraResult.projectKey || integration?.config?.defaultProjectKey || 'TK';
-                jiraUrl = `${integration.config.site_url}/jira/software/projects/${projectKey}/list`;
-                jiraButtonText = '🎫 JIRA 프로젝트 보기';
+                const projectKey = integration?.config?.defaultProjectKey || 'TK';
+                jiraUrl = `${integration.config.site_url}/jira/software/projects/${projectKey}/timeline`;
+                jiraButtonText = '🎫 JIRA 타임라인 보기';
               }
             } else {
-              const projectKey = jiraResult?.projectKey || integration?.config?.defaultProjectKey || 'TK';
+              const projectKey = integration?.config?.defaultProjectKey || 'TK';
               jiraUrl = `${integration.config.site_url}/jira/software/projects/${projectKey}/timeline`;
               jiraButtonText = '🎫 JIRA 타임라인 보기';
             }
@@ -4098,6 +4122,97 @@ async function processTranscriptWithAI(transcript, client, channelId) {
       text: '✅ 회의록 분석 완료!',
       blocks: resultBlocks
     });
+    
+    // 개인 DM으로도 결과 전송
+    try {
+      // DM 채널 열기
+      const dmChannel = await client.conversations.open({
+        users: slackUserId
+      });
+      
+      if (dmChannel.ok && dmChannel.channel) {
+        const dmBlocks = [
+          {
+            type: 'header',
+            text: {
+              type: 'plain_text',
+              text: '🎯 TtalKkac AI 분석 완료',
+              emoji: true
+            }
+          },
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: `*프로젝트:* ${projectTitle}\n*생성된 업무:* ${tasksCount}개\n*채널:* <#${channelId}>`
+            }
+          },
+          {
+            type: 'divider'
+          },
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: '*🔗 워크스페이스 링크*'
+            }
+          }
+        ];
+        
+        // Notion 링크 추가
+        if (notionPageUrl) {
+          dmBlocks.push({
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: `📝 *Notion 페이지*\n<${notionPageUrl}|프로젝트 보기>`
+            }
+          });
+        }
+        
+        // JIRA 링크 추가
+        if (jiraResult?.success && jiraResult.projectKey) {
+          const jiraIntegration = await prisma.integration.findFirst({
+            where: {
+              tenantId: user.tenantId,
+              userId: user.id,
+              serviceType: 'JIRA',
+              isActive: true
+            }
+          });
+          
+          if (jiraIntegration?.config?.site_url) {
+            const jiraProjectUrl = `${jiraIntegration.config.site_url}/jira/software/projects/${jiraResult.projectKey}/timeline`;
+            dmBlocks.push({
+              type: 'section',
+              text: {
+                type: 'mrkdwn',
+                text: `🎫 *JIRA 프로젝트*\n<${jiraProjectUrl}|${jiraResult.projectKey} 타임라인 보기>`
+              }
+            });
+          }
+        }
+        
+        // 버튼 추가
+        if (actionElements.length > 0) {
+          dmBlocks.push({
+            type: 'actions',
+            elements: actionElements
+          });
+        }
+        
+        await client.chat.postMessage({
+          channel: dmChannel.channel.id,
+          text: '🎯 TtalKkac AI 분석이 완료되었습니다',
+          blocks: dmBlocks
+        });
+        
+        console.log('✅ 개인 DM 전송 완료');
+      }
+    } catch (dmError) {
+      console.error('❌ 개인 DM 전송 실패:', dmError);
+      // DM 전송 실패해도 계속 진행
+    }
     
     // 생성된 업무 목록 전송 (실제 데이터로)
     if (aiData.action_items && aiData.action_items.length > 0) {
@@ -4899,14 +5014,35 @@ async function processUploadedFile(file, projectName, client, userId) {
         }
       }
       
+      // JIRA 워크스페이스 URL 먼저 설정
+      if (jiraIntegration && jiraIntegration.config) {
+        const jiraConfig = jiraIntegration.config;
+        if (jiraConfig.site_url) {
+          jiraSiteUrl = jiraConfig.site_url;
+        } else if (jiraConfig.cloud_id && jiraConfig.site_name) {
+          jiraSiteUrl = `https://${jiraConfig.site_name}.atlassian.net`;
+        }
+      }
+      
       // JIRA 이슈 생성
       if (jiraIntegration && result.stage2?.task_master_prd?.tasks) {
+        console.log('🎫 JIRA 이슈 생성 시도:', {
+          hasIntegration: !!jiraIntegration,
+          taskCount: result.stage2?.task_master_prd?.tasks?.length || 0,
+          jiraSiteUrl: jiraSiteUrl
+        });
+        
         try {
           const JiraService = require('./services/jira-service').default || require('./services/jira-service').JiraService;
           const jiraService = new JiraService(prisma);
           
           // 첫 번째 태스크를 메인 이슈로 생성 (나머지는 서브태스크로)
           const mainTask = result.stage2.task_master_prd.tasks[0];
+          console.log('📝 메인 태스크:', {
+            title: mainTask?.title || mainTask?.task,
+            hasMainTask: !!mainTask
+          });
+          
           if (mainTask) {
             const jiraIssue = await jiraService.createJiraIssue(
               user.tenantId,
@@ -5178,13 +5314,27 @@ async function processUploadedFile(file, projectName, client, userId) {
         dmBlocks.push({
           type: 'divider'
         });
-        dmBlocks.push({
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: '📌 *생성된 워크스페이스로 이동:*'
-          }
-        });
+        
+        // 생성된 페이지/이슈가 있는 경우
+        if (notionPageUrl || jiraIssueUrl) {
+          dmBlocks.push({
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: '📌 *생성된 페이지/이슈로 이동:*'
+            }
+          });
+        } else {
+          // 워크스페이스 링크만 있는 경우
+          dmBlocks.push({
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: '📌 *워크스페이스로 이동:*'
+            }
+          });
+        }
+        
         dmBlocks.push({
           type: 'actions',
           elements: dmButtons
