@@ -99,12 +99,12 @@ const KanbanColumn: React.FC<{
 };
 
 const MobileKanbanBoard: React.FC<MobileKanbanBoardProps> = ({ tasks, onStatusUpdate }) => {
-  const [activeTab, setActiveTab] = useState<'pending' | 'in_progress' | 'completed'>('pending');
+  const [activeTab, setActiveTab] = useState<'TODO' | 'IN_PROGRESS' | 'DONE'>('TODO');
 
   const columns = {
-    pending: { title: '대기 중', tasks: tasks.filter(t => t.status === 'pending') },
-    in_progress: { title: '진행 중', tasks: tasks.filter(t => t.status === 'in_progress') },
-    completed: { title: '완료', tasks: tasks.filter(t => t.status === 'completed') },
+    TODO: { title: '대기 중', tasks: tasks.filter(t => t.status === 'TODO') },
+    IN_PROGRESS: { title: '진행 중', tasks: tasks.filter(t => t.status === 'IN_PROGRESS') },
+    DONE: { title: '완료', tasks: tasks.filter(t => t.status === 'DONE') },
   };
 
   return (
@@ -113,25 +113,25 @@ const MobileKanbanBoard: React.FC<MobileKanbanBoardProps> = ({ tasks, onStatusUp
         {/* 탭 네비게이션 */}
         <div className="kanban-tabs">
           <button
-            className={`tab-button ${activeTab === 'pending' ? 'active' : ''}`}
-            onClick={() => setActiveTab('pending')}
+            className={`tab-button ${activeTab === 'TODO' ? 'active' : ''}`}
+            onClick={() => setActiveTab('TODO')}
           >
             대기 중
-            <span className="tab-count">{columns.pending.tasks.length}</span>
+            <span className="tab-count">{columns.TODO.tasks.length}</span>
           </button>
           <button
-            className={`tab-button ${activeTab === 'in_progress' ? 'active' : ''}`}
-            onClick={() => setActiveTab('in_progress')}
+            className={`tab-button ${activeTab === 'IN_PROGRESS' ? 'active' : ''}`}
+            onClick={() => setActiveTab('IN_PROGRESS')}
           >
             진행 중
-            <span className="tab-count">{columns.in_progress.tasks.length}</span>
+            <span className="tab-count">{columns.IN_PROGRESS.tasks.length}</span>
           </button>
           <button
-            className={`tab-button ${activeTab === 'completed' ? 'active' : ''}`}
-            onClick={() => setActiveTab('completed')}
+            className={`tab-button ${activeTab === 'DONE' ? 'active' : ''}`}
+            onClick={() => setActiveTab('DONE')}
           >
             완료
-            <span className="tab-count">{columns.completed.tasks.length}</span>
+            <span className="tab-count">{columns.DONE.tasks.length}</span>
           </button>
         </div>
 

@@ -27,7 +27,7 @@ const MobileProjectSelector: React.FC<MobileProjectSelectorProps> = ({
           <option value="all">전체 프로젝트</option>
           {projects.map((project) => (
             <option key={project.id} value={project.id}>
-              {project.name || project.id}
+              {project.name || project.title || project.id}
             </option>
           ))}
         </select>

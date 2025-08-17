@@ -110,6 +110,7 @@ export interface User {
 export interface Project {
   id: string;
   title: string;
+  name?: string;  // 모바일 컴포넌트 호환성
   overview: string;
   content: any;
   notionPageUrl?: string;

@@ -125,22 +125,22 @@ const KanbanColumn: React.FC<{
 };
 
 const MobileKanbanBoardV2: React.FC<MobileKanbanBoardV2Props> = ({ tasks, onStatusUpdate }) => {
-  const [activeTab, setActiveTab] = useState<'pending' | 'in_progress' | 'completed'>('pending');
+  const [activeTab, setActiveTab] = useState<'TODO' | 'IN_PROGRESS' | 'DONE'>('TODO');
 
   const columns = {
-    pending: { 
+    TODO: { 
       title: 'To Do', 
-      tasks: tasks.filter(t => t.status === 'pending'),
+      tasks: tasks.filter(t => t.status === 'TODO'),
       icon: <Circle size={16} />
     },
-    in_progress: { 
+    IN_PROGRESS: { 
       title: 'In Progress', 
-      tasks: tasks.filter(t => t.status === 'in_progress'),
+      tasks: tasks.filter(t => t.status === 'IN_PROGRESS'),
       icon: <AlertCircle size={16} />
     },
-    completed: { 
+    DONE: { 
       title: 'Done', 
-      tasks: tasks.filter(t => t.status === 'completed'),
+      tasks: tasks.filter(t => t.status === 'DONE'),
       icon: <CheckCircle size={16} />
     },
   };
