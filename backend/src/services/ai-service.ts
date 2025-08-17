@@ -715,11 +715,32 @@ class AIService {
           });
 
           // AI 서버 응답을 백엔드 형식으로 변환
-          const aiResponse = response.data;
+          let aiResponse = response.data;
           
           // 더 자세한 디버깅 로그 추가
           console.log('🔍 AI 서버 전체 응답 키:', Object.keys(aiResponse));
           console.log('🔍 AI 서버 success 값:', aiResponse.success);
+          
+          // AI 서버가 analysis 객체 안에 데이터를 보내는 경우 처리
+          if (!aiResponse.stage3_tasks && aiResponse.analysis) {
+            console.log('🔄 analysis 객체에서 데이터 추출 중...');
+            
+            // analysis 객체의 데이터를 최상위로 이동
+            if (aiResponse.analysis.notion_project) {
+              aiResponse.stage1_notion = aiResponse.analysis.notion_project;
+              console.log('✅ stage1_notion 복원됨');
+            }
+            
+            if (aiResponse.analysis.task_master_prd) {
+              aiResponse.stage2_prd = aiResponse.analysis.task_master_prd;
+              console.log('✅ stage2_prd 복원됨');
+            }
+            
+            if (aiResponse.analysis.generated_tasks) {
+              aiResponse.stage3_tasks = aiResponse.analysis.generated_tasks;
+              console.log('✅ stage3_tasks 복원됨:', typeof aiResponse.analysis.generated_tasks);
+            }
+          }
           
           // stage3_tasks 상세 확인
           if (aiResponse.stage3_tasks) {
@@ -733,11 +754,7 @@ class AIService {
               }
             }
           } else {
-            console.log('❌ stage3_tasks가 없음!');
-            // analysis 객체 확인
-            if (aiResponse.analysis?.generated_tasks) {
-              console.log('🔄 analysis.generated_tasks 확인:', typeof aiResponse.analysis.generated_tasks);
-            }
+            console.log('❌ 여전히 stage3_tasks가 없음!');
           }
           
           // 디버깅: AI 응답 구조 확인
