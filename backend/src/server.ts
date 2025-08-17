@@ -1134,8 +1134,7 @@ app.patch('/api/tasks/:id/status',
             await prisma.taskMetadata.update({
               where: { taskId: id! },
               data: { 
-                jiraStatus: jiraStatus,
-                lastSyncedAt: new Date()
+                jiraStatus: jiraStatus
               }
             });
           } else {
