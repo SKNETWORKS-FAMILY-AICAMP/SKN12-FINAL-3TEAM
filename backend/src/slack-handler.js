@@ -3778,8 +3778,8 @@ async function processTranscriptWithAI(transcript, client, channelId) {
       for (const [index, taskItem] of aiData.action_items.entries()) {
         const taskNumber = `TK-${Date.now()}-${index + 1}`;
         
-        // 문자열 길이 제한 적용
-        const taskTitle = (taskItem.title || 'Untitled Task').substring(0, 255);
+        // 문자열 길이 제한 적용 (DB 스키마에 맞춤)
+        const taskTitle = (taskItem.title || 'Untitled Task').substring(0, 500);  // DB는 500자 제한
         const taskDescription = (taskItem.description || '').substring(0, 2000);
         
         const createdTask = await prisma.task.create({
@@ -3797,7 +3797,7 @@ async function processTranscriptWithAI(transcript, client, channelId) {
             dueDate: taskItem.deadline && taskItem.deadline !== 'TBD' 
               ? new Date(taskItem.deadline) 
               : null,
-            complexity: taskItem.complexity ? String(taskItem.complexity) : '5',  // 복잡도 추가
+            complexity: taskItem.complexity ? String(taskItem.complexity).substring(0, 10) : '5',  // 복잡도 추가
             metadata: {
               create: {
                 estimatedHours: taskItem.estimated_hours || 8,  // 실제 예상시간 사용
@@ -5160,8 +5160,8 @@ async function processUploadedFile(file, projectName, client, userId) {
           for (const [index, taskItem] of tasks.entries()) {
             const taskNumber = `TK-${Date.now()}-${index + 1}`;
             
-            // 문자열 길이 제한 적용
-            const taskTitle = (taskItem.title || taskItem.task || 'Untitled Task').substring(0, 255);
+            // 문자열 길이 제한 적용 (DB 스키마에 맞춤)
+            const taskTitle = (taskItem.title || taskItem.task || 'Untitled Task').substring(0, 500);  // DB는 500자 제한
             const taskDescription = (taskItem.description || '').substring(0, 2000);
             
             const createdTask = await prisma.task.create({
@@ -5176,7 +5176,7 @@ async function processUploadedFile(file, projectName, client, userId) {
                          taskItem.priority?.toUpperCase() === 'LOW' ? 'LOW' : 'MEDIUM',
                 startDate: taskItem.startDate || taskItem.start_date ? new Date(taskItem.startDate || taskItem.start_date) : null,
                 dueDate: taskItem.dueDate || taskItem.due_date ? new Date(taskItem.dueDate || taskItem.due_date) : null,
-                complexity: taskItem.complexity ? String(taskItem.complexity) : '5',
+                complexity: taskItem.complexity ? String(taskItem.complexity).substring(0, 10) : '5',
                 assigneeId: null // 나중에 할당
               }
             });
@@ -5214,8 +5214,8 @@ async function processUploadedFile(file, projectName, client, userId) {
               for (const [subIndex, subtask] of subtasksToSave.entries()) {
                 const subtaskNumber = `${taskNumber}-SUB${subIndex + 1}`;
                 
-                // 문자열 길이 제한 (DB 컬럼 제한 고려)
-                const subtaskTitle = (subtask.title || 'Untitled Subtask').substring(0, 255);
+                // 문자열 길이 제한 (DB 스키마에 맞춤)
+                const subtaskTitle = (subtask.title || 'Untitled Subtask').substring(0, 500);  // DB는 500자 제한
                 const subtaskDescription = (subtask.description || '').substring(0, 2000);
                 
                 const createdSubtask = await prisma.task.create({

@@ -80,7 +80,7 @@ model Project {
 model Task {
   id             String              @id @default(uuid())
   tenantId       String              @map("tenant_id")
-  title          String              @db.VarChar(200)
+  title          String              @db.VarChar(500)
   description    String?
   status         TaskStatus          @default(TODO)
   assigneeId     String?             @map("assignee_id")
