@@ -83,7 +83,12 @@ const TaskCard: React.FC<{
   return (
     <motion.div
       ref={setNodeRef}
-      style={style}
+      style={{
+        ...style,
+        borderLeftWidth: '4px',
+        borderLeftColor: parentColor,
+        borderColor: parentColor + '30'
+      }}
       {...attributes}
       {...listeners}
       data-task-id={task.id}
@@ -110,11 +115,6 @@ const TaskCard: React.FC<{
       } ${
         shouldPushDown ? 'opacity-50 z-10' : ''
       }`}
-      style={{
-        borderLeftWidth: '4px',
-        borderLeftColor: parentColor,
-        borderColor: parentColor + '30'
-      }}
     >
       {/* 부모 태스크 정보 */}
       {parentTask && (

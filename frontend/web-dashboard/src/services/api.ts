@@ -127,6 +127,7 @@ export interface Task {
   dueDate?: string;
   priority: 'HIGH' | 'MEDIUM' | 'LOW';
   complexity?: string;
+  parentId?: string;
   metadata?: TaskMetadata;
   children?: Task[];
 }

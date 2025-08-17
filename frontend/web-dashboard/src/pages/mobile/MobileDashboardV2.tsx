@@ -106,7 +106,7 @@ const MobileDashboardV2: React.FC = () => {
               className="project-select-v2"
             >
               <option value="all">All Projects</option>
-              {projects.map((project: any) => (
+              {(projects as any[]).map((project: any) => (
                 <option key={project.id} value={project.id}>
                   {project.name}
                 </option>
@@ -119,15 +119,15 @@ const MobileDashboardV2: React.FC = () => {
         {/* Stats Cards */}
         <div className="stats-grid-v2">
           <div className="stat-card-v2">
-            <div className="stat-value">{tasks.filter((t: any) => t.status === 'pending').length}</div>
+            <div className="stat-value">{(tasks as any[]).filter((t: any) => t.status === 'pending').length}</div>
             <div className="stat-label">Pending</div>
           </div>
           <div className="stat-card-v2">
-            <div className="stat-value">{tasks.filter((t: any) => t.status === 'in_progress').length}</div>
+            <div className="stat-value">{(tasks as any[]).filter((t: any) => t.status === 'in_progress').length}</div>
             <div className="stat-label">In Progress</div>
           </div>
           <div className="stat-card-v2">
-            <div className="stat-value">{tasks.filter((t: any) => t.status === 'completed').length}</div>
+            <div className="stat-value">{(tasks as any[]).filter((t: any) => t.status === 'completed').length}</div>
             <div className="stat-label">Completed</div>
           </div>
         </div>

@@ -38,7 +38,7 @@ const MobileTasks: React.FC = () => {
     queryFn: fetchTasks,
   });
 
-  const filteredTasks = tasks.filter((task: any) => {
+  const filteredTasks = (tasks as any[]).filter((task: any) => {
     if (filter === 'all') return true;
     return task.status === filter;
   });
@@ -86,28 +86,28 @@ const MobileTasks: React.FC = () => {
             onClick={() => setFilter('all')}
           >
             전체
-            <span className="filter-count">{tasks.length}</span>
+            <span className="filter-count">{(tasks as any[]).length}</span>
           </button>
           <button 
             className={`filter-tab ${filter === 'pending' ? 'active' : ''}`}
             onClick={() => setFilter('pending')}
           >
             대기 중
-            <span className="filter-count">{tasks.filter((t: any) => t.status === 'pending').length}</span>
+            <span className="filter-count">{(tasks as any[]).filter((t: any) => t.status === 'pending').length}</span>
           </button>
           <button 
             className={`filter-tab ${filter === 'in_progress' ? 'active' : ''}`}
             onClick={() => setFilter('in_progress')}
           >
             진행 중
-            <span className="filter-count">{tasks.filter((t: any) => t.status === 'in_progress').length}</span>
+            <span className="filter-count">{(tasks as any[]).filter((t: any) => t.status === 'in_progress').length}</span>
           </button>
           <button 
             className={`filter-tab ${filter === 'completed' ? 'active' : ''}`}
             onClick={() => setFilter('completed')}
           >
             완료
-            <span className="filter-count">{tasks.filter((t: any) => t.status === 'completed').length}</span>
+            <span className="filter-count">{(tasks as any[]).filter((t: any) => t.status === 'completed').length}</span>
           </button>
         </div>
 
