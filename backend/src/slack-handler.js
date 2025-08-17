@@ -3778,13 +3778,17 @@ async function processTranscriptWithAI(transcript, client, channelId) {
       for (const [index, taskItem] of aiData.action_items.entries()) {
         const taskNumber = `TK-${Date.now()}-${index + 1}`;
         
+        // 문자열 길이 제한 적용
+        const taskTitle = (taskItem.title || 'Untitled Task').substring(0, 255);
+        const taskDescription = (taskItem.description || '').substring(0, 2000);
+        
         const createdTask = await prisma.task.create({
           data: {
             tenantId: tenant.id,
             projectId: createdProject.id,
             taskNumber,
-            title: taskItem.title || 'Untitled Task',  // task -> title로 수정
-            description: taskItem.description || '',
+            title: taskTitle,
+            description: taskDescription,
             status: 'TODO',
             priority: taskItem.priority === 'high' ? 'HIGH' : 
                      taskItem.priority === 'low' ? 'LOW' : 'MEDIUM',
@@ -5156,13 +5160,17 @@ async function processUploadedFile(file, projectName, client, userId) {
           for (const [index, taskItem] of tasks.entries()) {
             const taskNumber = `TK-${Date.now()}-${index + 1}`;
             
+            // 문자열 길이 제한 적용
+            const taskTitle = (taskItem.title || taskItem.task || 'Untitled Task').substring(0, 255);
+            const taskDescription = (taskItem.description || '').substring(0, 2000);
+            
             const createdTask = await prisma.task.create({
               data: {
                 tenantId: user.tenantId,
                 projectId: createdProject.id,
                 taskNumber,
-                title: taskItem.title || taskItem.task || 'Untitled Task',
-                description: taskItem.description || '',
+                title: taskTitle,
+                description: taskDescription,
                 status: 'TODO',
                 priority: taskItem.priority?.toUpperCase() === 'HIGH' ? 'HIGH' : 
                          taskItem.priority?.toUpperCase() === 'LOW' ? 'LOW' : 'MEDIUM',
@@ -5206,14 +5214,18 @@ async function processUploadedFile(file, projectName, client, userId) {
               for (const [subIndex, subtask] of subtasksToSave.entries()) {
                 const subtaskNumber = `${taskNumber}-SUB${subIndex + 1}`;
                 
+                // 문자열 길이 제한 (DB 컬럼 제한 고려)
+                const subtaskTitle = (subtask.title || 'Untitled Subtask').substring(0, 255);
+                const subtaskDescription = (subtask.description || '').substring(0, 2000);
+                
                 const createdSubtask = await prisma.task.create({
                   data: {
                     tenantId: user.tenantId,
                     projectId: createdProject.id,
                     parentId: createdTask.id, // 부모 태스크 ID 연결
                     taskNumber: subtaskNumber,
-                    title: subtask.title || 'Untitled Subtask',
-                    description: subtask.description || '',
+                    title: subtaskTitle,
+                    description: subtaskDescription,
                     status: 'TODO',
                     priority: subtask.priority?.toUpperCase() === 'HIGH' ? 'HIGH' : 
                              subtask.priority?.toUpperCase() === 'LOW' ? 'LOW' : 'MEDIUM',
@@ -5221,7 +5233,7 @@ async function processUploadedFile(file, projectName, client, userId) {
                               new Date(subtask.startDate || subtask.start_date || taskItem.startDate || taskItem.start_date) : null,
                     dueDate: subtask.dueDate || subtask.due_date || taskItem.dueDate || taskItem.due_date ? 
                             new Date(subtask.dueDate || subtask.due_date || taskItem.dueDate || taskItem.due_date) : null,
-                    complexity: subtask.complexity ? String(subtask.complexity) : '3',
+                    complexity: subtask.complexity ? String(subtask.complexity).substring(0, 10) : '3',
                     assigneeId: null
                   }
                 });

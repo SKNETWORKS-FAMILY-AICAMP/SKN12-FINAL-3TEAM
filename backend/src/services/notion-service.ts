@@ -91,40 +91,54 @@ async createMeetingPage(inputData: InputData | string, projectName?: string): Pr
     console.log('📝 Notion 페이지 생성 시작');
     console.log('📌 프로젝트 이름:', projectName || '없음');
     
-    // 프로젝트 이름으로 개인 페이지 생성
+    // 프로젝트 이름으로 독립 페이지 생성
     const pageTitle = projectName || `딸깍 - ${parsedData.summary}`;
     
     console.log('📝 페이지 제목:', pageTitle);
     
-    // Notion API는 workspace parent를 직접 지원하지 않으므로
-    // 워크스페이스의 기존 페이지를 찾지 말고 새로 생성
-    // 대부분의 경우 통합 시 선택한 페이지가 있을 것임
-    
-    // 먼저 사용 가능한 데이터베이스나 페이지 검색
+    // 워크스페이스의 최상위 레벨 페이지 찾기
+    // 부모가 workspace인 페이지들을 찾아서 그와 같은 레벨에 생성
     const search = await this.notion.search({
       query: '',
       filter: { value: 'page', property: 'object' },
-      page_size: 1
+      page_size: 10 // 여러 페이지 검색
     });
     
     if (search.results.length === 0) {
       throw new Error('노션 워크스페이스에 접근 가능한 페이지가 없습니다. 노션에서 앱에 페이지 접근 권한을 부여해주세요.');
     }
     
-    // 검색된 첫 번째 페이지의 부모와 동일한 레벨에 생성 (형제 페이지로)
-    const firstPage = search.results[0] as any;
+    // workspace 레벨 페이지 찾기 (parent가 workspace_true인 페이지)
     let parent: any;
+    let workspaceLevelPage = null;
     
-    // 첫 번째 페이지의 부모 정보 사용
-    if (firstPage.parent?.type === 'page_id') {
-      // 부모 페이지가 있으면 그 부모 페이지 아래에 생성
-      parent = { page_id: firstPage.parent.page_id };
-    } else if (firstPage.parent?.type === 'database_id') {
-      // 데이터베이스가 부모인 경우는 건너뛰고 워크스페이스 시도
-      parent = { page_id: firstPage.id }; // 해당 페이지를 부모로 사용
+    for (const page of search.results) {
+      const pageData = page as any;
+      if (pageData.parent?.type === 'workspace' && pageData.parent?.workspace === true) {
+        workspaceLevelPage = pageData;
+        break;
+      }
+    }
+    
+    if (workspaceLevelPage) {
+      // workspace 레벨 페이지를 찾았다면 같은 레벨에 생성
+      console.log('✅ 워크스페이스 레벨 페이지 발견, 같은 레벨에 생성');
+      parent = { type: 'workspace', workspace: true };
     } else {
-      // 그 외의 경우 해당 페이지를 부모로 사용
-      parent = { page_id: firstPage.id };
+      // workspace 레벨을 못 찾았다면 가장 상위 페이지를 찾아서 그 레벨에 생성
+      const firstPage = search.results[0] as any;
+      
+      // 첫 번째 페이지의 최상위 부모 찾기
+      if (firstPage.parent?.type === 'page_id') {
+        // 부모의 부모를 찾을 수 없으므로 첫 번째 페이지와 같은 레벨에 생성
+        parent = firstPage.parent;
+      } else if (firstPage.parent?.type === 'database_id') {
+        // 데이터베이스 하위는 피하고 페이지 자체를 부모로
+        parent = { page_id: firstPage.id };
+      } else {
+        // workspace이거나 다른 경우
+        parent = firstPage.parent || { page_id: firstPage.id };
+      }
     }
     
     console.log('📌 페이지 생성 위치:', parent);
