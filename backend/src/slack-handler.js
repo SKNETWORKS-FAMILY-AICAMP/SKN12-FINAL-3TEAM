@@ -5237,8 +5237,51 @@ async function processUploadedFile(file, projectName, client, userId) {
         });
       }
       
-      // 개인 DM에도 Notion/JIRA 링크 추가
-      const dmBlocks = [...resultBlocks];
+      // 개인 DM 메시지용 블록 새로 구성 (중복 방지)
+      const dmBlocks = [
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `:white_check_mark: *${projectName || 'AI 분석'}*\n:brain: AI가 음성을 분석하고 있습니다...`
+          }
+        }
+      ];
+      
+      // 생성 결과 추가
+      if (result.success) {
+        dmBlocks.push({
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `:dart: *${aiData.summary || 'AI 분석 완료'}*`
+          }
+        });
+        
+        dmBlocks.push({
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `:white_check_mark: 업무가 성공적으로 생성되었습니다.`
+          }
+        });
+        
+        // 생성 통계 추가
+        const statsText = [
+          `📊 *생성된 항목:*`,
+          notionPageUrl ? `• 📋 Notion 프로젝트 문서` : null,
+          jiraIssueUrl ? `• 🎫 JIRA 이슈 및 서브태스크` : null,
+          `• 📌 ${result.stage2?.task_master_prd?.tasks?.length || 0}개의 업무`
+        ].filter(Boolean).join('\n');
+        
+        dmBlocks.push({
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: statsText
+          }
+        });
+      }
       
       // 연동되지 않은 서비스에 대한 안내 추가
       if (!notionIntegration) {
@@ -5316,31 +5359,11 @@ async function processUploadedFile(file, projectName, client, userId) {
         });
       }
       
-      // 버튼이 있으면 actions 블록 추가
+      // 버튼이 있으면 actions 블록 추가 (한 번만)
       if (dmButtons.length > 0) {
         dmBlocks.push({
           type: 'divider'
         });
-        
-        // 생성된 페이지/이슈가 있는 경우
-        if (notionPageUrl || jiraIssueUrl) {
-          dmBlocks.push({
-            type: 'section',
-            text: {
-              type: 'mrkdwn',
-              text: '📌 *생성된 페이지/이슈로 이동:*'
-            }
-          });
-        } else {
-          // 워크스페이스 링크만 있는 경우
-          dmBlocks.push({
-            type: 'section',
-            text: {
-              type: 'mrkdwn',
-              text: '📌 *워크스페이스로 이동:*'
-            }
-          });
-        }
         
         dmBlocks.push({
           type: 'actions',

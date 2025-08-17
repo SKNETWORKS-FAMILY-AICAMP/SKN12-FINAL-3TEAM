@@ -457,12 +457,12 @@ class JiraService {
       };
     }
     
-    // Epic Link 필드 추가 시도 (선택사항)
-    if ((request as any).epicLink && request.issueType !== 'Epic') {
-      // Epic Link는 선택사항 - parent 관계로도 충분
-      console.log('🔗 Epic Link 설정 시도 (선택사항)');
-      // Epic Link 필드는 JIRA 인스턴스마다 다르므로 설정하지 않음
-      // Sub-task의 parent 관계로 충분히 연결됨
+    // Epic Link 필드 추가 (Task를 Epic에 연결하여 타임라인에 표시)
+    if ((request as any).epicLink && request.issueType === 'Task') {
+      // Epic Link 필드 - customfield_10014가 가장 일반적
+      console.log('🔗 Epic Link 설정 중...');
+      issueData.fields.customfield_10014 = (request as any).epicLink;
+      console.log(`✅ Epic Link 설정: customfield_10014 = ${(request as any).epicLink}`);
     }
 
     console.log('🔗 이슈 생성 정보:', {
@@ -640,26 +640,25 @@ class JiraService {
             success: true
           });
           
-          // 2. TaskMaster SUBTASK들을 실제 JIRA Sub-task로 생성
+          // 2. TaskMaster SUBTASK들을 JIRA Task로 생성 (타임라인 표시용)
           if (task.subtasks && task.subtasks.length > 0) {
             for (const subtask of task.subtasks) {
               try {
-                // 실제 Sub-task로 생성 (부모 Epic에 연결)
+                // Task 타입으로 생성하여 타임라인에 표시 (Epic에 연결)
                 const jiraTaskIssue = await this.createJiraIssue(tenantId, userId, {
-                  summary: subtask.title,
+                  summary: `[${task.title}] ${subtask.title}`, // Epic 제목 포함
                   description: subtask.description,
-                  issueType: 'Sub-task', // Sub-task 타입 사용
+                  issueType: 'Task', // Task 타입으로 변경 (타임라인 표시용)
                   priority: 'MEDIUM',
-                  parentKey: epicIssue.key, // 부모 Epic에 연결
-                  epicLink: epicIssue.key, // Epic Link 추가 (타임라인 연결)
+                  epicLink: epicIssue.key, // Epic Link로 연결 (타임라인에서 Epic 아래 표시)
                   startDate: subtask.startDate || task.start_date,
                   dueDate: subtask.dueDate || task.deadline,
                   projectKey: targetProject.key
                 });
                 
-                console.log(`✅ Sub-task 생성 (TaskMaster Subtask): ${jiraTaskIssue.key} - ${subtask.title}`);
+                console.log(`✅ Task 생성 (TaskMaster Subtask): ${jiraTaskIssue.key} - ${subtask.title}`);
                 results.push({
-                  type: 'Sub-task',
+                  type: 'Task',
                   key: jiraTaskIssue.key,
                   title: subtask.title,
                   parentKey: epicIssue.key,
@@ -667,9 +666,9 @@ class JiraService {
                   success: true
                 });
               } catch (subtaskError) {
-                console.error(`❌ Sub-task 생성 실패 (TaskMaster Subtask: ${subtask.title}):`, subtaskError);
+                console.error(`❌ Task 생성 실패 (TaskMaster Subtask: ${subtask.title}):`, subtaskError);
                 results.push({
-                  type: 'Sub-task',
+                  type: 'Task',
                   title: subtask.title,
                   parentKey: epicIssue.key,
                   source: 'TaskMaster Subtask',
@@ -696,9 +695,8 @@ class JiraService {
       const totalCount = results.length;
       const epicsCreated = results.filter(r => r.type === 'Epic' && r.success).length;
       const tasksCreated = results.filter(r => r.type === 'Task' && r.success).length;
-      const subtasksCreated = results.filter(r => r.type === 'Sub-task' && r.success).length;
       
-      console.log(`✅ JIRA 매핑 완료: Epic ${epicsCreated}개, Task ${tasksCreated}개, Sub-task ${subtasksCreated}개 (총 ${successCount}/${totalCount})`);
+      console.log(`✅ JIRA 매핑 완료: Epic ${epicsCreated}개, Task ${tasksCreated}개 (총 ${successCount}/${totalCount})`);
       
       return {
         success: true,
