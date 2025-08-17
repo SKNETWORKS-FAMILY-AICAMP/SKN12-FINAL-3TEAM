@@ -1635,7 +1635,8 @@ async def two_stage_analysis(request: TwoStageAnalysisRequest):
                     stage3_result = {
                         "success": True,
                         "summary": f"Generated {len(task_items_with_subtasks)} tasks with {sum(len(task.subtasks) for task in task_items_with_subtasks)} subtasks",
-                        "tasks": [task.dict() for task in task_items_with_subtasks],
+                        "action_items": [task.dict() for task in task_items_with_subtasks],  # tasks → action_items로 변경
+                        "tasks": [task.dict() for task in task_items_with_subtasks],  # 호환성을 위해 tasks도 유지
                         "complexity_analysis": complexity_analysis,
                         "total_tasks": len(task_items_with_subtasks),
                         "total_subtasks": sum(len(task.subtasks) for task in task_items_with_subtasks),
