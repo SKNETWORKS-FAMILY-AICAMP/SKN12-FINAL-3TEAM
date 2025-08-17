@@ -30,6 +30,7 @@ interface JiraCreateIssueRequest {
   startDate?: string | undefined; // YYYY-MM-DD 형식
   dueDate?: string | undefined; // YYYY-MM-DD 형식
   epicName?: string | undefined; // Epic의 경우 Epic Name
+  epicLink?: string | undefined; // Epic과 연결할 때 사용 (타임라인 표시용)
 }
 
 interface JiraCreateIssueResponse {
