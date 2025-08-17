@@ -91,11 +91,43 @@ async createMeetingPage(inputData: InputData | string, projectName?: string): Pr
     console.log('📝 Notion 페이지 생성 시작');
     console.log('📌 프로젝트 이름:', projectName || '없음');
     
-    // 프로젝트 이름으로 개인 페이지 생성 (워크스페이스 루트에)
+    // 프로젝트 이름으로 개인 페이지 생성
     const pageTitle = projectName || `딸깍 - ${parsedData.summary}`;
     
-    // 워크스페이스 루트에 새로운 독립 페이지 생성
-    const parent = { type: 'workspace' as const, workspace: true };
+    console.log('📝 페이지 제목:', pageTitle);
+    
+    // Notion API는 workspace parent를 직접 지원하지 않으므로
+    // 워크스페이스의 기존 페이지를 찾지 말고 새로 생성
+    // 대부분의 경우 통합 시 선택한 페이지가 있을 것임
+    
+    // 먼저 사용 가능한 데이터베이스나 페이지 검색
+    const search = await this.notion.search({
+      query: '',
+      filter: { value: 'page', property: 'object' },
+      page_size: 1
+    });
+    
+    if (search.results.length === 0) {
+      throw new Error('노션 워크스페이스에 접근 가능한 페이지가 없습니다. 노션에서 앱에 페이지 접근 권한을 부여해주세요.');
+    }
+    
+    // 검색된 첫 번째 페이지의 부모와 동일한 레벨에 생성 (형제 페이지로)
+    const firstPage = search.results[0] as any;
+    let parent: any;
+    
+    // 첫 번째 페이지의 부모 정보 사용
+    if (firstPage.parent?.type === 'page_id') {
+      // 부모 페이지가 있으면 그 부모 페이지 아래에 생성
+      parent = { page_id: firstPage.parent.page_id };
+    } else if (firstPage.parent?.type === 'database_id') {
+      // 데이터베이스가 부모인 경우는 건너뛰고 워크스페이스 시도
+      parent = { page_id: firstPage.id }; // 해당 페이지를 부모로 사용
+    } else {
+      // 그 외의 경우 해당 페이지를 부모로 사용
+      parent = { page_id: firstPage.id };
+    }
+    
+    console.log('📌 페이지 생성 위치:', parent);
 
     // 프로젝트 이름으로 메인 페이지 생성
     const mainPageResponse = await this.notion.pages.create({

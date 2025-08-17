@@ -4969,11 +4969,13 @@ async function processUploadedFile(file, projectName, client, userId) {
       
       // Notion 페이지 생성
       if (notionIntegration && result.stage2?.task_master_prd) {
+        console.log('📌 Notion 연동 확인됨. 페이지 생성 시작...');
         try {
           const NotionService = require('./services/notion-service').NotionService;
           const notionService = await NotionService.createForUser(user.tenantId, user.id);
           
           if (notionService) {
+            console.log('✅ NotionService 인스턴스 생성 성공');
             // AI가 생성한 데이터를 Notion 페이지로 변환
             const notionData = {
               summary: result.stage1?.notion_project?.title || projectName,
@@ -5006,9 +5008,16 @@ async function processUploadedFile(file, projectName, client, userId) {
             );
             notionPageUrl = notionPage.url;
             console.log('✅ Notion 페이지 생성 성공:', notionPageUrl);
+          } else {
+            console.log('⚠️ NotionService 인스턴스를 생성할 수 없습니다.');
           }
         } catch (error) {
-          console.error('❌ Notion 페이지 생성 실패:', error);
+          console.error('❌ Notion 페이지 생성 실패 상세:', {
+            message: error.message,
+            stack: error.stack,
+            notionIntegration: !!notionIntegration,
+            hasTaskMaster: !!result.stage2?.task_master_prd
+          });
         }
         
         // Notion 워크스페이스 URL 구성
@@ -5032,6 +5041,9 @@ async function processUploadedFile(file, projectName, client, userId) {
         }
       }
       
+      // JIRA 결과 변수를 블록 밖에서 선언
+      let jiraResult = null;
+      
       // JIRA 프로젝트 생성 및 이슈 생성
       if (jiraIntegration && result.stage2?.task_master_prd?.tasks) {
         console.log('🎫 JIRA 프로젝트 및 이슈 생성 시도:', {
@@ -5045,7 +5057,7 @@ async function processUploadedFile(file, projectName, client, userId) {
           const jiraService = new JiraService(prisma);
           
           // syncTaskMasterToJira를 사용하여 새 프로젝트 생성 및 이슈 추가
-          const jiraResult = await jiraService.syncTaskMasterToJira(
+          jiraResult = await jiraService.syncTaskMasterToJira(
             user.tenantId,
             user.id,
             {
