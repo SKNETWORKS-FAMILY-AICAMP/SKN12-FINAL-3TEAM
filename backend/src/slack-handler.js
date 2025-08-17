@@ -5250,11 +5250,16 @@ async function processUploadedFile(file, projectName, client, userId) {
       
       // 생성 결과 추가
       if (result.success) {
+        // summary 가져오기 (stage1 또는 stage2에서)
+        const summary = result.stage1?.notion_project?.title || 
+                       result.stage2?.task_master_prd?.title || 
+                       'AI 분석 완료';
+        
         dmBlocks.push({
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: `:dart: *${aiData.summary || 'AI 분석 완료'}*`
+            text: `:dart: *${summary}*`
           }
         });
         
