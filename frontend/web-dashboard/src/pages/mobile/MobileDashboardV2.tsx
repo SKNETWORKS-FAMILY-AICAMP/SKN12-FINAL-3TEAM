@@ -27,14 +27,26 @@ apiClient.interceptors.request.use((config) => {
 });
 
 const fetchProjects = async () => {
-  const response = await apiClient.get('/api/projects');
-  return response.data;
+  try {
+    const response = await apiClient.get('/api/projects');
+    // 응답이 배열인지 확인하고, 아니면 빈 배열 반환
+    return Array.isArray(response.data) ? response.data : [];
+  } catch (error) {
+    console.error('Failed to fetch projects:', error);
+    return [];
+  }
 };
 
 const fetchTasks = async (projectId?: string) => {
-  const url = projectId ? `/api/tasks?projectId=${projectId}` : '/api/tasks';
-  const response = await apiClient.get(url);
-  return response.data;
+  try {
+    const url = projectId ? `/api/tasks?projectId=${projectId}` : '/api/tasks';
+    const response = await apiClient.get(url);
+    // 응답이 배열인지 확인하고, 아니면 빈 배열 반환
+    return Array.isArray(response.data) ? response.data : [];
+  } catch (error) {
+    console.error('Failed to fetch tasks:', error);
+    return [];
+  }
 };
 
 const updateTaskStatus = async (taskId: string, status: string) => {
@@ -120,15 +132,15 @@ const MobileDashboardV2: React.FC = () => {
         {/* Stats Cards */}
         <div className="stats-grid-v2">
           <div className="stat-card-v2">
-            <div className="stat-value">{(tasks as any[]).filter((t: any) => t.status === 'pending').length}</div>
-            <div className="stat-label">Pending</div>
+            <div className="stat-value">{(tasks as any[]).filter((t: any) => t.status === 'TODO').length}</div>
+            <div className="stat-label">To Do</div>
           </div>
           <div className="stat-card-v2">
-            <div className="stat-value">{(tasks as any[]).filter((t: any) => t.status === 'in_progress').length}</div>
+            <div className="stat-value">{(tasks as any[]).filter((t: any) => t.status === 'IN_PROGRESS').length}</div>
             <div className="stat-label">In Progress</div>
           </div>
           <div className="stat-card-v2">
-            <div className="stat-value">{(tasks as any[]).filter((t: any) => t.status === 'completed').length}</div>
+            <div className="stat-value">{(tasks as any[]).filter((t: any) => t.status === 'DONE').length}</div>
             <div className="stat-label">Completed</div>
           </div>
         </div>

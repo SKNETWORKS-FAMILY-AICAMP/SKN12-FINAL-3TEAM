@@ -30,14 +30,26 @@ apiClient.interceptors.request.use((config) => {
 
 // API 함수들
 const fetchProjects = async () => {
-  const response = await apiClient.get('/api/projects');
-  return response.data;
+  try {
+    const response = await apiClient.get('/api/projects');
+    // 응답이 배열인지 확인하고, 아니면 빈 배열 반환
+    return Array.isArray(response.data) ? response.data : [];
+  } catch (error) {
+    console.error('Failed to fetch projects:', error);
+    return [];
+  }
 };
 
 const fetchTasks = async (projectId?: string) => {
-  const url = projectId ? `/api/tasks?projectId=${projectId}` : '/api/tasks';
-  const response = await apiClient.get(url);
-  return response.data;
+  try {
+    const url = projectId ? `/api/tasks?projectId=${projectId}` : '/api/tasks';
+    const response = await apiClient.get(url);
+    // 응답이 배열인지 확인하고, 아니면 빈 배열 반환
+    return Array.isArray(response.data) ? response.data : [];
+  } catch (error) {
+    console.error('Failed to fetch tasks:', error);
+    return [];
+  }
 };
 
 const updateTaskStatus = async (taskId: string, status: string) => {
