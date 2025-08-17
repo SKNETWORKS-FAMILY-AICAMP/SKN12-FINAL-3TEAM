@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { 
@@ -222,6 +222,7 @@ const MainContent = () => {
   const [taskToDelete, setTaskToDelete] = useState<any>(null);
   const [isEditingTask, setIsEditingTask] = useState(false);
   const [editedTaskData, setEditedTaskData] = useState<any>({});
+  const [selectedProjectId, setSelectedProjectId] = useState<string>('all'); // 프로젝트 필터링 상태 추가
 
   // React Query로 데이터 패칭
   const { data: stats, isLoading: statsLoading, refetch: refetchStats, error: statsError } = useQuery({
@@ -249,6 +250,12 @@ const MainContent = () => {
   const { data: users = [], isLoading: usersLoading, error: usersError } = useQuery({
     queryKey: ['users'],
     queryFn: userAPI.getUsers,
+  });
+
+  // 프로젝트 목록 가져오기
+  const { data: projects = [], isLoading: projectsLoading } = useQuery({
+    queryKey: ['projects'],
+    queryFn: projectAPI.getProjects,
   });
 
   // 태스크 목록 디버깅
@@ -393,10 +400,21 @@ const MainContent = () => {
     window.location.href = '/login';
   };
 
+  // 프로젝트별로 태스크 필터링
+  const filteredTasks = useMemo(() => {
+    if (!tasks) return [];
+    if (selectedProjectId === 'all') return tasks;
+    
+    return tasks.filter((task: any) => task.projectId === selectedProjectId);
+  }, [tasks, selectedProjectId]);
+
   // API 데이터를 칸반보드에 매핑하는 useEffect 추가
   useEffect(() => {
-    if (Array.isArray(tasks) && tasks.length > 0) {
-      console.log('🔄 업무 데이터를 칸반보드에 매핑 중...', tasks);
+    const tasksToDisplay = filteredTasks;
+    
+    if (Array.isArray(tasksToDisplay) && tasksToDisplay.length > 0) {
+      console.log('🔄 업무 데이터를 칸반보드에 매핑 중...', tasksToDisplay);
+      console.log('📋 선택된 프로젝트:', selectedProjectId);
       
       const newColumns: KanbanColumns = {
         todo: { name: '해야할 일', items: [] },
@@ -442,7 +460,7 @@ const MainContent = () => {
     } else {
       console.log('❌ 업무 데이터가 없습니다:', { tasks, tasksLoading });
     }
-  }, [tasks]);
+  }, [filteredTasks]);
 
 
   // @dnd-kit 센서 설정 - 더 자연스러운 드래그 경험
@@ -979,7 +997,24 @@ const MainContent = () => {
               className="bg-white rounded-2xl p-6 shadow-soft border border-neutral-200"
             >
               <div className="flex items-center justify-between mb-6">
-                <h3 className="text-lg font-bold text-neutral-900">업무 현황</h3>
+                <div className="flex items-center gap-4">
+                  <h3 className="text-lg font-bold text-neutral-900">업무 현황</h3>
+                  
+                  {/* 프로젝트 선택 드롭다운 */}
+                  <select
+                    value={selectedProjectId}
+                    onChange={(e) => setSelectedProjectId(e.target.value)}
+                    className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white text-sm"
+                  >
+                    <option value="all">전체 프로젝트</option>
+                    {projects.map((project: any) => (
+                      <option key={project.id} value={project.id}>
+                        {project.title} ({project.tasks?.length || 0}개 업무)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                
                 <div className="flex items-center space-x-3">
                   {/* 새 업무 추가 버튼 */}
                   <button

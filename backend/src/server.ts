@@ -968,6 +968,14 @@ app.get('/api/tasks',
           assignee: {
             select: { id: true, name: true, email: true }
           },
+          project: {
+            select: { 
+              id: true, 
+              title: true, 
+              status: true,
+              createdAt: true
+            }
+          },
           metadata: {
             select: {
               estimatedHours: true,
