@@ -3000,7 +3000,7 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
       const isAdmin = nextMember.id === currentUserId;
       
       await ack({
-        response_action: 'push',
+        response_action: 'update',
         view: {
           type: 'modal',
           callback_id: 'setup_team_modal',
