@@ -650,6 +650,17 @@ class AIService {
   async processTwoStagePipeline(audioBuffer: Buffer, filename?: string): Promise<TwoStagePipelineResult> {
     try {
       console.log(`🚀 Starting 2-stage pipeline: ${filename || 'unknown'}`);
+      console.log(`📊 Audio buffer size: ${(audioBuffer.length / 1024 / 1024).toFixed(2)} MB`);
+      
+      // 파일 크기 체크 (50MB 제한)
+      const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+      if (audioBuffer.length > MAX_FILE_SIZE) {
+        console.error(`❌ File too large: ${(audioBuffer.length / 1024 / 1024).toFixed(2)} MB (max: 50MB)`);
+        return {
+          success: false,
+          error: `파일 크기가 너무 큽니다 (${(audioBuffer.length / 1024 / 1024).toFixed(2)} MB). 최대 50MB까지 지원됩니다.`
+        };
+      }
 
       try {
         const isTextInput = filename?.endsWith('.txt') || audioBuffer.toString('utf-8').length < 10000;

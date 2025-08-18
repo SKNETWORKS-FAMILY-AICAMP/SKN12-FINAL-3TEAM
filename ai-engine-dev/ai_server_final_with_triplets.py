@@ -4,9 +4,27 @@ TtalKkak 최종 AI 서버 - Triplet + BERT 통합
 """
 
 import os
+
+# 임시 디렉토리를 /workspace/temp로 변경 (FastAPI 대용량 파일 업로드용)
+os.environ['TMPDIR'] = '/workspace/temp'
+os.environ['TEMP'] = '/workspace/temp'
+os.environ['TMP'] = '/workspace/temp'
+
 import io
 import json
 import tempfile
+
+# tempfile 모듈도 설정 변경
+tempfile.tempdir = '/workspace/temp'
+os.makedirs('/workspace/temp', exist_ok=True)
+
+print(f"✅ Temp directory set to: {tempfile.gettempdir()}")
+
+# Hugging Face와 PyTorch 캐시도 /workspace로 이동
+os.environ['HF_HOME'] = '/workspace/.cache/huggingface'
+os.environ['TRANSFORMERS_CACHE'] = '/workspace/.cache/transformers'
+os.environ['TORCH_HOME'] = '/workspace/.cache/torch'
+
 import logging
 from typing import Optional, Dict, Any, List
 from contextlib import asynccontextmanager
