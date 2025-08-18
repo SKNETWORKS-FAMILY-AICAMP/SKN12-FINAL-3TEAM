@@ -3035,13 +3035,9 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
       
       console.log('🚀 모달 업데이트 시작...');
       
-      // 먼저 ack 응답
-      await ack();
-      
-      // 그 다음 views.update API 직접 호출
       try {
-        await client.views.update({
-          view_id: view.id,
+        await ack({
+          response_action: 'push',
           view: {
             type: 'modal',
             callback_id: 'setup_team_modal',
@@ -3226,7 +3222,7 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
         });
         console.log('✅ 모달 업데이트 ack 완료');
       } catch (ackError) {
-        console.error('❌ 모달 업데이트 ack 실패:', ackError);
+        console.error('❌ 모달 업데이트 실패:', ackError);
         console.error('에러 상세:', ackError.message);
         if (ackError.data) {
           console.error('Slack 에러 데이터:', JSON.stringify(ackError.data, null, 2));
