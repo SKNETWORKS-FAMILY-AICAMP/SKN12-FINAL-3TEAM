@@ -5342,6 +5342,7 @@ async function processUploadedFile(file, projectName, client, userId) {
       });
       
       // DB에 생성된 데이터 저장
+      let createdProject = null;  // createdProject를 외부 스코프에 선언
       if (result.success && result.stage2?.task_master_prd) {
         try {
           // SlackInput 생성
@@ -5357,7 +5358,7 @@ async function processUploadedFile(file, projectName, client, userId) {
           });
           
           // Project 생성
-          const createdProject = await prisma.project.create({
+          createdProject = await prisma.project.create({  // const 제거하여 외부 변수에 할당
             data: {
               tenantId: user.tenantId,
               slackInputId: slackInput.id,
