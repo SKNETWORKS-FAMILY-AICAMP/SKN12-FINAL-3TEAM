@@ -5423,7 +5423,7 @@ async function processUploadedFile(file, projectName, client, userId) {
                 let subtaskAssignment = null;
                 
                 if (subtask.required_skills || subtask.task_type) {
-                  const { smartAssigner } = require('../src/services/smart-assignment-service');
+                  const { smartAssigner } = require('./services/smart-assignment-service');
                   const subtaskInfo = {
                     id: '',
                     title: subtaskTitle,

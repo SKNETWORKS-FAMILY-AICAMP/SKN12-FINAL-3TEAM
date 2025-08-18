@@ -830,10 +830,26 @@ class AIService {
           }
         }
 
+        // AI 서버에서 BERT 필터링 후 유효한 내용이 없다고 판단한 경우
+        if (!result.success && (result.error?.includes('유효한 회의 내용') || result.error?.includes('너무 짧거나 비어있습니다'))) {
+          console.log('⚠️ No valid content detected after BERT filtering');
+          return result; // 에러 메시지를 그대로 전달
+        }
+
         console.log(`✅ 2-stage pipeline completed successfully via AI server`);
         return result;
 
       } catch (error: any) {
+        // 특정 에러 메시지 체크 (BERT 필터링 관련)
+        if (error?.response?.data?.step === 'bert_filtering' || error?.response?.data?.step === 'transcription_validation') {
+          console.log('⚠️ Content validation failed:', error.response.data.error);
+          return {
+            success: false,
+            error: error.response.data.error,
+            step: error.response.data.step
+          };
+        }
+        
         console.warn(`AI 서버 연결 실패: ${error?.response?.data?.error || error.message || 'Unknown error'}`);
       }
 

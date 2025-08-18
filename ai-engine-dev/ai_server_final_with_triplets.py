@@ -2368,6 +2368,22 @@ async def final_pipeline(
                     if enhanced_result["success"]:
                         full_text = enhanced_result["filtered_transcript"]
                         logger.info(f"✅ BERT filtering applied to audio: {len(raw_text)} → {len(full_text)} chars")
+                        
+                        # BERT 필터링 후 유효한 내용이 없는 경우
+                        if not full_text or len(full_text.strip()) < 50:  # 50자 미만이면 유효하지 않은 것으로 판단
+                            logger.warning(f"⚠️ No valid content after BERT filtering (length: {len(full_text.strip())} chars)")
+                            return {
+                                "success": False,
+                                "step": "bert_filtering",
+                                "error": "유효한 회의 내용이 감지되지 않았습니다. 노이즈만 있거나 너무 짧은 음성입니다.",
+                                "transcription": {
+                                    "full_text": raw_text,
+                                    "filtered_text": full_text,
+                                    "segments": transcribe_result.transcription.get("segments", []),
+                                    "language": transcribe_result.transcription.get("language", "unknown")
+                                },
+                                "processing_time": time.time() - start_time
+                            }
                     else:
                         full_text = raw_text
                         logger.warning("BERT filtering failed on audio, using original transcription")
@@ -2376,6 +2392,21 @@ async def final_pipeline(
                     full_text = raw_text
             else:
                 full_text = raw_text
+            
+            # BERT 필터링을 거치지 않은 경우에도 최소 길이 체크
+            if not full_text or len(full_text.strip()) < 50:
+                logger.warning(f"⚠️ Transcription too short or empty (length: {len(full_text.strip())} chars)")
+                return {
+                    "success": False,
+                    "step": "transcription_validation",
+                    "error": "전사된 내용이 너무 짧거나 비어있습니다. 유효한 회의 내용을 생성할 수 없습니다.",
+                    "transcription": {
+                        "full_text": full_text,
+                        "segments": transcribe_result.transcription.get("segments", []),
+                        "language": transcribe_result.transcription.get("language", "unknown")
+                    },
+                    "processing_time": time.time() - start_time
+                }
         else:
             return {
                 "success": False,
