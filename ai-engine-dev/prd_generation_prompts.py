@@ -403,7 +403,9 @@ def generate_complexity_based_subtask_prompt(task: dict, task_analysis: dict, ne
             "estimated_hours": 숫자,
             "dependencies": [],
             "details": "구현 세부사항",
-            "status": "pending"
+            "status": "pending",
+            "required_skills": ["JavaScript", "React", "Node.js"],  // 이 작업에 필요한 기술 스택
+            "work_type": "frontend/backend/fullstack/mobile/design/database/devops/cloud/data/ai/testing/documentation/pm/security/optimization"  // 작업 유형
         }}
     ]
 }}
@@ -438,7 +440,9 @@ def generate_complexity_based_subtask_prompt(task: dict, task_analysis: dict, ne
             "estimated_hours": 숫자,
             "dependencies": [],
             "details": "구현 세부사항",
-            "status": "pending"
+            "status": "pending",
+            "required_skills": ["필요한", "기술", "목록"],
+            "work_type": "frontend/backend/fullstack/mobile/design/database/devops/cloud/data/ai/testing/documentation/pm/security/optimization 중 하나"
         }}
     ]
 }}
@@ -448,7 +452,10 @@ def generate_complexity_based_subtask_system_prompt(num_subtasks: int, next_id: 
     """복잡도 기반 서브태스크 시스템 프롬프트"""
     return f"""You are an AI assistant helping with task breakdown. Generate exactly {num_subtasks} subtasks based on the provided prompt and context. 
 
-Respond ONLY with a valid JSON object containing a single key "subtasks" whose value is an array of the generated subtask objects. Each subtask object in the array must have keys: "id", "title", "description", "dependencies", "details", "status", "priority", "estimated_hours". 
+Respond ONLY with a valid JSON object containing a single key "subtasks" whose value is an array of the generated subtask objects. Each subtask object in the array must have keys: "id", "title", "description", "dependencies", "details", "status", "priority", "estimated_hours", "required_skills", "work_type". 
+
+- 'required_skills': Must be an array of technology/skill strings like ["JavaScript", "React", "Node.js", "Python", "AWS", etc.]
+- 'work_type': Must be one of: "frontend", "backend", "fullstack", "mobile", "design", "database", "devops", "cloud", "data", "ai", "testing", "documentation", "pm", "security", "optimization"
 
 Ensure the 'id' starts from {next_id} and is sequential. Ensure 'dependencies' only reference valid prior subtask IDs generated in this response (starting from {next_id}). Ensure 'status' is 'pending'. Do not include any other text or explanation."""
 
