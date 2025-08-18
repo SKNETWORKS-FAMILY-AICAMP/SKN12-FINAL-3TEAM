@@ -711,7 +711,23 @@ Subtasks:
                             if json_start_idx != -1:
                                 json_content = json_content[json_start_idx:]
                     
-                    skill_data = json.loads(json_content)
+                    # 빈 응답 체크
+                    if not json_content or json_content == '':
+                        logger.warning(f"⚠️ Empty response for task {task.id}, using defaults")
+                        skill_data = {
+                            'required_skills': ['JavaScript', 'TypeScript'],
+                            'task_type': 'fullstack'
+                        }
+                    else:
+                        try:
+                            skill_data = json.loads(json_content)
+                        except json.JSONDecodeError as e:
+                            logger.warning(f"⚠️ JSON parsing error for task {task.id}: {e}")
+                            logger.debug(f"Response was: {json_content[:500]}")
+                            skill_data = {
+                                'required_skills': ['JavaScript', 'TypeScript'],
+                                'task_type': 'fullstack'
+                            }
                     
                     # 태스크에 기술 정보 추가
                     if not hasattr(task, 'required_skills'):
@@ -743,19 +759,19 @@ Subtasks:
                     # Qwen 모델이 없는 경우 기본값 설정
                     logger.warning(f"⚠️ Qwen model not available, using default skills for task {task.id}")
                     task.required_skills = ['JavaScript', 'TypeScript', 'Node.js']
-                    task.task_type = 'fullstack'
+                    task.work_type = 'fullstack'  # work_type으로 수정
                     for subtask in task.subtasks:
                         subtask.required_skills = ['JavaScript']
-                        subtask.task_type = 'fullstack'
+                        subtask.work_type = 'fullstack'  # work_type으로 수정
                         
             except Exception as e:
                 logger.error(f"❌ Error extracting skills for task {task.id}: {e}")
                 # 오류 시 기본값 설정
                 task.required_skills = ['JavaScript', 'TypeScript']
-                task.task_type = 'fullstack'
+                task.work_type = 'fullstack'  # work_type으로 수정
                 for subtask in task.subtasks:
                     subtask.required_skills = ['JavaScript']
-                    subtask.task_type = 'fullstack'
+                    subtask.work_type = 'fullstack'  # work_type으로 수정
         
         logger.info(f"✅ Skill extraction completed for {len(task_items)} tasks")
         return task_items
@@ -1859,7 +1875,7 @@ async def two_stage_analysis(request: TwoStageAnalysisRequest):
                                 logger.info(f"   📅 시작일: {task.start_date or '미정'}")
                                 logger.info(f"   📅 마감일: {task.due_date or '미정'}")
                                 logger.info(f"   🔧 필요기술: {', '.join(getattr(task, 'required_skills', [])) if hasattr(task, 'required_skills') else '미정'}")
-                                logger.info(f"   💼 작업유형: {getattr(task, 'task_type', '미정')}")
+                                logger.info(f"   💼 작업유형: {getattr(task, 'work_type', '미정')}")
                                 
                                 if hasattr(task, 'dependencies') and task.dependencies:
                                     logger.info(f"   🔗 의존성: {', '.join(map(str, task.dependencies))}")
@@ -1882,8 +1898,8 @@ async def two_stage_analysis(request: TwoStageAnalysisRequest):
                                             logger.info(f"         - 예상시간: {getattr(subtask, 'estimated_hours', 0) or 0}시간")
                                             if hasattr(subtask, 'required_skills') and subtask.required_skills:
                                                 logger.info(f"         - 필요기술: {', '.join(subtask.required_skills)}")
-                                            if hasattr(subtask, 'task_type') and subtask.task_type:
-                                                logger.info(f"         - 작업유형: {subtask.task_type}")
+                                            if hasattr(subtask, 'work_type') and subtask.work_type:
+                                                logger.info(f"         - 작업유형: {subtask.work_type}")
                                             if hasattr(subtask, 'start_date') and subtask.start_date:
                                                 logger.info(f"         - 시작일: {subtask.start_date}")
                                             if hasattr(subtask, 'due_date') and subtask.due_date:
@@ -2456,20 +2472,26 @@ async def final_pipeline(
         # 1. 회의록 요약 출력 (stage1_notion에서 정보 추출)
         if analysis_result.stage1_notion:
             logger.info("\n📋 [Stage 1: Notion 프로젝트 분석]")
-            logger.info(f"제목: {analysis_result.stage1_notion.get('title', 'N/A')}")
-            logger.info(f"개요: {analysis_result.stage1_notion.get('overview', 'N/A')[:200]}...")
-            if 'objectives' in analysis_result.stage1_notion:
-                logger.info(f"목표: {len(analysis_result.stage1_notion.get('objectives', []))}개")
-            if 'key_features' in analysis_result.stage1_notion:
-                logger.info(f"주요 기능: {len(analysis_result.stage1_notion.get('key_features', []))}개")
+            # 올바른 필드명 사용
+            logger.info(f"프로젝트명: {analysis_result.stage1_notion.get('project_name', 'N/A')}")
+            logger.info(f"프로젝트 목적: {analysis_result.stage1_notion.get('project_purpose', 'N/A')[:200] if analysis_result.stage1_notion.get('project_purpose') else 'N/A'}...")
+            if 'core_objectives' in analysis_result.stage1_notion:
+                logger.info(f"핵심 목표: {len(analysis_result.stage1_notion.get('core_objectives', []))}개")
+            if 'expected_effects' in analysis_result.stage1_notion:
+                logger.info(f"기대 효과: {len(analysis_result.stage1_notion.get('expected_effects', []))}개")
         
         # 2. PRD 정보 출력
         if analysis_result.stage2_prd:
             logger.info("\n📄 [Stage 2: Task Master PRD]")
-            logger.info(f"제목: {analysis_result.stage2_prd.get('title', 'N/A')}")
-            logger.info(f"프로젝트 범위: {analysis_result.stage2_prd.get('scope', 'N/A')[:200]}...")
-            if 'requirements' in analysis_result.stage2_prd:
-                logger.info(f"요구사항: {len(analysis_result.stage2_prd.get('requirements', []))}개")
+            # 올바른 PRD 필드명 사용
+            overview = analysis_result.stage2_prd.get('overview', 'N/A')
+            logger.info(f"개요: {overview[:200] if overview and overview != 'N/A' else 'N/A'}...")
+            if 'core_features' in analysis_result.stage2_prd:
+                core_features = analysis_result.stage2_prd.get('core_features', '')
+                logger.info(f"핵심 기능: {core_features[:200] if core_features else 'N/A'}...")
+            if 'development_roadmap' in analysis_result.stage2_prd:
+                roadmap = analysis_result.stage2_prd.get('development_roadmap', '')
+                logger.info(f"개발 로드맵: {roadmap[:200] if roadmap else 'N/A'}...")
         
         # 3. 생성된 태스크 목록 출력
         if analysis_result.stage3_tasks:

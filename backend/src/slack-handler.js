@@ -5334,7 +5334,8 @@ async function processUploadedFile(file, projectName, client, userId) {
                   requiredSkills: requiredSkills,
                   taskType: taskType,
                   jiraIssueKey: jiraKey || null,
-                  jiraStatus: jiraKey ? 'To Do' : null
+                  jiraStatus: jiraKey ? 'To Do' : null,
+                  workType: taskType  // workType도 추가
                 }
               });
             }
