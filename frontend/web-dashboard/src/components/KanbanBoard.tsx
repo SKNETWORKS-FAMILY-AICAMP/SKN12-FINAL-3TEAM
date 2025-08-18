@@ -116,18 +116,16 @@ const TaskCard: React.FC<{
         shouldPushDown ? 'opacity-50 z-10' : ''
       }`}
     >
-      {/* 부모 태스크 정보 */}
-      {parentTask && (
-        <div className="flex items-center gap-2 mb-3 pb-2 border-b border-gray-100">
-          <div 
-            className="w-3 h-3 rounded-full shadow-sm" 
-            style={{ backgroundColor: parentColor || '#3B82F6' }}
-          />
-          <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: parentColor || '#3B82F6' }}>
-            {parentTask.title}
-          </span>
-        </div>
-      )}
+      {/* 부모 태스크 정보 - 항상 표시 (디버깅용) */}
+      <div className="flex items-center gap-2 mb-3 pb-2 border-b border-gray-100">
+        <div 
+          className="w-3 h-3 rounded-full shadow-sm" 
+          style={{ backgroundColor: parentColor || '#999999' }}
+        />
+        <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: parentColor || '#999999' }}>
+          {parentTask ? parentTask.title : `Parent ID: ${task.parentId || 'No Parent'}`}
+        </span>
+      </div>
       
       {/* 태스크 헤더 */}
       <div className="flex items-start justify-between mb-3">
@@ -328,9 +326,24 @@ const KanbanBoard: React.FC = () => {
   const queryClient = useQueryClient();
 
   // 태스크 데이터 가져오기
-  const { data: allTasks = [], isLoading } = useQuery({
+  const { data: rawTasks = [], isLoading } = useQuery({
     queryKey: ['tasks'],
     queryFn: () => taskAPI.getTasks(),
+  });
+  
+  // 중첩된 children을 플랫한 배열로 변환
+  const allTasks: Task[] = [];
+  rawTasks.forEach(mainTask => {
+    allTasks.push(mainTask);
+    if (mainTask.children && mainTask.children.length > 0) {
+      mainTask.children.forEach(subTask => {
+        // parentId가 없으면 추가
+        if (!subTask.parentId) {
+          subTask.parentId = mainTask.id;
+        }
+        allTasks.push(subTask);
+      });
+    }
   });
 
   // 서브태스크만 필터링하고 메인태스크별로 색상 할당
@@ -345,37 +358,25 @@ const KanbanBoard: React.FC = () => {
     '#6366F1', // 인디고
   ];
 
-  // assigneeId가 있는 태스크만 필터링 (서브태스크)
-  const tasks = allTasks.filter(task => task.assigneeId);
+  // parentId가 있는 태스크만 필터링 (서브태스크)
+  const tasks = allTasks.filter(task => task.parentId);
   
-  // 모든 부모 태스크 ID 수집 및 색상 매핑
+  // 메인태스크 찾기 및 색상 매핑
   const parentColorMap = new Map<string, string>();
-  const parentIds = new Set<string>();
+  const mainTasks = allTasks.filter(task => !task.parentId);
   
-  // 서브태스크들의 parentId 수집
-  tasks.forEach(task => {
-    if (task.parentId) {
-      parentIds.add(task.parentId);
-    }
-  });
-  
-  // 각 부모 태스크 ID에 고유 색상 할당
-  Array.from(parentIds).forEach((parentId, index) => {
-    parentColorMap.set(parentId, colorPalette[index % colorPalette.length]);
+  // 각 메인태스크에 고유 색상 할당
+  mainTasks.forEach((mainTask, index) => {
+    parentColorMap.set(mainTask.id, colorPalette[index % colorPalette.length]);
   });
   
   // 디버깅 로그
   console.log('=== KanbanBoard Debug ===');
-  console.log('All tasks count:', allTasks.length);
-  console.log('Subtasks (with assigneeId):', tasks.length);
-  console.log('Parent IDs found:', Array.from(parentIds));
+  console.log('Raw tasks from API:', rawTasks.length, rawTasks);
+  console.log('Flattened all tasks:', allTasks.length);
+  console.log('Main tasks (no parentId):', mainTasks.length, mainTasks.map(t => t.title));
+  console.log('Subtasks (with parentId):', tasks.length, tasks.map(t => ({ title: t.title, parentId: t.parentId })));
   console.log('Parent color map:', Array.from(parentColorMap.entries()));
-  
-  // 각 서브태스크의 색상 확인
-  tasks.forEach(task => {
-    const color = task.parentId ? parentColorMap.get(task.parentId) : 'NO COLOR';
-    console.log(`Subtask: ${task.title}, ParentID: ${task.parentId || 'NONE'}, Color: ${color}`);
-  });
 
   // 태스크 상태 업데이트 mutation
   const updateTaskMutation = useMutation({
