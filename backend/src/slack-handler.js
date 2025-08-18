@@ -3000,7 +3000,7 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
       const isAdmin = nextMember.id === currentUserId;
       
       await ack({
-        response_action: 'update',
+        response_action: 'push',
         view: {
           type: 'modal',
           callback_id: 'setup_team_modal',
@@ -3113,6 +3113,8 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
                   type: 'plain_text',
                   text: '기술 스택을 선택하세요'
                 },
+                // initial_options를 빈 배열로 명시적 설정
+                initial_options: [],
                 options: [
                   { text: { type: 'plain_text', text: 'JavaScript' }, value: 'JavaScript' },
                   { text: { type: 'plain_text', text: 'TypeScript' }, value: 'TypeScript' },
@@ -3152,6 +3154,8 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
                   type: 'plain_text',
                   text: '선호하는 작업 유형을 선택하세요'
                 },
+                // initial_options를 빈 배열로 명시적 설정
+                initial_options: [],
                 options: [
                   { text: { type: 'plain_text', text: '프론트엔드 개발' }, value: 'frontend' },
                   { text: { type: 'plain_text', text: '백엔드 개발' }, value: 'backend' },
@@ -3206,8 +3210,9 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
         
         // 2. 모든 멤버 생성
         for (const member of metadata.memberData) {
-          const skills = member.skills ? member.skills.split(',').map(s => s.trim()).filter(s => s) : [];
-          const preferredTypes = member.preferredTypes ? member.preferredTypes.split(',').map(s => s.trim()).filter(s => s) : [];
+          // skills와 preferredTypes는 이미 배열이므로 split 불필요
+          const skills = Array.isArray(member.skills) ? member.skills : [];
+          const preferredTypes = Array.isArray(member.preferredTypes) ? member.preferredTypes : [];
           
           await prismaClient.user.create({
             data: {
