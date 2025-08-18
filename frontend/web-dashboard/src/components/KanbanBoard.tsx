@@ -345,27 +345,36 @@ const KanbanBoard: React.FC = () => {
     '#6366F1', // 인디고
   ];
 
-  // 메인태스크 ID별 색상 매핑
+  // assigneeId가 있는 태스크만 필터링 (서브태스크)
+  const tasks = allTasks.filter(task => task.assigneeId);
+  
+  // 모든 부모 태스크 ID 수집 및 색상 매핑
   const parentColorMap = new Map<string, string>();
-  const mainTasks = allTasks.filter(task => !task.parentId);
-  mainTasks.forEach((task, index) => {
-    parentColorMap.set(task.id, colorPalette[index % colorPalette.length]);
+  const parentIds = new Set<string>();
+  
+  // 서브태스크들의 parentId 수집
+  tasks.forEach(task => {
+    if (task.parentId) {
+      parentIds.add(task.parentId);
+    }
   });
-
-  // 서브태스크만 필터링
-  const tasks = allTasks.filter(task => task.parentId);
+  
+  // 각 부모 태스크 ID에 고유 색상 할당
+  Array.from(parentIds).forEach((parentId, index) => {
+    parentColorMap.set(parentId, colorPalette[index % colorPalette.length]);
+  });
   
   // 디버깅 로그
   console.log('=== KanbanBoard Debug ===');
   console.log('All tasks count:', allTasks.length);
-  console.log('All tasks:', allTasks);
-  console.log('Main tasks (no parentId):', mainTasks.length, mainTasks);
-  console.log('Subtasks (with parentId):', tasks.length, tasks);
-  console.log('Parent color map:', parentColorMap);
+  console.log('Subtasks (with assigneeId):', tasks.length);
+  console.log('Parent IDs found:', Array.from(parentIds));
+  console.log('Parent color map:', Array.from(parentColorMap.entries()));
   
-  // 각 태스크의 parentId 확인
-  allTasks.forEach(task => {
-    console.log(`Task: ${task.title}, ID: ${task.id}, ParentID: ${task.parentId || 'NONE'}`);
+  // 각 서브태스크의 색상 확인
+  tasks.forEach(task => {
+    const color = task.parentId ? parentColorMap.get(task.parentId) : 'NO COLOR';
+    console.log(`Subtask: ${task.title}, ParentID: ${task.parentId || 'NONE'}, Color: ${color}`);
   });
 
   // 태스크 상태 업데이트 mutation
