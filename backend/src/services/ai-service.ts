@@ -708,6 +708,9 @@ class AIService {
             filename: filename || 'audio.wav',
             contentType: 'audio/wav'
           });
+          formData.append('generate_notion', 'true');
+          formData.append('generate_tasks', 'true');
+          formData.append('num_tasks', '5');
 
           const response = await axiosInstance.post<any>(`${this.baseUrl}/pipeline-final`, formData, {
             timeout: this.timeout,

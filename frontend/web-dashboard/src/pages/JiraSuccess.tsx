@@ -85,7 +85,7 @@ const IntegrationSuccess = () => {
               transition={{ duration: 0.8, delay: 0.3, type: "spring", stiffness: 150 }}
             >
               <img
-                src="/checkmark_new.gif"
+                src="/checkmark.gif"
                 alt="Success Checkmark Animation"
                 className="w-full h-full drop-shadow-xl"
                 style={{

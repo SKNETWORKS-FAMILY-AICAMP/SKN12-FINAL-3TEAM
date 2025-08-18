@@ -970,7 +970,7 @@ private createDetailedTaskToggles(actionItems: any[]): any[] {
     
     // "목적: " 패턴 찾기
     const purposeMatch = summary.match(/목적[:：]\s*([^\n]+)/);
-    if (purposeMatch) {
+    if (purposeMatch && purposeMatch[1]) {
       return purposeMatch[1].trim();
     }
     
@@ -990,7 +990,7 @@ private createDetailedTaskToggles(actionItems: any[]): any[] {
     
     // "핵심 아이디어" 패턴 찾기
     const ideaMatch = summary.match(/핵심\s*아이디어[:：]\s*([^\n]+)/);
-    if (ideaMatch) {
+    if (ideaMatch && ideaMatch[1]) {
       return ideaMatch[1].trim();
     }
     
@@ -1045,14 +1045,14 @@ private createDetailedTaskToggles(actionItems: any[]): any[] {
     
     // "프로젝트명: " 패턴 찾기
     const projectMatch = summary.match(/프로젝트명[:：]\s*([^\n]+)/);
-    if (projectMatch) {
+    if (projectMatch && projectMatch[1]) {
       return projectMatch[1].trim();
     }
     
     // 첫 번째 태스크에서 프로젝트 정보 찾기
     if (parsedData.action_items && parsedData.action_items.length > 0) {
       const firstTask = parsedData.action_items[0];
-      if (firstTask.tags && firstTask.tags.includes('project')) {
+      if (firstTask && firstTask.tags && firstTask.tags.includes('project')) {
         return firstTask.title;
       }
     }
