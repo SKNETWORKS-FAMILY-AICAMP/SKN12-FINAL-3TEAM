@@ -3023,16 +3023,21 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
     };
     
     metadata.memberData.push(memberInfo);
+    console.log('✅ 현재 멤버 정보 저장 완료:', memberInfo.name);
     
     if (currentIndex < metadata.members.length) {
       // 다음 멤버 정보 입력
+      console.log(`📍 다음 멤버로 이동: ${currentIndex} → ${currentIndex + 1}`);
       metadata.currentIndex = currentIndex + 1;
       const nextMember = metadata.members[currentIndex];
       const isAdmin = nextMember.id === metadata.currentUserId;
+      console.log('📍 다음 멤버 정보:', { name: nextMember.name, isAdmin });
       
-      await ack({
-        response_action: 'update',
-        view: {
+      console.log('🚀 모달 업데이트 시작...');
+      try {
+        await ack({
+          response_action: 'update',
+          view: {
           type: 'modal',
           callback_id: 'setup_team_modal',
           private_metadata: JSON.stringify(metadata),
@@ -3212,10 +3217,19 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
               optional: true
             }
           ]
+          }
+        });
+        console.log('✅ 모달 업데이트 ack 완료');
+      } catch (ackError) {
+        console.error('❌ 모달 업데이트 ack 실패:', ackError);
+        console.error('에러 상세:', ackError.message);
+        if (ackError.data) {
+          console.error('Slack 에러 데이터:', JSON.stringify(ackError.data, null, 2));
         }
-      });
+      }
     } else {
       // 모든 정보 수집 완료 - DB에 저장
+      console.log('🎯 모든 멤버 정보 수집 완료 - DB 저장 시작');
       await ack();
       
       try {
