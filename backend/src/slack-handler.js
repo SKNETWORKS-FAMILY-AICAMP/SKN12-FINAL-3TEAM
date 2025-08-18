@@ -2758,6 +2758,8 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
     }
     
     console.log('✅ slug 유효성 검사 통과');
+    console.log('📍 기존 metadata members:', members ? `${members.length}명` : 'undefined');
+    console.log('📍 기존 metadata currentUserId:', currentUserId);
     
     metadata.teamName = teamName;
     metadata.teamSlug = teamSlug;
@@ -2765,6 +2767,8 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
     metadata.memberData = [];
     metadata.members = members;  // members 배열 추가
     metadata.currentUserId = currentUserId;  // currentUserId도 유지
+    
+    console.log('📍 업데이트된 metadata:', JSON.stringify(metadata, null, 2));
     
     // 첫 번째 멤버 정보 입력 모달로 업데이트
     const firstMember = members[0];
@@ -2977,6 +2981,7 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
   } else {
     // 멤버 정보 저장 및 다음 멤버로 이동
     console.log('🟡 멤버 정보 처리 - currentIndex:', currentIndex);
+    console.log('📍 metadata 전체 내용:', JSON.stringify(metadata, null, 2));
     
     // members가 metadata에 없으면 에러 처리
     if (!metadata.members || !Array.isArray(metadata.members)) {
