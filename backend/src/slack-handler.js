@@ -3034,39 +3034,44 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
       console.log('📍 다음 멤버 정보:', { name: nextMember.name, isAdmin });
       
       console.log('🚀 모달 업데이트 시작...');
+      
+      // 먼저 ack 응답
+      await ack();
+      
+      // 그 다음 views.update API 직접 호출
       try {
-        await ack({
-          response_action: 'update',
+        await client.views.update({
+          view_id: view.id,
           view: {
-          type: 'modal',
-          callback_id: 'setup_team_modal',
-          private_metadata: JSON.stringify(metadata),
-          title: {
-            type: 'plain_text',
-            text: '팀원 정보 설정'
-          },
-          submit: {
-            type: 'plain_text',
-            text: currentIndex === metadata.members.length - 1 ? '완료' : '다음'
-          },
-          close: {
-            type: 'plain_text',
-            text: '취소'
-          },
-          blocks: [
-            {
-              type: 'section',
-              text: {
-                type: 'mrkdwn',
-                text: `*팀원 정보 설정 (${currentIndex + 2}/${metadata.members.length + 1})*\n\n*${nextMember.name}* ${isAdmin ? '(관리자)' : ''}`
-              }
+            type: 'modal',
+            callback_id: 'setup_team_modal',
+            private_metadata: JSON.stringify(metadata),
+            title: {
+              type: 'plain_text',
+              text: '팀원 정보 설정'
             },
-            {
-              type: 'divider'
+            submit: {
+              type: 'plain_text',
+              text: currentIndex === metadata.members.length - 1 ? '완료' : '다음'
             },
-            {
-              type: 'input',
-              block_id: 'member_role_input',
+            close: {
+              type: 'plain_text',
+              text: '취소'
+            },
+            blocks: [
+              {
+                type: 'section',
+                text: {
+                  type: 'mrkdwn',
+                  text: `*팀원 정보 설정 (${currentIndex + 2}/${metadata.members.length + 1})*\n\n*${nextMember.name}* ${isAdmin ? '(관리자)' : ''}`
+                }
+              },
+              {
+                type: 'divider'
+              },
+              {
+                type: 'input',
+                block_id: 'member_role_input',
               element: {
                 type: 'static_select',
                 action_id: 'member_role',
@@ -3092,10 +3097,10 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
                 type: 'plain_text',
                 text: '👤 권한'
               }
-            },
-            {
-              type: 'input',
-              block_id: 'member_exp_input',
+              },
+              {
+                type: 'input',
+                block_id: 'member_exp_input',
               element: {
                 type: 'static_select',
                 action_id: 'member_exp',
@@ -3122,10 +3127,10 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
                 type: 'plain_text',
                 text: '🎖️ 경험 수준'
               }
-            },
-            {
-              type: 'input',
-              block_id: 'member_hours_input',
+              },
+              {
+                type: 'input',
+                block_id: 'member_hours_input',
               element: {
                 type: 'number_input',
                 action_id: 'member_hours',
@@ -3138,10 +3143,10 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
                 type: 'plain_text',
                 text: '⏰ 주간 가능 시간'
               }
-            },
-            {
-              type: 'input',
-              block_id: 'member_skills_input',
+              },
+              {
+                type: 'input',
+                block_id: 'member_skills_input',
               element: {
                 type: 'multi_static_select',
                 action_id: 'member_skills',
@@ -3179,10 +3184,10 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
                 text: '💻 보유 기술 (여러 개 선택 가능)'
               },
               optional: true
-            },
-            {
-              type: 'input',
-              block_id: 'member_preferred_input',
+              },
+              {
+                type: 'input',
+                block_id: 'member_preferred_input',
               element: {
                 type: 'multi_static_select',
                 action_id: 'member_preferred',
