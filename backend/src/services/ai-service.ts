@@ -704,17 +704,30 @@ class AIService {
 
         } else {
           const formData = new FormData();
+          
+          // 오디오 파일 추가
           formData.append('audio', audioBuffer, {
-            filename: filename || 'audio.wav',
-            contentType: 'audio/wav'
+            filename: filename || 'audio.mp3',
+            contentType: 'audio/mpeg'  // MP3 파일이므로 contentType 수정
           });
+          
+          // 다른 파라미터들 추가
           formData.append('generate_notion', 'true');
           formData.append('generate_tasks', 'true');
           formData.append('num_tasks', '5');
+          
+          console.log('📤 FormData 전송 정보:', {
+            filename: filename || 'audio.mp3',
+            bufferSize: audioBuffer.length,
+            headers: formData.getHeaders()
+          });
 
           const response = await axiosInstance.post<any>(`${this.baseUrl}/pipeline-final`, formData, {
             timeout: this.timeout,
-            headers: formData.getHeaders()
+            headers: {
+              ...formData.getHeaders(),
+              'Accept': 'application/json'
+            }
           });
 
           // AI 서버 응답을 백엔드 형식으로 변환
