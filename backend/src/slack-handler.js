@@ -5178,17 +5178,45 @@ async function processUploadedFile(file, projectName, client, userId) {
           
           if (notionService) {
             console.log('✅ NotionService 인스턴스 생성 성공');
+            
+            // DB에서 방금 저장한 태스크 정보 가져오기 (담당자 정보 포함)
+            let dbTasks = [];
+            if (createdProject) {
+              dbTasks = await prisma.task.findMany({
+                where: {
+                  projectId: createdProject.id,
+                  parentId: null  // 메인 태스크만
+                },
+                include: {
+                  assignee: true,  // 담당자 정보 포함
+                  metadata: true,  // 메타데이터 (기술, 점수 등) 포함
+                  children: {      // 서브태스크 포함
+                    include: {
+                      assignee: true,
+                      metadata: true
+                    }
+                  }
+                }
+              });
+            }
+            
             // AI가 생성한 데이터를 Notion 페이지로 변환
             const notionData = {
               summary: result.stage1?.notion_project?.title || projectName,
-              action_items: result.stage2.task_master_prd.tasks?.map((task, index) => ({
+              action_items: result.stage2.task_master_prd.tasks?.map((task, index) => {
+                // DB에서 해당 태스크 찾기
+                const dbTask = dbTasks.find(t => t.title === (task.title || task.task));
+                const assigneeName = dbTask?.assignee?.name || '미지정';
+                const requiredSkills = dbTask?.metadata?.requiredSkills || [];
+                
+                return {
                 id: index + 1,
                 title: task.title || task.task,
                 description: task.description,
                 details: task.details,
                 priority: task.priority?.toUpperCase() || 'MEDIUM',
                 status: 'pending',
-                assignee: task.assignee || '미지정',
+                assignee: assigneeName,  // DB에서 가져온 담당자 이름
                 start_date: task.startDate || task.start_date || new Date().toISOString().split('T')[0],
                 deadline: task.dueDate || task.due_date || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
                 estimated_hours: task.estimated_hours || 8,
@@ -5197,10 +5225,12 @@ async function processUploadedFile(file, projectName, client, userId) {
                 test_strategy: task.test_strategy || '',
                 acceptance_criteria: task.acceptance_criteria || [],
                 subtasks: task.subtasks || [],
-                tags: task.tags || [],
+                tags: requiredSkills,  // DB에서 가져온 기술 정보
+                required_skills: requiredSkills,  // 명시적으로 기술 정보 추가
                 created_at: new Date().toISOString(),
                 updated_at: null
-              })) || []
+              }
+              }) || []
             };
             
             // 프로젝트 이름을 함께 전달
