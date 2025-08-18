@@ -5553,7 +5553,7 @@ async function processUploadedFile(file, projectName, client, userId) {
                 include: {
                   assignee: true,
                   metadata: true,
-                  subtasks: {
+                  children: {  // subtasks가 아니라 children
                     include: {
                       assignee: true,
                       metadata: true
@@ -5600,9 +5600,9 @@ async function processUploadedFile(file, projectName, client, userId) {
                       if (subtask) {
                         console.log(`✅ JIRA 서브태스크 생성: ${subtask.key} - ${task.title}`);
                         
-                        // 하위 서브태스크도 생성
-                        if (task.subtasks && task.subtasks.length > 0) {
-                          for (const subsubtask of task.subtasks) {
+                        // 하위 서브태스크도 생성 (children 필드 사용)
+                        if (task.children && task.children.length > 0) {
+                          for (const subsubtask of task.children) {
                             try {
                               await jiraService.createIssue({
                                 projectKey: projectKey,
