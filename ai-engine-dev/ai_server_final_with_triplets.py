@@ -1677,8 +1677,15 @@ async def generate_notion_project(request: AnalysisRequest):
                 error=result["error"]
             )
         
+        # 생성된 결과 로깅 (디버깅용)
+        logger.info(f"🔍 AI 모델 응답 키: {list(result.keys())}")
+        logger.info(f"🔍 AI 모델 응답 샘플: {json.dumps(result, indent=2, ensure_ascii=False)[:500]}")
+        
         # 데이터 검증
         validated_result = validate_notion_project(result)
+        
+        # 검증 후 결과 로깅
+        logger.info(f"✅ 검증된 결과 키: {list(validated_result.keys())}")
         
         # 노션 형식으로 포맷팅
         formatted_notion = format_notion_project(validated_result)
