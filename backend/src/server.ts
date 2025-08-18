@@ -17,7 +17,7 @@ import * as jwt from 'jsonwebtoken';
 import { SimpleTenantMiddleware } from './middleware/tenant';
 import { AIService } from './services/ai-service';
 import { JiraService } from './services/jira-service';
-import { SmartTaskAssigner } from './services/smart-task-assigner';
+import { SmartAssignmentService } from './services/smart-assignment-service';
 import { authenticateUser, generateToken, createOrUpdateUser } from './middleware/auth';
 
 // Slack 핸들러 import
@@ -43,7 +43,7 @@ const aiService = new AIService();
 const jiraService = new JiraService(prisma);
 
 // 스마트 업무 배정 서비스 초기화
-const smartAssigner = new SmartTaskAssigner(prisma);
+const smartAssigner = new SmartAssignmentService();
 
 // 파일 업로드 설정 (메모리 저장)
 const upload = multer({
