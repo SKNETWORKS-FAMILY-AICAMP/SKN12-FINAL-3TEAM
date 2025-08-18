@@ -2977,8 +2977,32 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
   } else {
     // 멤버 정보 저장 및 다음 멤버로 이동
     console.log('🟡 멤버 정보 처리 - currentIndex:', currentIndex);
+    
+    // members가 metadata에 없으면 에러 처리
+    if (!metadata.members || !Array.isArray(metadata.members)) {
+      console.error('❌ members 배열이 누락됨:', metadata);
+      await ack({
+        response_action: 'errors',
+        errors: {
+          member_role_input: '세션 오류가 발생했습니다. 다시 시작해주세요.'
+        }
+      });
+      return;
+    }
+    
     const memberIndex = currentIndex - 1;
-    const currentMember = members[memberIndex];
+    const currentMember = metadata.members[memberIndex];
+    
+    if (!currentMember) {
+      console.error('❌ 현재 멤버를 찾을 수 없음 - memberIndex:', memberIndex);
+      await ack({
+        response_action: 'errors',
+        errors: {
+          member_role_input: '멤버 정보를 찾을 수 없습니다.'
+        }
+      });
+      return;
+    }
     
     // 현재 멤버 데이터 저장
     const memberInfo = {
@@ -2995,11 +3019,11 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
     
     metadata.memberData.push(memberInfo);
     
-    if (currentIndex < members.length) {
+    if (currentIndex < metadata.members.length) {
       // 다음 멤버 정보 입력
       metadata.currentIndex = currentIndex + 1;
-      const nextMember = members[currentIndex];
-      const isAdmin = nextMember.id === currentUserId;
+      const nextMember = metadata.members[currentIndex];
+      const isAdmin = nextMember.id === metadata.currentUserId;
       
       await ack({
         response_action: 'update',
@@ -3013,7 +3037,7 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
           },
           submit: {
             type: 'plain_text',
-            text: currentIndex === members.length - 1 ? '완료' : '다음'
+            text: currentIndex === metadata.members.length - 1 ? '완료' : '다음'
           },
           close: {
             type: 'plain_text',
@@ -3024,7 +3048,7 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
               type: 'section',
               text: {
                 type: 'mrkdwn',
-                text: `*팀원 정보 설정 (${currentIndex + 2}/${members.length + 1})*\n\n*${nextMember.name}* ${isAdmin ? '(관리자)' : ''}`
+                text: `*팀원 정보 설정 (${currentIndex + 2}/${metadata.members.length + 1})*\n\n*${nextMember.name}* ${isAdmin ? '(관리자)' : ''}`
               }
             },
             {
