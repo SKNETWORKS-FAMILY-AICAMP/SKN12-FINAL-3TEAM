@@ -2763,6 +2763,8 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
     metadata.teamSlug = teamSlug;
     metadata.currentIndex = 1;
     metadata.memberData = [];
+    metadata.members = members;  // members 배열 추가
+    metadata.currentUserId = currentUserId;  // currentUserId도 유지
     
     // 첫 번째 멤버 정보 입력 모달로 업데이트
     const firstMember = members[0];
