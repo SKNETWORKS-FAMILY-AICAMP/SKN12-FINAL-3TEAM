@@ -3014,12 +3014,12 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
       slackUserId: currentMember.id,
       name: currentMember.name,
       email: currentMember.email,
-      role: view.state.values[`member_role_input_${currentIndex}`]?.member_role.selected_option.value,
-      experienceLevel: view.state.values[`member_exp_input_${currentIndex}`]?.member_exp.selected_option.value,
-      availableHours: parseFloat(view.state.values[`member_hours_input_${currentIndex}`]?.member_hours.value),
+      role: view.state.values.member_role_input.member_role.selected_option.value,
+      experienceLevel: view.state.values.member_exp_input.member_exp.selected_option.value,
+      availableHours: parseFloat(view.state.values.member_hours_input.member_hours.value),
       // multi_static_select에서 선택된 옵션들 배열로 받기
-      skills: view.state.values[`member_skills_input_${currentIndex}`]?.member_skills.selected_options?.map(opt => opt.value) || [],
-      preferredTypes: view.state.values[`member_preferred_input_${currentIndex}`]?.member_preferred.selected_options?.map(opt => opt.value) || []
+      skills: view.state.values.member_skills_input.member_skills.selected_options?.map(opt => opt.value) || [],
+      preferredTypes: view.state.values.member_preferred_input.member_preferred.selected_options?.map(opt => opt.value) || []
     };
     
     metadata.memberData.push(memberInfo);
@@ -3038,13 +3038,10 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
       try {
         await ack({
           response_action: 'update',
-          hash: view.hash,  // 현재 뷰의 hash 추가
           view: {
             type: 'modal',
             callback_id: 'setup_team_modal',
             private_metadata: JSON.stringify(metadata),
-            clear_on_close: true,  // 닫을 때 상태 초기화
-            notify_on_close: false,
             title: {
               type: 'plain_text',
               text: '팀원 정보 설정'
@@ -3070,7 +3067,7 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
               },
               {
                 type: 'input',
-                block_id: `member_role_input_${currentIndex + 1}`,
+                block_id: 'member_role_input',
               element: {
                 type: 'static_select',
                 action_id: 'member_role',
@@ -3099,7 +3096,7 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
               },
               {
                 type: 'input',
-                block_id: `member_exp_input_${currentIndex + 1}`,
+                block_id: 'member_exp_input',
               element: {
                 type: 'static_select',
                 action_id: 'member_exp',
@@ -3129,7 +3126,7 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
               },
               {
                 type: 'input',
-                block_id: `member_hours_input_${currentIndex + 1}`,
+                block_id: 'member_hours_input',
               element: {
                 type: 'number_input',
                 action_id: 'member_hours',
@@ -3145,7 +3142,7 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
               },
               {
                 type: 'input',
-                block_id: `member_skills_input_${currentIndex + 1}`,
+                block_id: 'member_skills_input',
               element: {
                 type: 'multi_static_select',
                 action_id: 'member_skills',
@@ -3153,8 +3150,6 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
                   type: 'plain_text',
                   text: '기술 스택을 선택하세요'
                 },
-                // initial_options를 빈 배열로 명시적 설정
-                initial_options: [],
                 options: [
                   { text: { type: 'plain_text', text: 'JavaScript' }, value: 'JavaScript' },
                   { text: { type: 'plain_text', text: 'TypeScript' }, value: 'TypeScript' },
@@ -3186,7 +3181,7 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
               },
               {
                 type: 'input',
-                block_id: `member_preferred_input_${currentIndex + 1}`,
+                block_id: 'member_preferred_input',
               element: {
                 type: 'multi_static_select',
                 action_id: 'member_preferred',
@@ -3194,8 +3189,6 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
                   type: 'plain_text',
                   text: '선호하는 작업 유형을 선택하세요'
                 },
-                // initial_options를 빈 배열로 명시적 설정
-                initial_options: [],
                 options: [
                   { text: { type: 'plain_text', text: '프론트엔드 개발' }, value: 'frontend' },
                   { text: { type: 'plain_text', text: '백엔드 개발' }, value: 'backend' },
