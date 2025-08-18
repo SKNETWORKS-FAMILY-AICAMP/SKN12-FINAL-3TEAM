@@ -191,14 +191,16 @@ class AIService {
     this.timeout = parseInt(process.env.AI_TIMEOUT || '600000'); // 10분으로 증가
     
     // AI 서버 전용 axios 인스턴스 생성
+    const httpsAgent = new https.Agent({
+      rejectUnauthorized: false, // ngrok SSL 인증서 문제 우회
+      keepAlive: true,
+      keepAliveMsecs: 60000
+    });
+    
     this.aiAxios = axios.create({
       timeout: this.timeout,
-      httpsAgent: new https.Agent({
-        rejectUnauthorized: false, // ngrok SSL 인증서 문제 우회
-        keepAlive: true,
-        keepAliveMsecs: 60000
-      })
-    });
+      httpsAgent: httpsAgent
+    } as any);
   }
 
   /**
