@@ -699,17 +699,35 @@ Subtasks:
                     outputs = qwen_model.generate([text], sampling_params)
                     response = outputs[0].outputs[0].text
                     
-                    # JSON 파싱
+                    # JSON 파싱 개선
                     if "```json" in response:
                         json_start = response.find("```json") + 7
                         json_end = response.find("```", json_start)
                         json_content = response[json_start:json_end].strip() if json_end != -1 else response[json_start:].strip()
                     else:
                         json_content = response.strip()
-                        if not json_content.startswith('{'):
-                            json_start_idx = json_content.find('{')
-                            if json_start_idx != -1:
-                                json_content = json_content[json_start_idx:]
+                        
+                    # JSON 객체 시작과 끝 찾기
+                    if json_content:
+                        # 첫 번째 { 찾기
+                        start_idx = json_content.find('{')
+                        if start_idx != -1:
+                            # 마지막 } 찾기 (중첩된 객체 고려)
+                            brace_count = 0
+                            end_idx = -1
+                            for i in range(start_idx, len(json_content)):
+                                if json_content[i] == '{':
+                                    brace_count += 1
+                                elif json_content[i] == '}':
+                                    brace_count -= 1
+                                    if brace_count == 0:
+                                        end_idx = i + 1
+                                        break
+                            
+                            if end_idx != -1:
+                                json_content = json_content[start_idx:end_idx]
+                            else:
+                                json_content = json_content[start_idx:]
                     
                     # 빈 응답 체크
                     if not json_content or json_content == '':
@@ -2587,6 +2605,95 @@ async def final_pipeline(
         return {
             "success": False,
             "step": "pipeline",
+            "error": str(e)
+        }
+
+@app.post("/generate-tasks", response_model=Dict[str, Any])
+async def generate_tasks_endpoint(
+    request: Request,
+    prd: str = Form(None),
+    num_tasks: int = Form(5)
+):
+    """PRD에서 태스크 생성 전용 엔드포인트"""
+    try:
+        logger.info("🎯 Starting task generation from PRD...")
+        
+        # JSON 요청 처리
+        if request.headers.get("content-type") == "application/json":
+            body = await request.json()
+            prd = body.get('prd', '')
+            num_tasks = body.get('num_tasks', 5)
+        
+        if not prd:
+            return {
+                "success": False,
+                "error": "PRD content is required"
+            }
+        
+        # PRD 파싱 (문자열이면 딕셔너리로 변환)
+        if isinstance(prd, str):
+            try:
+                prd_data = json.loads(prd)
+            except:
+                # JSON이 아니면 간단한 PRD 구조 생성
+                prd_data = {
+                    "overview": prd,
+                    "core_features": "Features from PRD",
+                    "user_experience": "User experience",
+                    "technical_architecture": "Technical details",
+                    "development_roadmap": "Development plan",
+                    "logical_dependency_chain": "Dependencies",
+                    "risks_and_mitigations": "Risks",
+                    "appendix": "Additional info"
+                }
+        else:
+            prd_data = prd
+        
+        # Task Master 워크플로우 - PRD to Tasks
+        logger.info(f"   Step 1: Generating {num_tasks} tasks from PRD...")
+        task_items = await generate_tasks_from_prd(prd_data, num_tasks=num_tasks)
+        
+        if not task_items:
+            return {
+                "success": False,
+                "error": "Failed to generate tasks from PRD"
+            }
+        
+        logger.info(f"   ✅ Generated {len(task_items)} tasks")
+        
+        # 복잡도 분석
+        logger.info("   Step 2: Analyzing task complexity...")
+        task_complexity_analysis = await analyze_task_complexity(task_items)
+        
+        # 복잡도 기반 서브태스크 생성
+        logger.info("   Step 3: Generating complexity-based subtasks...")
+        task_items_with_subtasks = await generate_complexity_based_subtasks(
+            task_items, 
+            task_complexity_analysis
+        )
+        
+        # 기술 및 작업 유형 추출
+        logger.info("   Step 4: Extracting required skills and task types...")
+        task_items_with_skills = await extract_skills_and_task_types(task_items_with_subtasks)
+        
+        # 결과 반환
+        tasks_dict = [task.dict() for task in task_items_with_skills]
+        
+        return {
+            "success": True,
+            "tasks": tasks_dict,
+            "metadata": {
+                "total_tasks": len(tasks_dict),
+                "total_subtasks": sum(len(task.get('subtasks', [])) for task in tasks_dict),
+                "source": "PRD",
+                "model": "Qwen3-4B"
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Task generation error: {e}")
+        return {
+            "success": False,
             "error": str(e)
         }
 
