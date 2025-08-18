@@ -190,7 +190,7 @@ const KanbanColumn: React.FC<{
   insertAfter?: string | null;
   dragOverIndex?: number | null;
   parentColorMap?: Map<string, string>;
-  allTasks?: Task[];
+  mainTasksMap?: Map<string, Task>;
 }> = ({ 
   column, 
   onAddTask,
@@ -199,7 +199,7 @@ const KanbanColumn: React.FC<{
   insertAfter = null,
   dragOverIndex = null,
   parentColorMap = new Map(),
-  allTasks = []
+  mainTasksMap = new Map()
 }) => {
   const {
     setNodeRef,
@@ -276,7 +276,7 @@ const KanbanColumn: React.FC<{
                   isInsertAfter={insertAfter === task.id}
                   shouldPushDown={shouldPushDown}
                   parentColor={task.parentId ? parentColorMap.get(task.parentId) : undefined}
-                  parentTask={task.parentId ? allTasks.find(t => t.id === task.parentId) : undefined}
+                  parentTask={task.parentId ? mainTasksMap.get(task.parentId) : undefined}
                 />
                 {showInsertLineAfter && (
                   <motion.div
@@ -333,8 +333,13 @@ const KanbanBoard: React.FC = () => {
   
   // 중첩된 children을 플랫한 배열로 변환
   const allTasks: Task[] = [];
+  const mainTasksMap = new Map<string, Task>();
+  
   rawTasks.forEach(mainTask => {
-    allTasks.push(mainTask);
+    // 메인태스크 저장 (칸반보드에는 표시하지 않음)
+    mainTasksMap.set(mainTask.id, mainTask);
+    
+    // 서브태스크만 allTasks에 추가
     if (mainTask.children && mainTask.children.length > 0) {
       mainTask.children.forEach(subTask => {
         // parentId가 없으면 추가
@@ -358,25 +363,31 @@ const KanbanBoard: React.FC = () => {
     '#6366F1', // 인디고
   ];
 
-  // parentId가 있는 태스크만 필터링 (서브태스크)
-  const tasks = allTasks.filter(task => task.parentId);
+  // allTasks는 이미 서브태스크만 포함하므로 그대로 사용
+  const tasks = allTasks;
   
-  // 메인태스크 찾기 및 색상 매핑
+  // 메인태스크별 색상 매핑
   const parentColorMap = new Map<string, string>();
-  const mainTasks = allTasks.filter(task => !task.parentId);
+  let colorIndex = 0;
   
-  // 각 메인태스크에 고유 색상 할당
-  mainTasks.forEach((mainTask, index) => {
-    parentColorMap.set(mainTask.id, colorPalette[index % colorPalette.length]);
+  // mainTasksMap에서 각 메인태스크에 색상 할당
+  mainTasksMap.forEach((mainTask, mainTaskId) => {
+    parentColorMap.set(mainTaskId, colorPalette[colorIndex % colorPalette.length]);
+    colorIndex++;
   });
   
   // 디버깅 로그
   console.log('=== KanbanBoard Debug ===');
   console.log('Raw tasks from API:', rawTasks.length, rawTasks);
-  console.log('Flattened all tasks:', allTasks.length);
-  console.log('Main tasks (no parentId):', mainTasks.length, mainTasks.map(t => t.title));
-  console.log('Subtasks (with parentId):', tasks.length, tasks.map(t => ({ title: t.title, parentId: t.parentId })));
+  console.log('Main tasks saved in map:', mainTasksMap.size, Array.from(mainTasksMap.values()).map(t => t.title));
+  console.log('Subtasks to display:', tasks.length, tasks.map(t => ({ title: t.title, parentId: t.parentId })));
   console.log('Parent color map:', Array.from(parentColorMap.entries()));
+  
+  // 색상 할당 확인
+  tasks.forEach(task => {
+    const color = task.parentId ? parentColorMap.get(task.parentId) : 'NO PARENT';
+    console.log(`Task: ${task.title}, ParentID: ${task.parentId}, Color: ${color}`);
+  });
 
   // 태스크 상태 업데이트 mutation
   const updateTaskMutation = useMutation({
@@ -602,7 +613,7 @@ const KanbanBoard: React.FC = () => {
                 insertAfter={insertAfter}
                 dragOverIndex={dragOverIndex}
                 parentColorMap={parentColorMap}
-                allTasks={allTasks}
+                mainTasksMap={mainTasksMap}
               />
             </motion.div>
           ))}
@@ -619,7 +630,7 @@ const KanbanBoard: React.FC = () => {
               isDragging 
               index={0}
               parentColor={activeTask.parentId ? parentColorMap.get(activeTask.parentId) || '#3B82F6' : undefined}
-              parentTask={activeTask.parentId ? allTasks.find(t => t.id === activeTask.parentId) : undefined}
+              parentTask={activeTask.parentId ? mainTasksMap.get(activeTask.parentId) : undefined}
             />
           ) : null}
         </DragOverlay>

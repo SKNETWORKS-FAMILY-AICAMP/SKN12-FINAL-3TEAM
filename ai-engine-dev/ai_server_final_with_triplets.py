@@ -699,6 +699,12 @@ Subtasks:
                     outputs = qwen_model.generate([text], sampling_params)
                     response = outputs[0].outputs[0].text
                     
+                    # <think> 태그 제거
+                    if "<think>" in response:
+                        think_end = response.find("</think>")
+                        if think_end != -1:
+                            response = response[think_end + 8:].strip()
+                    
                     # JSON 파싱 개선
                     if "```json" in response:
                         json_start = response.find("```json") + 7

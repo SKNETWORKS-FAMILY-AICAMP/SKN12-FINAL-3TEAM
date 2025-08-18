@@ -4,7 +4,9 @@
  * WhisperX + Triplet + BERT + Qwen 통합 처리
  */
 import axiosInstance from '../lib/axios';
+import axios from 'axios';
 import FormData from 'form-data';
+import https from 'https';
 
 interface TranscriptionResult {
   success: boolean;
@@ -182,10 +184,23 @@ interface TwoStagePipelineResult {
 class AIService {
   private baseUrl: string;
   private timeout: number;
+  private aiAxios: any;
 
   constructor() {
     this.baseUrl = process.env.RUNPOD_AI_URL || 'http://localhost:8000';
-    this.timeout = parseInt(process.env.AI_TIMEOUT || '300000'); // 5분
+    this.timeout = parseInt(process.env.AI_TIMEOUT || '600000'); // 10분으로 증가
+    
+    // AI 서버 전용 axios 인스턴스 생성
+    this.aiAxios = axios.create({
+      timeout: this.timeout,
+      maxContentLength: Infinity,
+      maxBodyLength: Infinity,
+      httpsAgent: new https.Agent({
+        rejectUnauthorized: false, // ngrok SSL 인증서 문제 우회
+        keepAlive: true,
+        keepAliveMsecs: 60000
+      })
+    });
   }
 
   /**
@@ -380,9 +395,7 @@ class AIService {
       console.log(`⚡ Generating tasks from PRD using VLLM AI server`);
 
       try {
-        const response = await axiosInstance.post<GeneratedTasksResult> (`${this.baseUrl}/generate-tasks`, prd, {
-          timeout: this.timeout
-        });
+        const response = await this.aiAxios.post<GeneratedTasksResult> (`${this.baseUrl}/generate-tasks`, prd);
 
         const result: GeneratedTasksResult = response.data;
 
@@ -670,13 +683,11 @@ class AIService {
         if (isTextInput) {
           const transcript = audioBuffer.toString('utf-8');
 
-          const response = await axiosInstance.post<any>(`${this.baseUrl}/pipeline-final`, {
+          const response = await this.aiAxios.post<any>(`${this.baseUrl}/pipeline-final`, {
             transcript,
             generate_notion: true,
             generate_tasks: true,
             num_tasks: 5
-          }, {
-            timeout: this.timeout
           });
 
           // AI 서버 응답을 백엔드 형식으로 변환
@@ -733,8 +744,7 @@ class AIService {
             headers: formData.getHeaders()
           });
 
-          const response = await axiosInstance.post<any>(`${this.baseUrl}/pipeline-final`, formData, {
-            timeout: this.timeout,
+          const response = await this.aiAxios.post<any>(`${this.baseUrl}/pipeline-final`, formData, {
             headers: {
               ...formData.getHeaders(),
               'Accept': 'application/json'
@@ -857,7 +867,33 @@ class AIService {
       console.log(`⚠️ AI 서버 연결 실패, 더미 응답 사용`);
 
       const transcript = audioBuffer.toString('utf-8');
-      const tasksResult = await this.generateTasks({});
+      
+      // 더미 PRD 생성
+      const dummyPrd = {
+        overview: "AI 기반 프로젝트 관리 시스템 구축",
+        core_features: [
+          { name: "음성 인식 시스템", description: "회의 음성을 텍스트로 변환" },
+          { name: "업무 자동 생성", description: "회의 내용을 분석하여 업무 자동 생성" },
+          { name: "스마트 할당", description: "팀원 역량에 따른 업무 자동 할당" }
+        ],
+        user_experience: {
+          target_users: ["개발팀", "기획팀", "디자인팀"],
+          user_journey: "음성 업로드 → AI 분석 → 업무 생성 → 팀원 할당"
+        },
+        technical_architecture: {
+          frontend: "React, TypeScript",
+          backend: "Node.js, Express",
+          database: "PostgreSQL, Prisma ORM",
+          infrastructure: "AWS EC2, S3"
+        },
+        development_roadmap: [
+          { phase: "1단계", period: "2주", details: "기본 시스템 구축" },
+          { phase: "2단계", period: "2주", details: "AI 기능 통합" },
+          { phase: "3단계", period: "1주", details: "테스트 및 배포" }
+        ]
+      };
+      
+      const tasksResult = await this.generateTasks(dummyPrd);
 
       if (!tasksResult.success || !tasksResult.tasks) {
         throw new Error('업무 생성 실패');
