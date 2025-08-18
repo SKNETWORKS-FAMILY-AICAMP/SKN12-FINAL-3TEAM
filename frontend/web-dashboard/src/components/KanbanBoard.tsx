@@ -9,11 +9,16 @@ import {
   PointerSensor,
   useSensor,
   useSensors,
-  closestCorners,
+  closestCenter,
+  DragOverEvent,
 } from '@dnd-kit/core';
 import {
   SortableContext,
   verticalListSortingStrategy,
+  arrayMove,
+  insertAtIndex,
+  removeAtIndex,
+  rectIntersection,
 } from '@dnd-kit/sortable';
 import {
   useSortable,
@@ -40,7 +45,14 @@ interface KanbanColumn {
   tasks: Task[];
 }
 
-const TaskCard: React.FC<{ task: Task; isDragging?: boolean }> = ({ task, isDragging }) => {
+const TaskCard: React.FC<{ 
+  task: Task; 
+  isDragging?: boolean; 
+  isOver?: boolean;
+  isInsertAfter?: boolean;
+  shouldPushDown?: boolean;
+  index: number;
+}> = ({ task, isDragging, isOver = false, isInsertAfter = false, shouldPushDown = false, index }) => {
   const {
     attributes,
     listeners,
@@ -48,24 +60,17 @@ const TaskCard: React.FC<{ task: Task; isDragging?: boolean }> = ({ task, isDrag
     transform,
     transition,
     isDragging: isSortableDragging,
-  } = useSortable({ id: task.id });
+  } = useSortable({ 
+    id: task.id,
+    transition: {
+      duration: 150,
+      easing: 'cubic-bezier(0.25, 1, 0.5, 1)',
+    },
+  });
 
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-  };
-
-  const getPriorityColor = (priority: Task['priority']) => {
-    switch (priority) {
-      case 'HIGH':
-        return 'bg-accent-red/10 text-accent-red border-accent-red/20';
-      case 'MEDIUM':
-        return 'bg-accent-amber/10 text-accent-amber border-accent-amber/20';
-      case 'LOW':
-        return 'bg-accent-green/10 text-accent-green border-accent-green/20';
-      default:
-        return 'bg-neutral-100 text-neutral-600 border-neutral-200';
-    }
   };
 
   const formatDate = (dateString?: string) => {
@@ -82,12 +87,29 @@ const TaskCard: React.FC<{ task: Task; isDragging?: boolean }> = ({ task, isDrag
       style={style}
       {...attributes}
       {...listeners}
+      data-task-id={task.id}
       initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
+      animate={{ 
+        opacity: shouldPushDown ? 0.5 : 1, 
+        y: shouldPushDown ? 100 : 0,
+        scale: shouldPushDown ? 0.95 : 1,
+        x: shouldPushDown ? 10 : 0
+      }}
       exit={{ opacity: 0, y: -10 }}
-      whileHover={{ y: -2 }}
+      whileHover={{ y: -2, scale: 1.02 }}
+      whileTap={{ scale: 0.98 }}
+      transition={{ 
+        duration: shouldPushDown ? 0.2 : 0.2,
+        ease: shouldPushDown ? 'easeOut' : 'easeInOut'
+      }}
       className={`bg-white rounded-2xl p-4 shadow-soft border border-neutral-200 cursor-grab active:cursor-grabbing transition-all duration-200 hover:shadow-medium ${
-        isDragging || isSortableDragging ? 'opacity-50 rotate-3 scale-105' : ''
+        isDragging || isSortableDragging ? 'opacity-90 rotate-1 scale-105 shadow-xl z-[100]' : ''
+      } ${
+        isOver ? 'ring-2 ring-blue-400 ring-offset-2 bg-blue-50 border-blue-300' : ''
+      } ${
+        isInsertAfter ? 'border-t-4 border-t-blue-400' : ''
+      } ${
+        shouldPushDown ? 'opacity-50 z-10' : ''
       }`}
     >
       {/* 태스크 헤더 */}
@@ -121,23 +143,15 @@ const TaskCard: React.FC<{ task: Task; isDragging?: boolean }> = ({ task, isDrag
           </div>
         )}
 
-        {/* 마감일과 우선순위 */}
-        <div className="flex items-center justify-between">
-          {/* 마감일 */}
-          {task.dueDate && (
-            <div className="flex items-center space-x-1">
-              <Calendar className="w-3 h-3 text-neutral-400" />
-              <span className="text-xs text-neutral-500">
-                {formatDate(task.dueDate)}
-              </span>
-            </div>
-          )}
-
-          {/* 우선순위 배지 */}
-          <span className={`px-2 py-1 rounded-lg text-xs font-medium border ${getPriorityColor(task.priority)}`}>
-            {task.priority === 'HIGH' ? '높음' : task.priority === 'MEDIUM' ? '중간' : '낮음'}
-          </span>
-        </div>
+        {/* 마감일 */}
+        {task.dueDate && (
+          <div className="flex items-center space-x-1">
+            <Calendar className="w-3 h-3 text-neutral-400" />
+            <span className="text-xs text-neutral-500">
+              {formatDate(task.dueDate)}
+            </span>
+          </div>
+        )}
 
         {/* 예상 시간 */}
         {task.metadata?.estimatedHours && (
@@ -153,9 +167,20 @@ const TaskCard: React.FC<{ task: Task; isDragging?: boolean }> = ({ task, isDrag
   );
 };
 
-const KanbanColumn: React.FC<{ column: KanbanColumn; onAddTask: (columnId: string) => void }> = ({ 
+const KanbanColumn: React.FC<{ 
+  column: KanbanColumn; 
+  onAddTask: (columnId: string) => void;
+  isOver?: boolean;
+  overTaskId?: string | null;
+  insertAfter?: string | null;
+  dragOverIndex?: number | null;
+}> = ({ 
   column, 
-  onAddTask 
+  onAddTask,
+  isOver = false,
+  overTaskId = null,
+  insertAfter = null,
+  dragOverIndex = null
 }) => {
   const {
     setNodeRef,
@@ -177,7 +202,9 @@ const KanbanColumn: React.FC<{ column: KanbanColumn; onAddTask: (columnId: strin
   return (
     <div className="flex flex-col h-full">
       {/* 컬럼 헤더 */}
-      <div className={`${column.bgColor} rounded-2xl p-4 mb-4 border border-opacity-20`} style={{ borderColor: column.color }}>
+      <div className={`${column.bgColor} rounded-2xl p-4 mb-4 border border-opacity-20 transition-all duration-200 ${
+        isOver ? 'ring-2 ring-offset-2 ring-blue-400 scale-105' : ''
+      }`} style={{ borderColor: column.color }}>
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <div className={`p-2 rounded-xl ${column.bgColor.replace('/10', '/20')}`} style={{ color: column.color }}>
@@ -200,11 +227,48 @@ const KanbanColumn: React.FC<{ column: KanbanColumn; onAddTask: (columnId: strin
       </div>
 
       {/* 태스크 리스트 */}
-      <div ref={setNodeRef} className="flex-1 space-y-3 min-h-[200px]">
+      <div 
+        ref={setNodeRef} 
+        className={`flex-1 space-y-3 min-h-[200px] transition-all duration-200 rounded-2xl p-2 ${
+          isOver ? 'bg-blue-50 border-2 border-dashed border-blue-300' : ''
+        }`}
+      >
         <SortableContext items={column.tasks.map(task => task.id)} strategy={verticalListSortingStrategy}>
-          {column.tasks.map((task) => (
-            <TaskCard key={task.id} task={task} />
-          ))}
+          {column.tasks.map((task, index) => {
+            const shouldPushDown = dragOverIndex !== null && index >= dragOverIndex;
+            const showInsertLine = dragOverIndex === index && !insertAfter;
+            const showInsertLineAfter = dragOverIndex === index + 1 && insertAfter === task.id;
+            
+            return (
+              <React.Fragment key={task.id}>
+                {showInsertLine && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 6 }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="bg-blue-500 rounded-full mx-2 my-2 shadow-lg"
+                    style={{ height: '6px' }}
+                  />
+                )}
+                <TaskCard 
+                  task={task} 
+                  index={index}
+                  isOver={overTaskId === task.id}
+                  isInsertAfter={insertAfter === task.id}
+                  shouldPushDown={shouldPushDown}
+                />
+                {showInsertLineAfter && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 6 }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="bg-blue-500 rounded-full mx-2 my-2 shadow-lg"
+                    style={{ height: '6px' }}
+                  />
+                )}
+              </React.Fragment>
+            );
+          })}
         </SortableContext>
         
         {column.tasks.length === 0 && (
@@ -213,6 +277,15 @@ const KanbanColumn: React.FC<{ column: KanbanColumn; onAddTask: (columnId: strin
             animate={{ opacity: 1 }}
             className="flex flex-col items-center justify-center h-32 border-2 border-dashed border-neutral-200 rounded-2xl text-neutral-400"
           >
+            {isOver && dragOverIndex === 0 && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 6 }}
+                exit={{ opacity: 0, height: 0 }}
+                className="bg-blue-500 rounded-full mx-2 my-2 shadow-lg mb-4"
+                style={{ height: '6px', width: '80%' }}
+              />
+            )}
             <Target className="w-8 h-8 mb-2" />
             <p className="text-sm font-medium">업무가 없습니다</p>
             <p className="text-xs">새 업무를 추가해보세요</p>
@@ -225,6 +298,10 @@ const KanbanColumn: React.FC<{ column: KanbanColumn; onAddTask: (columnId: strin
 
 const KanbanBoard: React.FC = () => {
   const [activeTask, setActiveTask] = useState<Task | null>(null);
+  const [overColumnId, setOverColumnId] = useState<string | null>(null);
+  const [overTaskId, setOverTaskId] = useState<string | null>(null);
+  const [insertAfter, setInsertAfter] = useState<string | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const queryClient = useQueryClient();
 
   // 태스크 데이터 가져오기
@@ -273,7 +350,8 @@ const KanbanBoard: React.FC = () => {
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 8,
+        distance: 3, // 더 민감하게
+        delay: 50, // 더 빠른 반응
       },
     })
   );
@@ -284,11 +362,81 @@ const KanbanBoard: React.FC = () => {
     setActiveTask(task || null);
   };
 
+  const handleDragOver = (event: DragOverEvent) => {
+    const { over, active } = event;
+    
+    if (!over || active.id === over.id) {
+      setOverColumnId(null);
+      setOverTaskId(null);
+      setInsertAfter(null);
+      setDragOverIndex(null);
+      return;
+    }
+
+    // 컬럼 위에 있는지 확인
+    const column = columns.find(col => col.id === over.id);
+    if (column) {
+      setOverColumnId(column.id);
+      setOverTaskId(null);
+      setInsertAfter(null);
+      setDragOverIndex(0); // 컬럼의 맨 위에 삽입
+      return;
+    }
+    
+    // 태스크 위에 있는지 확인
+    const task = tasks.find(t => t.id === over.id);
+    if (task) {
+      setOverTaskId(task.id);
+      const taskColumn = columns.find(col => col.tasks.some(t => t.id === task.id));
+      if (taskColumn) {
+        setOverColumnId(taskColumn.id);
+        
+        const taskIndex = taskColumn.tasks.findIndex(t => t.id === task.id);
+        
+        // 마우스 위치에 따라 삽입 위치 결정
+        if (event.activatorEvent) {
+          const mouseEvent = event.activatorEvent as MouseEvent;
+          const taskElement = document.querySelector(`[data-task-id="${task.id}"]`) as HTMLElement;
+          
+          if (taskElement) {
+            const rect = taskElement.getBoundingClientRect();
+            const mouseY = mouseEvent.clientY;
+            const taskTop = rect.top;
+            const taskBottom = rect.bottom;
+            const taskHeight = rect.height;
+            
+            // 카드의 상단 1/4 지점과 하단 1/4 지점을 기준으로 판단 (더 민감하게)
+            const upperThreshold = taskTop + taskHeight * 0.25;
+            const lowerThreshold = taskBottom - taskHeight * 0.25;
+            
+            if (mouseY < upperThreshold) {
+              // 카드 위쪽에 드래그 - 해당 위치에 삽입
+              setInsertAfter(null);
+              setDragOverIndex(taskIndex);
+            } else if (mouseY > lowerThreshold) {
+              // 카드 아래쪽에 드래그 - 다음 위치에 삽입
+              setInsertAfter(task.id);
+              setDragOverIndex(taskIndex + 1);
+            } else {
+              // 카드 중앙에 드래그 - 해당 위치에 삽입 (겹치지 않도록)
+              setInsertAfter(null);
+              setDragOverIndex(taskIndex);
+            }
+          }
+        }
+      }
+    }
+  };
+
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     
     if (!over) {
-      setActiveTask(null);
+          setActiveTask(null);
+    setOverColumnId(null);
+    setOverTaskId(null);
+    setInsertAfter(null);
+    setDragOverIndex(null);
       return;
     }
 
@@ -304,7 +452,36 @@ const KanbanBoard: React.FC = () => {
       });
     }
 
+    // 태스크 위에 드롭한 경우 - 해당 위치에 삽입
+    const overTask = tasks.find(t => t.id === overId);
+    if (overTask) {
+      const sourceColumn = columns.find(col => col.tasks.some(t => t.id === activeTaskId));
+      const targetColumn = columns.find(col => col.tasks.some(t => t.id === overId));
+      
+      if (sourceColumn && targetColumn) {
+        // 같은 컬럼 내에서 순서만 변경
+        if (sourceColumn.id === targetColumn.id) {
+          const oldIndex = sourceColumn.tasks.findIndex(t => t.id === activeTaskId);
+          const newIndex = targetColumn.tasks.findIndex(t => t.id === overId);
+          
+          if (oldIndex !== newIndex) {
+            const newTasks = arrayMove(sourceColumn.tasks, oldIndex, newIndex);
+            // 여기서 실제로는 API 호출로 순서 업데이트
+            console.log('Reorder in same column:', { oldIndex, newIndex, newTasks });
+          }
+        } else {
+          // 다른 컬럼으로 이동
+          updateTaskMutation.mutate({
+            taskId: activeTaskId,
+            status: targetColumn.status,
+          });
+        }
+      }
+    }
+
     setActiveTask(null);
+    setOverColumnId(null);
+    setOverTaskId(null);
   };
 
   const handleAddTask = (columnId: string) => {
@@ -335,8 +512,9 @@ const KanbanBoard: React.FC = () => {
       {/* 칸반 보드 */}
       <DndContext
         sensors={sensors}
-        collisionDetection={closestCorners}
+        collisionDetection={closestCenter}
         onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
       >
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 h-full">
@@ -348,13 +526,23 @@ const KanbanBoard: React.FC = () => {
               transition={{ delay: 0.1 * columns.indexOf(column) }}
               className="flex flex-col"
             >
-              <KanbanColumn column={column} onAddTask={handleAddTask} />
+              <KanbanColumn 
+                column={column} 
+                onAddTask={handleAddTask}
+                isOver={overColumnId === column.id}
+                overTaskId={overTaskId}
+                insertAfter={insertAfter}
+                dragOverIndex={dragOverIndex}
+              />
             </motion.div>
           ))}
         </div>
 
         {/* 드래그 오버레이 */}
-        <DragOverlay>
+        <DragOverlay dropAnimation={{
+          duration: 200,
+          easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)',
+        }}>
           {activeTask ? <TaskCard task={activeTask} isDragging /> : null}
         </DragOverlay>
       </DndContext>

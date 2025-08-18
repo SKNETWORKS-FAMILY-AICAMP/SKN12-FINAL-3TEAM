@@ -168,7 +168,7 @@ export const projectAPI = {
         },
       });
 
-      return response.data;
+      return response.data as { success: boolean; message: string; projectId?: string };
     } catch (error) {
       console.error('Failed to create project from audio:', error);
       return { success: false, message: '음성 처리 중 오류가 발생했습니다.' };
@@ -226,6 +226,53 @@ export const taskAPI = {
       return false;
     }
   },
+  
+  // 새 업무 생성
+  createTask: async (taskData: {
+    title: string;
+    description?: string;
+    status?: Task['status'];
+    priority?: Task['priority'];
+    dueDate?: string;
+    assigneeId?: string;
+    projectId: string; // 필수 추가
+  }): Promise<Task> => {
+    try {
+      const response: AxiosResponse<Task> = await apiClient.post('/api/tasks', taskData);
+      return response.data;
+    } catch (error) {
+      console.error('Failed to create task:', error);
+      throw error;
+    }
+  },
+
+  // 업무 수정
+  updateTask: async (taskId: string, updates: {
+    title?: string;
+    description?: string;
+    status?: Task['status'];
+    priority?: Task['priority'];
+    dueDate?: string;
+    assigneeId?: string;
+  }): Promise<Task> => {
+    try {
+      const response: AxiosResponse<Task> = await apiClient.patch(`/api/tasks/${taskId}`, updates);
+      return response.data;
+    } catch (error) {
+      console.error('Failed to update task:', error);
+      throw error;
+    }
+  },
+
+  // 업무 삭제
+  deleteTask: async (taskId: string): Promise<void> => {
+    try {
+      await apiClient.delete(`/api/tasks/${taskId}`);
+    } catch (error) {
+      console.error('Failed to delete task:', error);
+      throw error;
+    }
+  },
 };
 
 export const userAPI = {
@@ -250,6 +297,52 @@ export const userAPI = {
       return null;
     }
   },
+
+  // 사용자 생성
+  createUser: async (userData: {
+    name: string;
+    email: string;
+    role?: User['role'];
+    skills?: string[];
+    availableHours?: number;
+    experienceLevel?: string;
+  }): Promise<User> => {
+    try {
+      const response: AxiosResponse<User> = await apiClient.post('/api/users', userData);
+      return response.data;
+    } catch (error) {
+      console.error('Failed to create user:', error);
+      throw error;
+    }
+  },
+
+  // 사용자 수정
+  updateUser: async (userId: string, updates: {
+    name?: string;
+    email?: string;
+    role?: User['role'];
+    skills?: string[];
+    availableHours?: number;
+    experienceLevel?: string;
+  }): Promise<User> => {
+    try {
+      const response: AxiosResponse<User> = await apiClient.patch(`/api/users/${userId}`, updates);
+      return response.data;
+    } catch (error) {
+      console.error('Failed to update user:', error);
+      throw error;
+    }
+  },
+
+  // 사용자 삭제
+  deleteUser: async (userId: string): Promise<void> => {
+    try {
+      await apiClient.delete(`/api/users/${userId}`);
+    } catch (error) {
+      console.error('Failed to delete user:', error);
+      throw error;
+    }
+  },
 };
 
 export const slackAPI = {
@@ -266,7 +359,7 @@ export const slackAPI = {
 };
 
 export const integrationAPI = {
-  // 연동 상태 조회
+  // 연동 상태 조회 (getStatus로도 접근 가능)
   getIntegrationStatus: async () => {
     try {
       const response = await apiClient.get('/api/integrations/status');
@@ -281,27 +374,49 @@ export const integrationAPI = {
     }
   },
 
-  // Notion 연동
-  connectNotion: async () => {
+  // getStatus 별칭 (다른 컴포넌트에서 사용)
+  getStatus: async () => {
+    return integrationAPI.getIntegrationStatus();
+  },
+
+  // 연동 해지
+  disconnectService: async (service: 'slack' | 'notion' | 'jira'): Promise<{ success: boolean; message: string }> => {
     try {
-      const response = await apiClient.get('/api/integrations/notion/auth');
-      return response.data.authUrl;
+      const response = await apiClient.delete(`/api/integrations/${service}`);
+      return {
+        success: true,
+        message: response.data.message || '연동이 해제되었습니다.'
+      };
     } catch (error) {
-      console.error('Failed to get Notion auth URL:', error);
-      return null;
+      console.error(`Failed to disconnect ${service}:`, error);
+      return {
+        success: false,
+        message: '연동 해제에 실패했습니다.'
+      };
     }
   },
 
-  // JIRA 연동
-  connectJira: async () => {
-    try {
-      const response = await apiClient.get('/api/integrations/jira/auth');
-      return response.data.authUrl;
-    } catch (error) {
-      console.error('Failed to get JIRA auth URL:', error);
-      return null;
-    }
-  },
+  // Notion 연동 (OAuth 리다이렉트 방식으로 변경됨 - 사용 안 함)
+  // connectNotion: async () => {
+  //   try {
+  //     const response = await apiClient.get('/api/integrations/notion/auth');
+  //     return response.data.authUrl;
+  //   } catch (error) {
+  //     console.error('Failed to get Notion auth URL:', error);
+  //     return null;
+  //   }
+  // },
+
+  // JIRA 연동 (OAuth 리다이렉트 방식으로 변경됨 - 사용 안 함)
+  // connectJira: async () => {
+  //   try {
+  //     const response = await apiClient.get('/api/integrations/jira/auth');
+  //     return response.data.authUrl;
+  //   } catch (error) {
+  //     console.error('Failed to get JIRA auth URL:', error);
+  //     return null;
+  //   }
+  // },
 };
 
 // Real-time event listeners

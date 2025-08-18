@@ -1,14 +1,43 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Home, MessageSquare, FileText, Settings, ChevronRight } from 'lucide-react';
+import { Home, MessageSquare, FileText, Settings, ChevronRight, Link as LinkIcon } from 'lucide-react';
+import ttalkkakLogo from '../assets/logo.png';
+import { useQuery } from '@tanstack/react-query';
+import { integrationAPI, taskAPI } from '../services/api';
 
 interface SidebarProps {
   setActiveMenu: (menu: string) => void;
 }
 
+interface MenuItemType {
+  id: string;
+  icon: any;
+  label: string;
+  path: string;
+  description: string;
+  badge?: number;
+  status?: 'connected' | 'disconnected' | 'loading';
+}
+
 const Sidebar = ({ setActiveMenu }: SidebarProps) => {
   const location = useLocation();
+
+  // 실시간 데이터 가져오기
+  const { data: integrationStatus } = useQuery({
+    queryKey: ['integrationStatus'],
+    queryFn: integrationAPI.getStatus,
+    refetchInterval: 30000 // 30초마다 갱신
+  });
+
+  const { data: tasks = [] } = useQuery({
+    queryKey: ['tasks'],
+    queryFn: taskAPI.getTasks,
+    refetchInterval: 30000 // 30초마다 갱신
+  });
+
+  // 진행 중인 작업 개수 계산
+  const inProgressTasksCount = tasks.filter(task => task.status === 'IN_PROGRESS').length;
   
-  const menuItems = [
+  const menuItems: MenuItemType[] = [
     { 
       id: 'home', 
       icon: Home, 
@@ -28,7 +57,19 @@ const Sidebar = ({ setActiveMenu }: SidebarProps) => {
       icon: FileText, 
       label: '업무 관리', 
       path: '/task',
-      description: '프로젝트 및 태스크'
+      description: '프로젝트 및 태스크',
+      badge: inProgressTasksCount > 0 ? inProgressTasksCount : undefined
+    },
+    // 연동 메뉴 추가
+    {
+      id: 'integration',
+      icon: LinkIcon,
+      label: '연동',
+      path: '/integration',
+      description: '외부 서비스 연동',
+      status: integrationStatus ? 
+        (integrationStatus.slack || integrationStatus.notion || integrationStatus.jira ? 'connected' : 'disconnected') 
+        : 'loading'
     },
     { 
       id: 'settings', 
@@ -41,12 +82,20 @@ const Sidebar = ({ setActiveMenu }: SidebarProps) => {
 
   const getActiveMenu = () => {
     const currentPath = location.pathname;
-    const currentItem = menuItems.find(item => item.path === currentPath);
-    return currentItem?.id || 'home';
+    
+    // 정확한 경로 매칭
+    if (currentPath === '/') return 'home';
+    if (currentPath === '/meeting') return 'meeting';
+    if (currentPath === '/task') return 'task';
+    if (currentPath === '/integration') return 'integration';
+    if (currentPath === '/settings') return 'settings';
+    
+    // 기본값
+    return 'home';
   };
 
   return (
-    <div className="w-72 bg-gradient-to-br from-brand-50 to-brand-100 border-r border-brand-200 min-h-screen relative overflow-hidden">
+    <div className="w-72 bg-gradient-to-br from-brand-50 to-brand-100 dark:from-gray-800 dark:to-gray-900 border-r border-brand-200 dark:border-gray-700 min-h-screen relative overflow-hidden transition-colors">
       {/* Background Pattern */}
       <div className="absolute inset-0 opacity-5">
         <div className="absolute -top-4 -left-4 w-24 h-24 bg-brand-300 rounded-full blur-xl"></div>
@@ -55,24 +104,13 @@ const Sidebar = ({ setActiveMenu }: SidebarProps) => {
       </div>
 
       {/* Header */}
-      <div className="relative z-10 p-6 border-b border-brand-200/50">
-        <div className="flex items-center space-x-3">
-          {/* Logo Icon */}
-          <div className="relative">
-            <div className="w-10 h-10 bg-gradient-to-br from-brand-300 to-brand-500 rounded-xl flex items-center justify-center shadow-soft">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                <path d="M12 3 L15 8 L21 8 L16.5 12 L18 18 L12 15 L6 18 L7.5 12 L3 8 L9 8 Z" fill="white" stroke="none"/>
-                <path d="M15 11 L21 11 L18 14 Z" fill="#4A5D3A" stroke="none"/>
-              </svg>
-            </div>
-            <div className="absolute -top-1 -right-1 w-3 h-3 bg-brand-400 rounded-full animate-pulse"></div>
-          </div>
-          
-          {/* Logo Text */}
-          <div>
-            <h1 className="text-xl font-bold text-neutral-800 tracking-tight">TtalKkak</h1>
-            <p className="text-xs text-neutral-600 font-medium">AI 프로젝트 관리</p>
-          </div>
+      <div className="relative z-10 p-6 border-b border-brand-200/50 dark:border-gray-700/50">
+        <div className="flex items-center justify-start">
+          <img 
+            src={ttalkkakLogo} 
+            alt="TtalKkak Logo" 
+            className="w-28 h-22"
+          />
         </div>
       </div>
       
@@ -89,8 +127,8 @@ const Sidebar = ({ setActiveMenu }: SidebarProps) => {
               onClick={() => setActiveMenu(item.id)}
               className={`group relative w-full flex items-center p-4 rounded-2xl transition-all duration-200 ${
                 isActive 
-                  ? 'bg-white shadow-medium text-brand-700 scale-[1.02]' 
-                  : 'text-neutral-700 hover:bg-white/50 hover:shadow-soft hover:scale-[1.01]'
+                  ? 'bg-white dark:bg-gray-700 shadow-medium text-brand-700 dark:text-blue-400 scale-[1.02]' 
+                  : 'text-neutral-700 dark:text-gray-300 hover:bg-white/50 dark:hover:bg-gray-700/50 hover:shadow-soft hover:scale-[1.01]'
               }`}
             >
               {/* Active Indicator */}
@@ -101,8 +139,8 @@ const Sidebar = ({ setActiveMenu }: SidebarProps) => {
               {/* Icon Container */}
               <div className={`flex items-center justify-center w-10 h-10 rounded-xl transition-colors duration-200 ${
                 isActive 
-                  ? 'bg-brand-100 text-brand-600' 
-                  : 'bg-neutral-100 text-neutral-500 group-hover:bg-brand-50 group-hover:text-brand-500'
+                  ? 'bg-brand-100 dark:bg-blue-900/30 text-brand-600 dark:text-blue-400' 
+                  : 'bg-neutral-100 dark:bg-gray-600 text-neutral-500 dark:text-gray-300 group-hover:bg-brand-50 dark:group-hover:bg-blue-900/20 group-hover:text-brand-500 dark:group-hover:text-blue-400'
               }`}>
                 <Icon className="w-5 h-5" />
               </div>
@@ -110,19 +148,34 @@ const Sidebar = ({ setActiveMenu }: SidebarProps) => {
               {/* Content */}
               <div className="ml-4 flex-1">
                 <div className="flex items-center justify-between">
-                  <span className={`font-semibold text-sm ${
-                    isActive ? 'text-brand-700' : 'text-neutral-700'
-                  }`}>
-                    {item.label}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className={`font-semibold text-sm ${
+                      isActive ? 'text-brand-700 dark:text-blue-400' : 'text-neutral-700 dark:text-gray-300'
+                    }`}>
+                      {item.label}
+                    </span>
+                    {/* Badge for task count */}
+                    {item.badge && (
+                      <span className="bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                        {item.badge}
+                      </span>
+                    )}
+                    {/* Status indicator for integrations */}
+                    {item.status && (
+                      <div className={`w-2 h-2 rounded-full ${
+                        item.status === 'connected' ? 'bg-green-500' : 
+                        item.status === 'disconnected' ? 'bg-gray-400' : 'bg-yellow-500'
+                      }`}></div>
+                    )}
+                  </div>
                   <ChevronRight className={`w-4 h-4 transition-all duration-200 ${
                     isActive 
-                      ? 'text-brand-500 translate-x-0 opacity-100' 
-                      : 'text-neutral-400 -translate-x-1 opacity-0 group-hover:translate-x-0 group-hover:opacity-100'
+                      ? 'text-brand-500 dark:text-blue-400 translate-x-0 opacity-100' 
+                      : 'text-neutral-400 dark:text-gray-500 -translate-x-1 opacity-0 group-hover:translate-x-0 group-hover:opacity-100'
                   }`} />
                 </div>
                 <p className={`text-xs mt-0.5 ${
-                  isActive ? 'text-brand-600' : 'text-neutral-500'
+                  isActive ? 'text-brand-600 dark:text-blue-300' : 'text-neutral-500 dark:text-gray-400'
                 }`}>
                   {item.description}
                 </p>
@@ -134,21 +187,6 @@ const Sidebar = ({ setActiveMenu }: SidebarProps) => {
 
       {/* Bottom Section */}
       <div className="absolute bottom-0 left-0 right-0 p-4">
-        {/* Status Indicator */}
-        <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-4 border border-brand-200/50 shadow-soft">
-          <div className="flex items-center space-x-3">
-            <div className="flex space-x-1">
-              <div className="w-2 h-2 bg-accent-green rounded-full animate-pulse"></div>
-              <div className="w-2 h-2 bg-brand-400 rounded-full animate-pulse delay-100"></div>
-              <div className="w-2 h-2 bg-accent-blue rounded-full animate-pulse delay-200"></div>
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-neutral-700">시스템 정상</p>
-              <p className="text-xs text-neutral-500">모든 서비스 연결됨</p>
-            </div>
-          </div>
-        </div>
-
         {/* Version Info */}
         <div className="mt-3 text-center">
           <p className="text-xs text-neutral-400 font-medium">TtalKkak v1.0.0</p>
