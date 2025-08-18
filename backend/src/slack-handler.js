@@ -3014,12 +3014,12 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
       slackUserId: currentMember.id,
       name: currentMember.name,
       email: currentMember.email,
-      role: view.state.values.member_role_input.member_role.selected_option.value,
-      experienceLevel: view.state.values.member_exp_input.member_exp.selected_option.value,
-      availableHours: parseFloat(view.state.values.member_hours_input.member_hours.value),
+      role: view.state.values[`member_role_input_${currentIndex}`]?.member_role.selected_option.value,
+      experienceLevel: view.state.values[`member_exp_input_${currentIndex}`]?.member_exp.selected_option.value,
+      availableHours: parseFloat(view.state.values[`member_hours_input_${currentIndex}`]?.member_hours.value),
       // multi_static_select에서 선택된 옵션들 배열로 받기
-      skills: view.state.values.member_skills_input.member_skills.selected_options?.map(opt => opt.value) || [],
-      preferredTypes: view.state.values.member_preferred_input.member_preferred.selected_options?.map(opt => opt.value) || []
+      skills: view.state.values[`member_skills_input_${currentIndex}`]?.member_skills.selected_options?.map(opt => opt.value) || [],
+      preferredTypes: view.state.values[`member_preferred_input_${currentIndex}`]?.member_preferred.selected_options?.map(opt => opt.value) || []
     };
     
     metadata.memberData.push(memberInfo);
@@ -3037,7 +3037,7 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
       
       try {
         await ack({
-          response_action: 'push',
+          response_action: 'update',
           view: {
             type: 'modal',
             callback_id: 'setup_team_modal',
@@ -3067,7 +3067,7 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
               },
               {
                 type: 'input',
-                block_id: 'member_role_input',
+                block_id: `member_role_input_${currentIndex + 1}`,
               element: {
                 type: 'static_select',
                 action_id: 'member_role',
@@ -3096,7 +3096,7 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
               },
               {
                 type: 'input',
-                block_id: 'member_exp_input',
+                block_id: `member_exp_input_${currentIndex + 1}`,
               element: {
                 type: 'static_select',
                 action_id: 'member_exp',
@@ -3126,7 +3126,7 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
               },
               {
                 type: 'input',
-                block_id: 'member_hours_input',
+                block_id: `member_hours_input_${currentIndex + 1}`,
               element: {
                 type: 'number_input',
                 action_id: 'member_hours',
@@ -3142,7 +3142,7 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
               },
               {
                 type: 'input',
-                block_id: 'member_skills_input',
+                block_id: `member_skills_input_${currentIndex + 1}`,
               element: {
                 type: 'multi_static_select',
                 action_id: 'member_skills',
@@ -3183,7 +3183,7 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
               },
               {
                 type: 'input',
-                block_id: 'member_preferred_input',
+                block_id: `member_preferred_input_${currentIndex + 1}`,
               element: {
                 type: 'multi_static_select',
                 action_id: 'member_preferred',
