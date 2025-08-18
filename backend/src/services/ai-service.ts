@@ -193,8 +193,6 @@ class AIService {
     // AI 서버 전용 axios 인스턴스 생성
     this.aiAxios = axios.create({
       timeout: this.timeout,
-      maxContentLength: Infinity,
-      maxBodyLength: Infinity,
       httpsAgent: new https.Agent({
         rejectUnauthorized: false, // ngrok SSL 인증서 문제 우회
         keepAlive: true,
@@ -395,7 +393,7 @@ class AIService {
       console.log(`⚡ Generating tasks from PRD using VLLM AI server`);
 
       try {
-        const response = await this.aiAxios.post<GeneratedTasksResult> (`${this.baseUrl}/generate-tasks`, prd);
+        const response = await this.aiAxios.post(`${this.baseUrl}/generate-tasks`, prd);
 
         const result: GeneratedTasksResult = response.data;
 
@@ -683,7 +681,7 @@ class AIService {
         if (isTextInput) {
           const transcript = audioBuffer.toString('utf-8');
 
-          const response = await this.aiAxios.post<any>(`${this.baseUrl}/pipeline-final`, {
+          const response = await this.aiAxios.post(`${this.baseUrl}/pipeline-final`, {
             transcript,
             generate_notion: true,
             generate_tasks: true,
@@ -744,7 +742,7 @@ class AIService {
             headers: formData.getHeaders()
           });
 
-          const response = await this.aiAxios.post<any>(`${this.baseUrl}/pipeline-final`, formData, {
+          const response = await this.aiAxios.post(`${this.baseUrl}/pipeline-final`, formData, {
             headers: {
               ...formData.getHeaders(),
               'Accept': 'application/json'
