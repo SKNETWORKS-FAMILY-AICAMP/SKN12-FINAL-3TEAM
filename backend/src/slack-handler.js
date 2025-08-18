@@ -5322,13 +5322,17 @@ async function processUploadedFile(file, projectName, client, userId) {
             
             // TaskMetadata 생성
             const jiraKey = jiraIssueMap[taskItem.title || taskItem.task];
-            if (taskItem.estimated_hours || taskItem.tags?.length > 0 || jiraKey) {
+            // required_skills 또는 tags 모두 체크
+            const requiredSkills = taskItem.required_skills || taskItem.requiredSkills || taskItem.tags || [];
+            const taskType = taskItem.work_type || taskItem.workType || taskItem.task_type || taskItem.issueType || 'feature';
+            
+            if (taskItem.estimated_hours || requiredSkills.length > 0 || jiraKey) {
               await prisma.taskMetadata.create({
                 data: {
                   taskId: createdTask.id,
                   estimatedHours: taskItem.estimated_hours || taskItem.estimatedHours || 8,
-                  requiredSkills: taskItem.tags || [],
-                  taskType: taskItem.issueType || 'feature',
+                  requiredSkills: requiredSkills,
+                  taskType: taskType,
                   jiraIssueKey: jiraKey || null,
                   jiraStatus: jiraKey ? 'To Do' : null
                 }
@@ -5336,6 +5340,8 @@ async function processUploadedFile(file, projectName, client, userId) {
             }
             
             console.log(`✅ Task 저장 완료: ${createdTask.taskNumber} - ${createdTask.title}`);
+            console.log(`   🔧 Required Skills: ${requiredSkills.join(', ') || '없음'}`);
+            console.log(`   💼 Work Type: ${taskType}`);
             
             // 서브태스크 저장 - AI 분석 결과의 subtasks 필드 확인
             const subtasksToSave = taskItem.subtasks || taskItem.sub_tasks || [];
@@ -5406,14 +5412,25 @@ async function processUploadedFile(file, projectName, client, userId) {
                 
                 // 서브태스크 메타데이터 생성 (기술 정보 포함)
                 const subtaskJiraKey = jiraIssueMap[subtask.title];
-                if (subtask.estimated_hours || subtaskJiraKey || subtask.required_skills || subtask.task_type || subtaskAssignment) {
+                const subtaskRequiredSkills = subtask.required_skills || subtask.requiredSkills || [];
+                const subtaskWorkType = subtask.work_type || subtask.workType || subtask.task_type || 'fullstack';
+                
+                console.log(`     🔍 서브태스크 메타데이터:`, {
+                  title: subtask.title,
+                  required_skills: subtaskRequiredSkills,
+                  work_type: subtaskWorkType,
+                  hasRequiredSkills: subtask.hasOwnProperty('required_skills'),
+                  hasWorkType: subtask.hasOwnProperty('work_type')
+                });
+                
+                if (subtask.estimated_hours || subtaskJiraKey || subtaskRequiredSkills.length > 0 || subtaskWorkType || subtaskAssignment) {
                   await prisma.taskMetadata.create({
                     data: {
                       taskId: createdSubtask.id,
                       estimatedHours: subtask.estimated_hours || subtask.estimatedHours || 4,
-                      requiredSkills: subtask.required_skills || [],
+                      requiredSkills: subtaskRequiredSkills,
                       taskType: 'subtask',  // 태스크 종류
-                      workType: subtask.work_type || 'fullstack',  // 작업 유형
+                      workType: subtaskWorkType,  // 작업 유형
                       assignmentScore: subtaskAssignment?.score || null,
                       assignmentReason: subtaskAssignment?.reason || null,
                       jiraIssueKey: subtaskJiraKey || null,
@@ -5524,7 +5541,7 @@ async function processUploadedFile(file, projectName, client, userId) {
           if (jiraIntegration && createdProject) {
             console.log('🎫 JIRA 연동 확인됨. 이슈 생성 시작...');
             try {
-              const JiraService = require('./services/jira-service');
+              const { JiraService } = require('./services/jira-service');
               const jiraService = new JiraService(jiraIntegration.config);
               
               // DB에서 생성된 태스크 가져오기 (담당자 정보 포함)

@@ -455,7 +455,9 @@ RESPOND WITH JSON ONLY:"""
                             description=subtask_info.get("description", ""),
                             priority=subtask_info.get("priority", "medium"),
                             estimated_hours=subtask_info.get("estimated_hours", 4),
-                            status=subtask_info.get("status", "pending")
+                            status=subtask_info.get("status", "pending"),
+                            required_skills=subtask_info.get("required_skills", []),
+                            work_type=subtask_info.get("work_type", None)
                         )
                         subtasks.append(subtask)
                     
