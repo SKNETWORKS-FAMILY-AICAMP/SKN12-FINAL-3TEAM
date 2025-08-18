@@ -5421,9 +5421,11 @@ async function processUploadedFile(file, projectName, client, userId) {
                 // 서브태스크용 담당자 찾기
                 let subtaskAssigneeId = null;
                 let subtaskAssignment = null;
+                let smartAssigner = null;  // smartAssigner를 외부 스코프에 선언
                 
                 if (subtask.required_skills || subtask.task_type) {
-                  const { smartAssigner } = require('./services/smart-assignment-service');
+                  const smartAssignmentService = require('./services/smart-assignment-service');
+                  smartAssigner = smartAssignmentService.smartAssigner;
                   const subtaskInfo = {
                     id: '',
                     title: subtaskTitle,
@@ -5481,7 +5483,7 @@ async function processUploadedFile(file, projectName, client, userId) {
                   });
                   
                   // 할당 로그 저장
-                  if (subtaskAssignment) {
+                  if (subtaskAssignment && smartAssigner) {
                     await smartAssigner.logAssignment(subtaskAssignment, createdSubtask.id);
                   }
                 }
