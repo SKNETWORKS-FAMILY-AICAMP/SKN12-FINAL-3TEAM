@@ -3038,10 +3038,13 @@ app.view('setup_team_modal', async ({ ack, body, view, client }) => {
       try {
         await ack({
           response_action: 'update',
+          hash: view.hash,  // 현재 뷰의 hash 추가
           view: {
             type: 'modal',
             callback_id: 'setup_team_modal',
             private_metadata: JSON.stringify(metadata),
+            clear_on_close: true,  // 닫을 때 상태 초기화
+            notify_on_close: false,
             title: {
               type: 'plain_text',
               text: '팀원 정보 설정'
