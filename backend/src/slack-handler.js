@@ -5612,6 +5612,64 @@ async function processUploadedFile(file, projectName, client, userId) {
       ];
       
       // 생성 결과 추가
+      if (!result.success) {
+        // 노이즈 또는 유효하지 않은 내용 처리
+        console.log('⚠️ AI 처리 실패:', result.error);
+        
+        // 에러 메시지를 사용자에게 전달
+        await client.chat.postMessage({
+          channel: event.channel,
+          text: '⚠️ 음성 분석 실패',
+          blocks: [
+            {
+              type: 'section',
+              text: {
+                type: 'mrkdwn',
+                text: `:warning: *음성 분석 실패*`
+              }
+            },
+            {
+              type: 'section',
+              text: {
+                type: 'mrkdwn',
+                text: result.error || '음성 파일을 처리할 수 없습니다.'
+              }
+            },
+            {
+              type: 'context',
+              elements: [{
+                type: 'mrkdwn',
+                text: '💡 *도움말:* 명확한 음성으로 회의 내용을 녹음해주세요. 배경 소음이 너무 많거나 내용이 너무 짧으면 처리할 수 없습니다.'
+              }]
+            }
+          ]
+        });
+        
+        // DM으로도 알림
+        await client.chat.postMessage({
+          channel: userId,
+          text: '⚠️ 음성 분석 실패',
+          blocks: [
+            {
+              type: 'section',
+              text: {
+                type: 'mrkdwn',
+                text: `:warning: *${projectName || '음성 파일'} 분석 실패*\n\n${result.error || '음성 파일을 처리할 수 없습니다.'}`
+              }
+            },
+            {
+              type: 'context',
+              elements: [{
+                type: 'mrkdwn',
+                text: `파일명: ${file.name}\n크기: ${(file.size / 1024 / 1024).toFixed(2)} MB`
+              }]
+            }
+          ]
+        });
+        
+        return; // 여기서 처리 종료
+      }
+      
       if (result.success) {
         // summary 가져오기 (stage1 또는 stage2에서)
         const summary = result.stage1?.notion_project?.title || 
