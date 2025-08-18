@@ -207,6 +207,11 @@ export class SmartAssignmentService {
       scoredUsers.sort((a, b) => b.score - a.score);
       const bestMatch = scoredUsers[0];
 
+      if (!bestMatch) {
+        console.log('❌ 매칭 가능한 사용자가 없습니다');
+        return null;
+      }
+
       console.log(`🎯 최적 담당자: ${bestMatch.userName} (점수: ${bestMatch.score})`);
       console.log(`   - 기술 매치: ${bestMatch.breakdown.skillMatch}개`);
       console.log(`   - 작업 유형: ${bestMatch.breakdown.typeMatch ? '일치' : '불일치'}`);
