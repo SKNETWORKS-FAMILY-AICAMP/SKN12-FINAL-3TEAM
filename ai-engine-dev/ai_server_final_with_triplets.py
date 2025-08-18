@@ -579,6 +579,172 @@ def create_default_subtasks(task: TaskItem, num_subtasks: int = 3) -> List[SubTa
     }
     return create_complexity_based_default_subtasks(task, task_analysis)
 
+# 기술 및 작업 유형 추출 함수 (NEW)
+async def extract_skills_and_task_types(task_items: List[TaskItem]) -> List[TaskItem]:
+    """태스크와 서브태스크에서 필요 기술 및 작업 유형 추출"""
+    try:
+        logger.info("🎯 Extracting required skills and task types from tasks...")
+        
+        # 사용 가능한 기술 목록 (Slack에서 정의한 것과 동일)
+        available_skills = [
+            'JavaScript', 'TypeScript', 'Python', 'Java', 'React', 'Vue.js',
+            'Node.js', 'Spring', 'Django', 'MongoDB', 'PostgreSQL', 'MySQL',
+            'AWS', 'Docker', 'Kubernetes', 'Git', 'AI/ML', 'Flutter', 'Swift', 'Kotlin'
+        ]
+        
+        # 사용 가능한 작업 유형 (Slack에서 정의한 것과 동일)
+        available_task_types = {
+            'frontend': '프론트엔드 개발',
+            'backend': '백엔드 개발',
+            'fullstack': '풀스택 개발',
+            'mobile': '모바일 개발',
+            'design': 'UI/UX 디자인',
+            'database': '데이터베이스 설계',
+            'devops': '인프라/DevOps',
+            'cloud': '클라우드 아키텍처',
+            'data': '데이터 분석',
+            'ai': 'AI/ML 개발',
+            'testing': '테스트/QA',
+            'documentation': '문서화',
+            'pm': '프로젝트 관리',
+            'security': '보안',
+            'optimization': '성능 최적화'
+        }
+        
+        # 시스템 프롬프트
+        system_prompt = f"""You are an expert at analyzing software development tasks.
+Identify required technical skills and work types from task descriptions.
+
+Available Skills (choose from these ONLY):
+{', '.join(available_skills)}
+
+Available Task Types (choose the PRIMARY type):
+{json.dumps(available_task_types, ensure_ascii=False, indent=2)}
+
+Rules:
+1. Only select skills from the provided list
+2. Choose 1-5 most relevant skills per task
+3. Select ONE primary task type
+4. For subtasks, identify specific skills relevant to that subtask
+5. Output pure JSON only, no explanations
+
+Output format:
+{{
+    "id": task_id,
+    "required_skills": ["skill1", "skill2", ...],
+    "task_type": "type_key",
+    "subtasks": [
+        {{
+            "id": subtask_id,
+            "required_skills": ["skill1", "skill2"],
+            "task_type": "type_key"
+        }}
+    ]
+}}"""
+
+        # 각 태스크별로 기술 추출
+        for task in task_items:
+            try:
+                # 유저 프롬프트
+                user_prompt = f"""Analyze this task and extract required skills:
+
+Task ID: {task.id}
+Title: {task.title}
+Description: {task.description}
+Details: {task.details if hasattr(task, 'details') else ''}
+Complexity: {task.complexity}
+
+Subtasks:
+"""
+                for subtask in task.subtasks:
+                    user_prompt += f"- ID {subtask.id}: {subtask.title} - {subtask.description}\n"
+                
+                user_prompt += "\nIdentify required skills and task type for the main task and each subtask."
+                
+                # Qwen 모델로 기술 추출
+                messages = [{"role": "user", "content": f"{system_prompt}\n\n{user_prompt}"}]
+                
+                if qwen_model and qwen_tokenizer:
+                    text = qwen_tokenizer.apply_chat_template(
+                        messages, tokenize=False, add_generation_prompt=True
+                    )
+                    
+                    from vllm import SamplingParams
+                    sampling_params = SamplingParams(
+                        temperature=0.2,  # 낮은 temperature로 일관성 있는 추출
+                        max_tokens=1024,
+                        top_p=0.95
+                    )
+                    
+                    outputs = qwen_model.generate([text], sampling_params)
+                    response = outputs[0].outputs[0].text
+                    
+                    # JSON 파싱
+                    if "```json" in response:
+                        json_start = response.find("```json") + 7
+                        json_end = response.find("```", json_start)
+                        json_content = response[json_start:json_end].strip() if json_end != -1 else response[json_start:].strip()
+                    else:
+                        json_content = response.strip()
+                        if not json_content.startswith('{'):
+                            json_start_idx = json_content.find('{')
+                            if json_start_idx != -1:
+                                json_content = json_content[json_start_idx:]
+                    
+                    skill_data = json.loads(json_content)
+                    
+                    # 태스크에 기술 정보 추가
+                    if not hasattr(task, 'required_skills'):
+                        task.required_skills = []
+                    if not hasattr(task, 'work_type'):
+                        task.work_type = None
+                    
+                    task.required_skills = skill_data.get('required_skills', [])
+                    task.work_type = skill_data.get('task_type', 'fullstack')  # task_type을 work_type으로 저장
+                    
+                    # 서브태스크에 기술 정보 추가
+                    if 'subtasks' in skill_data:
+                        for subtask_data in skill_data['subtasks']:
+                            subtask_id = subtask_data.get('id')
+                            for subtask in task.subtasks:
+                                if subtask.id == subtask_id:
+                                    if not hasattr(subtask, 'required_skills'):
+                                        subtask.required_skills = []
+                                    if not hasattr(subtask, 'work_type'):
+                                        subtask.work_type = None
+                                    
+                                    subtask.required_skills = subtask_data.get('required_skills', [])
+                                    subtask.work_type = subtask_data.get('task_type', task.work_type)  # work_type으로 저장
+                                    break
+                    
+                    logger.info(f"✅ Task {task.id}: {len(task.required_skills)} skills, type: {task.work_type}")
+                    
+                else:
+                    # Qwen 모델이 없는 경우 기본값 설정
+                    logger.warning(f"⚠️ Qwen model not available, using default skills for task {task.id}")
+                    task.required_skills = ['JavaScript', 'TypeScript', 'Node.js']
+                    task.task_type = 'fullstack'
+                    for subtask in task.subtasks:
+                        subtask.required_skills = ['JavaScript']
+                        subtask.task_type = 'fullstack'
+                        
+            except Exception as e:
+                logger.error(f"❌ Error extracting skills for task {task.id}: {e}")
+                # 오류 시 기본값 설정
+                task.required_skills = ['JavaScript', 'TypeScript']
+                task.task_type = 'fullstack'
+                for subtask in task.subtasks:
+                    subtask.required_skills = ['JavaScript']
+                    subtask.task_type = 'fullstack'
+        
+        logger.info(f"✅ Skill extraction completed for {len(task_items)} tasks")
+        return task_items
+        
+    except Exception as e:
+        logger.error(f"❌ Error in skill extraction: {e}")
+        # 전체 실패 시 원본 반환
+        return task_items
+
 # 새로운 응답 모델들
 class NotionProjectResponse(BaseModel):
     success: bool
@@ -1631,12 +1797,16 @@ async def two_stage_analysis(request: TwoStageAnalysisRequest):
                         complexity_analysis=complexity_analysis
                     )
                     
+                    # Step 3-4: 기술 및 작업 유형 추출 (NEW)
+                    logger.info("   Step 3-4: Extracting required skills and task types...")
+                    task_items_with_skills = await extract_skills_and_task_types(task_items_with_subtasks)
+                    
                     # Stage 3 결과 구성
                     stage3_result = {
                         "success": True,
-                        "summary": f"Generated {len(task_items_with_subtasks)} tasks with {sum(len(task.subtasks) for task in task_items_with_subtasks)} subtasks",
-                        "action_items": [task.dict() for task in task_items_with_subtasks],  # tasks → action_items로 변경
-                        "tasks": [task.dict() for task in task_items_with_subtasks],  # 호환성을 위해 tasks도 유지
+                        "summary": f"Generated {len(task_items_with_skills)} tasks with {sum(len(task.subtasks) for task in task_items_with_skills)} subtasks",
+                        "action_items": [task.dict() for task in task_items_with_skills],  # tasks → action_items로 변경
+                        "tasks": [task.dict() for task in task_items_with_skills],  # 호환성을 위해 tasks도 유지
                         "complexity_analysis": complexity_analysis,
                         "total_tasks": len(task_items_with_subtasks),
                         "total_subtasks": sum(len(task.subtasks) for task in task_items_with_subtasks),
@@ -1652,7 +1822,7 @@ async def two_stage_analysis(request: TwoStageAnalysisRequest):
                         logger.info("📋 생성된 태스크 및 서브태스크 전체 목록")
                         logger.info("="*80)
                         
-                        for idx, task in enumerate(task_items_with_subtasks, 1):
+                        for idx, task in enumerate(task_items_with_skills, 1):
                             try:
                                 logger.info(f"\n📌 [{idx}] {task.title}")
                                 logger.info(f"   📝 설명: {task.description[:100] if task.description else ''}{'...' if task.description and len(task.description) > 100 else ''}")
@@ -1661,6 +1831,8 @@ async def two_stage_analysis(request: TwoStageAnalysisRequest):
                                 logger.info(f"   ⏱️ 예상시간: {task.estimated_hours or 0}시간")
                                 logger.info(f"   📅 시작일: {task.start_date or '미정'}")
                                 logger.info(f"   📅 마감일: {task.due_date or '미정'}")
+                                logger.info(f"   🔧 필요기술: {', '.join(getattr(task, 'required_skills', [])) if hasattr(task, 'required_skills') else '미정'}")
+                                logger.info(f"   💼 작업유형: {getattr(task, 'task_type', '미정')}")
                                 
                                 if hasattr(task, 'dependencies') and task.dependencies:
                                     logger.info(f"   🔗 의존성: {', '.join(map(str, task.dependencies))}")
@@ -1681,6 +1853,10 @@ async def two_stage_analysis(request: TwoStageAnalysisRequest):
                                             if hasattr(subtask, 'description') and subtask.description:
                                                 logger.info(f"         - 설명: {subtask.description[:60]}{'...' if len(subtask.description) > 60 else ''}")
                                             logger.info(f"         - 예상시간: {getattr(subtask, 'estimated_hours', 0) or 0}시간")
+                                            if hasattr(subtask, 'required_skills') and subtask.required_skills:
+                                                logger.info(f"         - 필요기술: {', '.join(subtask.required_skills)}")
+                                            if hasattr(subtask, 'task_type') and subtask.task_type:
+                                                logger.info(f"         - 작업유형: {subtask.task_type}")
                                             if hasattr(subtask, 'start_date') and subtask.start_date:
                                                 logger.info(f"         - 시작일: {subtask.start_date}")
                                             if hasattr(subtask, 'due_date') and subtask.due_date:

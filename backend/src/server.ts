@@ -3047,11 +3047,11 @@ app.post('/api/process-slack-full-pipeline',
             priority: taskItem.priority === 'high' ? 'HIGH' : 
                      taskItem.priority === 'low' ? 'LOW' : 'MEDIUM',
             requiredSkills: taskItem.required_skills || [],
-            taskType: taskItem.task_type || 'development'
+            taskType: taskItem.task_type || 'fullstack'
           };
 
           // 최적 담당자 찾기
-          const assignmentResult = await smartAssigner.assignBestUser(task, tenantId);
+          const assignmentResult = await smartAssigner.findBestAssignee(task, tenantId);
           const assigneeId = assignmentResult?.userId || user.id;
 
           const createdTask = await prisma.task.create({
@@ -3071,7 +3071,8 @@ app.post('/api/process-slack-full-pipeline',
                 create: {
                   estimatedHours: taskItem.estimated_hours || 0,
                   requiredSkills: taskItem.required_skills || [],
-                  taskType: taskItem.task_type || 'development',
+                  taskType: 'feature',  // 태스크 종류
+                  workType: taskItem.work_type || 'fullstack',  // 작업 유형
                   assignmentScore: assignmentResult?.score || null,
                   assignmentReason: assignmentResult?.reason || null,
                   jiraStatus: 'pending'
@@ -3331,11 +3332,11 @@ app.post('/api/process-slack-with-jira',
             priority: taskItem.priority === 'high' ? 'HIGH' : 
                      taskItem.priority === 'low' ? 'LOW' : 'MEDIUM',
             requiredSkills: taskItem.required_skills || [],
-            taskType: taskItem.task_type || 'development'
+            taskType: taskItem.task_type || 'fullstack'
           };
 
           // 최적 담당자 찾기
-          const assignmentResult = await smartAssigner.assignBestUser(task, tenantId);
+          const assignmentResult = await smartAssigner.findBestAssignee(task, tenantId);
           const assigneeId = assignmentResult?.userId || user.id;
 
           const createdTask = await prisma.task.create({
@@ -3355,7 +3356,8 @@ app.post('/api/process-slack-with-jira',
                 create: {
                   estimatedHours: taskItem.estimated_hours || 0,
                   requiredSkills: taskItem.required_skills || [],
-                  taskType: taskItem.task_type || 'development',
+                  taskType: 'feature',  // 태스크 종류
+                  workType: taskItem.work_type || 'fullstack',  // 작업 유형
                   assignmentScore: assignmentResult?.score || null,
                   assignmentReason: assignmentResult?.reason || null,
                   jiraStatus: 'pending'

@@ -30,6 +30,10 @@ class SubTask(BaseModel):
     estimated_hours: Optional[int] = Field(None, ge=0, description="예상 소요 시간")
     completed_at: Optional[datetime] = Field(None, description="완료 시간")
     
+    # 기술 및 작업 유형 (NEW)
+    required_skills: Optional[List[str]] = Field(default_factory=list, description="필요한 기술")
+    work_type: Optional[str] = Field(None, description="작업 유형 (frontend/backend/fullstack 등)")
+    
     class Config:
         use_enum_values = True
 
@@ -58,6 +62,10 @@ class TaskItem(BaseModel):
     # 검증 및 테스트
     test_strategy: Optional[str] = Field(None, description="테스트 전략")
     acceptance_criteria: List[str] = Field(default_factory=list, description="수락 기준")
+    
+    # 기술 및 작업 유형 (NEW)
+    required_skills: Optional[List[str]] = Field(default_factory=list, description="필요한 기술")
+    work_type: Optional[str] = Field(None, description="작업 유형 (frontend/backend/fullstack 등)")
     
     # 서브태스크
     subtasks: List[SubTask] = Field(default_factory=list, description="서브태스크 목록")

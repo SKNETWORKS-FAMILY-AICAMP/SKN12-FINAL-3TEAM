@@ -113,6 +113,7 @@ model TaskMetadata {
   actualHours      Float?   @map("actual_hours")
   requiredSkills   Json?    @map("required_skills")
   taskType         String?  @map("task_type") @db.VarChar(50)
+  workType         String?  @map("work_type") @db.VarChar(50)
   assignmentScore  Float?   @map("assignment_score")
   assignmentReason String?  @map("assignment_reason")
   jiraIssueKey     String?  @map("jira_issue_key") @db.VarChar(50)

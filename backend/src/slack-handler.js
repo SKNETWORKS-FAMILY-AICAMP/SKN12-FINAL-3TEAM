@@ -2248,10 +2248,16 @@ app.action('edit_member_info', async ({ ack, body, client }) => {
             element: {
               type: 'multi_static_select',
               action_id: 'skills_select',
-              initial_options: Array.isArray(skills) ? skills.map(skill => ({
-                text: { type: 'plain_text', text: skill },
-                value: skill
-              })) : [],
+              initial_options: Array.isArray(skills) ? skills
+                .filter(skill => [
+                  'JavaScript', 'TypeScript', 'Python', 'Java', 'React', 'Vue.js',
+                  'Node.js', 'Spring', 'Django', 'MongoDB', 'PostgreSQL', 'MySQL',
+                  'AWS', 'Docker', 'Kubernetes', 'Git', 'AI/ML', 'Flutter', 'Swift', 'Kotlin'
+                ].includes(skill))
+                .map(skill => ({
+                  text: { type: 'plain_text', text: skill },
+                  value: skill
+                })) : [],
               placeholder: {
                 type: 'plain_text',
                 text: '기술 스택을 선택하세요'
@@ -2291,25 +2297,31 @@ app.action('edit_member_info', async ({ ack, body, client }) => {
             element: {
               type: 'multi_static_select',
               action_id: 'preferred_select',
-              initial_options: Array.isArray(preferredTypes) ? preferredTypes.map(pref => ({
-                text: { type: 'plain_text', text: 
-                  pref === 'frontend' ? '프론트엔드 개발' : 
-                  pref === 'backend' ? '백엔드 개발' :
-                  pref === 'fullstack' ? '풀스택 개발' :
-                  pref === 'mobile' ? '모바일 개발' :
-                  pref === 'design' ? 'UI/UX 디자인' :
-                  pref === 'database' ? '데이터베이스 설계' :
-                  pref === 'devops' ? '인프라/DevOps' :
-                  pref === 'cloud' ? '클라우드 아키텍처' :
-                  pref === 'data' ? '데이터 분석' :
-                  pref === 'ai' ? 'AI/ML 개발' :
-                  pref === 'testing' ? '테스트/QA' :
-                  pref === 'documentation' ? '문서화' :
-                  pref === 'pm' ? '프로젝트 관리' :
-                  pref === 'security' ? '보안' :
-                  pref === 'optimization' ? '성능 최적화' : pref },
-                value: pref
-              })) : [],
+              initial_options: Array.isArray(preferredTypes) ? preferredTypes
+                .filter(pref => [
+                  'frontend', 'backend', 'fullstack', 'mobile', 'design', 'database',
+                  'devops', 'cloud', 'data', 'ai', 'testing', 'documentation',
+                  'pm', 'security', 'optimization'
+                ].includes(pref))
+                .map(pref => ({
+                  text: { type: 'plain_text', text: 
+                    pref === 'frontend' ? '프론트엔드 개발' : 
+                    pref === 'backend' ? '백엔드 개발' :
+                    pref === 'fullstack' ? '풀스택 개발' :
+                    pref === 'mobile' ? '모바일 개발' :
+                    pref === 'design' ? 'UI/UX 디자인' :
+                    pref === 'database' ? '데이터베이스 설계' :
+                    pref === 'devops' ? '인프라/DevOps' :
+                    pref === 'cloud' ? '클라우드 아키텍처' :
+                    pref === 'data' ? '데이터 분석' :
+                    pref === 'ai' ? 'AI/ML 개발' :
+                    pref === 'testing' ? '테스트/QA' :
+                    pref === 'documentation' ? '문서화' :
+                    pref === 'pm' ? '프로젝트 관리' :
+                    pref === 'security' ? '보안' :
+                    pref === 'optimization' ? '성능 최적화' : pref },
+                  value: pref
+                })) : [],
               placeholder: {
                 type: 'plain_text',
                 text: '선호하는 작업 유형을 선택하세요'
@@ -5359,6 +5371,31 @@ async function processUploadedFile(file, projectName, client, userId) {
                 const subtaskTitle = (subtask.title || 'Untitled Subtask').substring(0, 500);  // DB는 500자로 확장됨
                 const subtaskDescription = (subtask.description || '').substring(0, 2000);
                 
+                // 서브태스크용 담당자 찾기
+                let subtaskAssigneeId = null;
+                let subtaskAssignment = null;
+                
+                if (subtask.required_skills || subtask.task_type) {
+                  const { smartAssigner } = require('../src/services/smart-assignment-service');
+                  const subtaskInfo = {
+                    id: '',
+                    title: subtaskTitle,
+                    description: subtaskDescription,
+                    requiredSkills: subtask.required_skills || [],
+                    taskType: subtask.work_type || 'fullstack',  // work_type 사용
+                    estimatedHours: subtask.estimated_hours || 4,
+                    complexity: String(subtask.complexity || '3'),
+                    priority: subtask.priority || 'medium'
+                  };
+                  
+                  subtaskAssignment = await smartAssigner.findBestAssignee(subtaskInfo, user.tenantId);
+                  subtaskAssigneeId = subtaskAssignment?.userId || null;
+                  
+                  if (subtaskAssignment) {
+                    console.log(`  📌 서브태스크 담당자: ${subtaskAssignment.userName} (점수: ${subtaskAssignment.score})`);
+                  }
+                }
+                
                 const createdSubtask = await prisma.task.create({
                   data: {
                     tenantId: user.tenantId,
@@ -5375,22 +5412,31 @@ async function processUploadedFile(file, projectName, client, userId) {
                     dueDate: subtask.dueDate || subtask.due_date || taskItem.dueDate || taskItem.due_date ? 
                             new Date(subtask.dueDate || subtask.due_date || taskItem.dueDate || taskItem.due_date) : null,
                     complexity: subtask.complexity ? String(subtask.complexity).substring(0, 10) : '3',
-                    assigneeId: null
+                    assigneeId: subtaskAssigneeId
                   }
                 });
                 
-                // 서브태스크 메타데이터 생성
+                // 서브태스크 메타데이터 생성 (기술 정보 포함)
                 const subtaskJiraKey = jiraIssueMap[subtask.title];
-                if (subtask.estimated_hours || subtaskJiraKey) {
+                if (subtask.estimated_hours || subtaskJiraKey || subtask.required_skills || subtask.task_type || subtaskAssignment) {
                   await prisma.taskMetadata.create({
                     data: {
                       taskId: createdSubtask.id,
                       estimatedHours: subtask.estimated_hours || subtask.estimatedHours || 4,
-                      taskType: 'subtask',
+                      requiredSkills: subtask.required_skills || [],
+                      taskType: 'subtask',  // 태스크 종류
+                      workType: subtask.work_type || 'fullstack',  // 작업 유형
+                      assignmentScore: subtaskAssignment?.score || null,
+                      assignmentReason: subtaskAssignment?.reason || null,
                       jiraIssueKey: subtaskJiraKey || null,
                       jiraStatus: subtaskJiraKey ? 'To Do' : null
                     }
                   });
+                  
+                  // 할당 로그 저장
+                  if (subtaskAssignment) {
+                    await smartAssigner.logAssignment(subtaskAssignment, createdSubtask.id);
+                  }
                 }
                 
                 console.log(`  ✅ 서브태스크 저장: ${createdSubtask.taskNumber} - ${createdSubtask.title}`);
