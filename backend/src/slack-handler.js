@@ -5168,100 +5168,9 @@ async function processUploadedFile(file, projectName, client, userId) {
       let jiraIssueUrl = null;
       let notionWorkspaceUrl = null;
       let jiraSiteUrl = null;
+      let createdProject = null;  // 여기서 미리 선언
       
-      // Notion 페이지 생성
-      if (notionIntegration && result.stage2?.task_master_prd) {
-        console.log('📌 Notion 연동 확인됨. 페이지 생성 시작...');
-        try {
-          const NotionService = require('./services/notion-service').NotionService;
-          const notionService = await NotionService.createForUser(user.tenantId, user.id);
-          
-          if (notionService) {
-            console.log('✅ NotionService 인스턴스 생성 성공');
-            
-            // DB에서 방금 저장한 태스크 정보 가져오기 (담당자 정보 포함)
-            let dbTasks = [];
-            if (createdProject) {
-              dbTasks = await prisma.task.findMany({
-                where: {
-                  projectId: createdProject.id,
-                  parentId: null  // 메인 태스크만
-                },
-                include: {
-                  assignee: true,  // 담당자 정보 포함
-                  metadata: true,  // 메타데이터 (기술, 점수 등) 포함
-                  children: {      // 서브태스크 포함
-                    include: {
-                      assignee: true,
-                      metadata: true
-                    }
-                  }
-                }
-              });
-            }
-            
-            // AI가 생성한 데이터를 Notion 페이지로 변환
-            const notionData = {
-              summary: result.stage1?.notion_project?.title || projectName,
-              action_items: result.stage2.task_master_prd.tasks?.map((task, index) => {
-                // DB에서 해당 태스크 찾기
-                const dbTask = dbTasks.find(t => t.title === (task.title || task.task));
-                const assigneeName = dbTask?.assignee?.name || '미지정';
-                const requiredSkills = dbTask?.metadata?.requiredSkills || [];
-                
-                return {
-                id: index + 1,
-                title: task.title || task.task,
-                description: task.description,
-                details: task.details,
-                priority: task.priority?.toUpperCase() || 'MEDIUM',
-                status: 'pending',
-                assignee: assigneeName,  // DB에서 가져온 담당자 이름
-                start_date: task.startDate || task.start_date || new Date().toISOString().split('T')[0],
-                deadline: task.dueDate || task.due_date || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-                estimated_hours: task.estimated_hours || 8,
-                complexity: task.complexity || 5,
-                dependencies: task.dependencies || [],
-                test_strategy: task.test_strategy || '',
-                acceptance_criteria: task.acceptance_criteria || [],
-                subtasks: task.subtasks || [],
-                tags: requiredSkills,  // DB에서 가져온 기술 정보
-                required_skills: requiredSkills,  // 명시적으로 기술 정보 추가
-                created_at: new Date().toISOString(),
-                updated_at: null
-              }
-              }) || []
-            };
-            
-            // 프로젝트 이름을 함께 전달
-            const notionPage = await notionService.createMeetingPage(
-              notionData,
-              projectName || notionData.summary
-            );
-            notionPageUrl = notionPage.url;
-            console.log('✅ Notion 페이지 생성 성공:', notionPageUrl);
-          } else {
-            console.log('⚠️ NotionService 인스턴스를 생성할 수 없습니다.');
-          }
-        } catch (error) {
-          console.error('❌ Notion 페이지 생성 실패 상세:', {
-            message: error.message,
-            stack: error.stack,
-            notionIntegration: !!notionIntegration,
-            hasTaskMaster: !!result.stage2?.task_master_prd
-          });
-        }
-        
-        // Notion 워크스페이스 URL 구성
-        const notionConfig = notionIntegration.config;
-        if (notionConfig.workspace_id) {
-          notionWorkspaceUrl = `https://www.notion.so/${notionConfig.workspace_id}`;
-        } else if (notionConfig.workspace_url) {
-          notionWorkspaceUrl = notionConfig.workspace_url;
-        } else if (notionConfig.workspace_domain) {
-          notionWorkspaceUrl = `https://${notionConfig.workspace_domain}.notion.site`;
-        }
-      }
+      // Notion 페이지 생성은 DB 저장 후에 처리됨
       
       // JIRA 워크스페이스 URL 먼저 설정
       if (jiraIntegration && jiraIntegration.config) {
@@ -5341,8 +5250,7 @@ async function processUploadedFile(file, projectName, client, userId) {
         jiraSiteUrl
       });
       
-      // DB에 생성된 데이터 저장
-      let createdProject = null;  // createdProject를 외부 스코프에 선언
+      // DB에 생성된 데이터 저장 (이미 위에서 createdProject 선언함)
       if (result.success && result.stage2?.task_master_prd) {
         try {
           // SlackInput 생성
@@ -5526,9 +5434,195 @@ async function processUploadedFile(file, projectName, client, userId) {
           
           console.log(`✅ DB 저장 완료: Project ${createdProject.id}, ${tasks.length}개 업무`);
           
+          // DB 저장 성공 후 Notion 페이지 생성
+          if (notionIntegration && createdProject) {
+            console.log('📌 Notion 연동 확인됨. 페이지 생성 시작...');
+            try {
+              const NotionService = require('./services/notion-service').NotionService;
+              const notionService = await NotionService.createForUser(user.tenantId, user.id);
+              
+              if (notionService) {
+                console.log('✅ NotionService 인스턴스 생성 성공');
+                
+                // DB에서 방금 저장한 태스크 정보 가져오기 (담당자 정보 포함)
+                const dbTasks = await prisma.task.findMany({
+                  where: {
+                    projectId: createdProject.id,
+                    parentId: null  // 메인 태스크만
+                  },
+                  include: {
+                    assignee: true,  // 담당자 정보 포함
+                    metadata: true,  // 메타데이터 (기술, 점수 등) 포함
+                    children: {      // 서브태스크 포함
+                      include: {
+                        assignee: true,
+                        metadata: true
+                      }
+                    }
+                  }
+                });
+                
+                // AI가 생성한 데이터를 Notion 페이지로 변환
+                const notionData = {
+                  summary: result.stage1?.notion_project?.title || projectName,
+                  action_items: result.stage2.task_master_prd.tasks?.map((task, index) => {
+                    // DB에서 해당 태스크 찾기
+                    const dbTask = dbTasks.find(t => t.title === (task.title || task.task));
+                    const assigneeName = dbTask?.assignee?.name || '미지정';
+                    const requiredSkills = dbTask?.metadata?.requiredSkills || [];
+                    
+                    return {
+                      id: index + 1,
+                      title: task.title || task.task,
+                      description: task.description,
+                      details: task.details,
+                      priority: task.priority?.toUpperCase() || 'MEDIUM',
+                      status: 'pending',
+                      assignee: assigneeName,  // DB에서 가져온 담당자 이름
+                      start_date: task.startDate || task.start_date || new Date().toISOString().split('T')[0],
+                      deadline: task.dueDate || task.due_date || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                      estimated_hours: task.estimated_hours || 8,
+                      complexity: task.complexity || 5,
+                      dependencies: task.dependencies || [],
+                      test_strategy: task.test_strategy || '',
+                      acceptance_criteria: task.acceptance_criteria || [],
+                      subtasks: task.subtasks || [],
+                      tags: requiredSkills,  // DB에서 가져온 기술 정보
+                      required_skills: requiredSkills,  // 명시적으로 기술 정보 추가
+                      created_at: new Date().toISOString(),
+                      updated_at: null
+                    }
+                  }) || []
+                };
+                
+                // 프로젝트 이름을 함께 전달
+                const notionPage = await notionService.createMeetingPage(
+                  notionData,
+                  projectName || notionData.summary
+                );
+                notionPageUrl = notionPage.url;
+                console.log('✅ Notion 페이지 생성 성공:', notionPageUrl);
+              } else {
+                console.log('⚠️ NotionService 인스턴스를 생성할 수 없습니다.');
+              }
+            } catch (error) {
+              console.error('❌ Notion 페이지 생성 실패:', error);
+            }
+            
+            // Notion 워크스페이스 URL 구성
+            const notionConfig = notionIntegration.config;
+            if (notionConfig.workspace_id) {
+              notionWorkspaceUrl = `https://www.notion.so/${notionConfig.workspace_id}`;
+            } else if (notionConfig.workspace_url) {
+              notionWorkspaceUrl = notionConfig.workspace_url;
+            } else if (notionConfig.workspace_domain) {
+              notionWorkspaceUrl = `https://${notionConfig.workspace_domain}.notion.site`;
+            }
+          }
+          
+          // JIRA 이슈 생성
+          if (jiraIntegration && createdProject) {
+            console.log('🎫 JIRA 연동 확인됨. 이슈 생성 시작...');
+            try {
+              const JiraService = require('./services/jira-service');
+              const jiraService = new JiraService(jiraIntegration.config);
+              
+              // DB에서 생성된 태스크 가져오기 (담당자 정보 포함)
+              const dbTasks = await prisma.task.findMany({
+                where: {
+                  projectId: createdProject.id,
+                  parentId: null  // 메인 태스크만
+                },
+                include: {
+                  assignee: true,
+                  metadata: true,
+                  subtasks: {
+                    include: {
+                      assignee: true,
+                      metadata: true
+                    }
+                  }
+                }
+              });
+              
+              // JIRA 프로젝트 키 가져오기
+              let projectKey = jiraIntegration.config.default_project;
+              if (!projectKey) {
+                // 기본 프로젝트가 없으면 첫 번째 프로젝트 사용
+                const projects = await jiraService.getProjects();
+                if (projects && projects.length > 0) {
+                  projectKey = projects[0].key;
+                }
+              }
+              
+              if (projectKey) {
+                // 메인 이슈 생성
+                const mainIssue = await jiraService.createIssue({
+                  projectKey: projectKey,
+                  summary: projectName || result.stage1?.notion_project?.title || 'AI 생성 업무',
+                  description: result.stage1?.notion_project?.overview || result.stage1?.transcript || '회의 내용 기반 업무',
+                  issueType: 'Task'
+                });
+                
+                if (mainIssue && mainIssue.key) {
+                  jiraIssueUrl = `${jiraIntegration.config.site_url}/browse/${mainIssue.key}`;
+                  console.log('✅ JIRA 메인 이슈 생성 성공:', jiraIssueUrl);
+                  
+                  // 서브태스크 생성
+                  for (const task of dbTasks) {
+                    try {
+                      const subtask = await jiraService.createIssue({
+                        projectKey: projectKey,
+                        summary: task.title,
+                        description: task.description || '',
+                        issueType: 'Sub-task',
+                        parentKey: mainIssue.key,
+                        assignee: task.assignee?.email // 담당자 이메일로 할당
+                      });
+                      
+                      if (subtask) {
+                        console.log(`✅ JIRA 서브태스크 생성: ${subtask.key} - ${task.title}`);
+                        
+                        // 하위 서브태스크도 생성
+                        if (task.subtasks && task.subtasks.length > 0) {
+                          for (const subsubtask of task.subtasks) {
+                            try {
+                              await jiraService.createIssue({
+                                projectKey: projectKey,
+                                summary: subsubtask.title,
+                                description: subsubtask.description || '',
+                                issueType: 'Sub-task',
+                                parentKey: subtask.key,
+                                assignee: subsubtask.assignee?.email
+                              });
+                            } catch (subError) {
+                              console.error('서브-서브태스크 생성 실패:', subError);
+                            }
+                          }
+                        }
+                      }
+                    } catch (taskError) {
+                      console.error('서브태스크 생성 실패:', taskError);
+                    }
+                  }
+                }
+              } else {
+                console.warn('⚠️ JIRA 프로젝트 키를 찾을 수 없습니다.');
+              }
+              
+              // JIRA 사이트 URL 구성
+              jiraSiteUrl = jiraIntegration.config.site_url;
+              
+            } catch (jiraError) {
+              console.error('❌ JIRA 이슈 생성 실패:', jiraError);
+              // JIRA 실패해도 계속 진행
+              jiraSiteUrl = jiraIntegration.config.site_url;
+            }
+          }
+          
         } catch (dbError) {
           console.error('❌ DB 저장 실패:', dbError);
-          // DB 저장 실패해도 Notion/JIRA 생성은 성공했으므로 계속 진행
+          // DB 저장 실패해도 계속 진행
         }
       }
       
