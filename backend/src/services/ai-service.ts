@@ -406,7 +406,7 @@ class AIService {
         
         // 비동기 엔드포인트 사용 (/generate-tasks-async)
         const asyncResponse = await this.aiAxios.post('/generate-tasks-async', requestBody, {
-          timeout: 10000 // Job ID만 받기
+          timeout: 20000 // 20초로 증가
         });
         
         if (asyncResponse.data.success && asyncResponse.data.job_id) {
@@ -749,13 +749,13 @@ class AIService {
       if (isTextInput) {
         const transcript = audioBuffer.toString('utf-8');
         
-        // 비동기 엔드포인트 호출
+        // 비동기 엔드포인트 호출 - Job ID 받기용 타임아웃 증가
         const response = await this.aiAxios.post('/pipeline-final-async', {
           transcript,
           generate_notion: true,
           generate_tasks: true,
           num_tasks: 5
-        }, { timeout: 10000 });
+        }, { timeout: 30000 }); // 30초로 증가
         
         if (response.data.success && response.data.job_id) {
           console.log(`✅ Async job created: ${response.data.job_id}`);
@@ -797,10 +797,10 @@ class AIService {
         formData.append('generate_tasks', 'true');
         formData.append('num_tasks', '5');
         
-        // 비동기 엔드포인트 호출
+        // 비동기 엔드포인트 호출 - Job ID 받기용 타임아웃 증가
         const response = await this.aiAxios.post('/pipeline-final-async', formData, {
           headers: formData.getHeaders(),
-          timeout: 10000
+          timeout: 30000  // 30초로 증가 (대용량 파일 업로드 시간 고려)
         });
         
         if (response.data.success && response.data.job_id) {

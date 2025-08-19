@@ -2854,10 +2854,10 @@ async def final_pipeline_async(
 ):
     """🚀 비동기 파이프라인: Job ID를 즉시 반환하고 백그라운드에서 처리"""
     try:
-        # Job ID 생성
+        # Job ID 생성 (즉시)
         job_id = str(uuid.uuid4())
         
-        # Job 정보 저장
+        # Job 정보 저장 (즉시)
         jobs_store[job_id] = {
             "job_id": job_id,
             "status": JobStatus.PENDING,
@@ -2866,7 +2866,15 @@ async def final_pipeline_async(
             "progress": 0
         }
         
-        # JSON 요청 처리
+        # 먼저 Job ID 반환 준비
+        response_data = {
+            "success": True,
+            "job_id": job_id,
+            "status": JobStatus.PENDING,
+            "message": "Job created successfully. Use /job-status/{job_id} to check progress."
+        }
+        
+        # JSON 요청 처리 (빠르게)
         if request.headers.get("content-type") == "application/json":
             body = await request.json()
             transcript = body.get('transcript')
@@ -2874,13 +2882,15 @@ async def final_pipeline_async(
             generate_tasks = body.get('generate_tasks', True)
             num_tasks = body.get('num_tasks', 5)
             apply_bert_filtering = body.get('apply_bert_filtering', False)
+            audio_data = None
+        else:
+            # 오디오 데이터는 스트림으로 읽기 (메모리 효율적)
+            audio_data = None
+            if audio and audio.filename:
+                # 비동기로 읽되, 너무 오래 걸리지 않도록
+                audio_data = await audio.read()
         
-        # 오디오 데이터 읽기
-        audio_data = None
-        if audio and audio.filename:
-            audio_data = await audio.read()
-        
-        # 백그라운드 태스크 시작
+        # 백그라운드 태스크 시작 (논블로킹)
         asyncio.create_task(
             process_pipeline_async(
                 job_id, audio_data, transcript,
@@ -2889,14 +2899,9 @@ async def final_pipeline_async(
             )
         )
         
-        # Job ID 즉시 반환
+        # Job ID 즉시 반환 (response_data 사용)
         return JSONResponse(
-            content={
-                "success": True,
-                "job_id": job_id,
-                "status": JobStatus.PENDING,
-                "message": "Job created successfully. Use /job-status/{job_id} to check progress."
-            },
+            content=response_data,
             status_code=202  # Accepted
         )
         
