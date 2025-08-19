@@ -150,12 +150,23 @@ export class SimpleTenantMiddleware {
     next: NextFunction
   ): Promise<void> => {
     try {
+      // 고정된 tenant ID를 사용하여 일관성 보장
+      const FIXED_TENANT_ID = '256e4ab4-3c3c-419f-8719-de54e0aff35a';
       const devTenantSlug = 'dev-tenant';
       
+      // 먼저 고정 ID로 찾기
       let tenant = await this.prisma.tenant.findUnique({
-        where: { slug: devTenantSlug }
+        where: { id: FIXED_TENANT_ID }
       });
 
+      // 없으면 slug로 찾기
+      if (!tenant) {
+        tenant = await this.prisma.tenant.findUnique({
+          where: { slug: devTenantSlug }
+        });
+      }
+
+      // 그래도 없으면 생성 (하지만 고정 ID는 사용할 수 없으므로 새 ID로 생성)
       if (!tenant) {
         tenant = await this.prisma.tenant.create({
           data: {
@@ -163,11 +174,14 @@ export class SimpleTenantMiddleware {
             slug: devTenantSlug
           }
         });
-        logger.info(`Created development tenant: ${tenant.id}`);
+        logger.info(`Created new development tenant: ${tenant.id}`);
       }
 
+      // 항상 같은 tenant 사용
       req.tenant = tenant;
       req.tenantId = tenant.id;
+      
+      logger.debug(`Using tenant: ${tenant.id} (${tenant.slug})`);
       next();
     } catch (error) {
       logger.error('Error creating dev tenant:', error);
