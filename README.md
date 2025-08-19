@@ -129,6 +129,13 @@ Qwen3 생성 (문서화)
 - **Quantization**: 4-bit (QLoRA)
 - **컨텍스트**: 8192 토큰
 
+## 모델 구성
+
+| **WhisperX (음성인식)** | **BERT (노이즈 필터링)** | **Qwen3 (텍스트 생성)** |
+|-------------------------|--------------------------|-------------------------|
+| - Base Model: OpenAI Whisper base <br> - 언어: 한국어 특화 <br> - 서버: 독립 서버 (Port 8001) | - Base Model: KLUE/BERT-base <br> - Fine-tuning: Ttalkkak_model_v3.pt <br> - 분류: Binary (업무/노이즈) <br> - 정확도: 92.5% | - Models: 4B 버전 <br> - Fine-tuning: LoRA 어댑터 <br> - Quantization: 4-bit (QLoRA) <br> - 컨텍스트: 8192 토큰 |
+
+
 ---
 ## ERD
 ### 서비스의 데이터베이스 구조</br>
