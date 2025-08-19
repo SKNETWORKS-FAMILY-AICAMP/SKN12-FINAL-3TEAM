@@ -144,7 +144,7 @@ Qwen3 생성 (문서화)
 ### 주요 구성 요소
 - **클라이언트 레이어**: 웹 대시보드(React), Slack App, 모바일 앱
 - **백엔드 API 레이어**: Express 서버, Slack 핸들러, 멀티테넌트 지원
-- **AI 처리 엔진**: FastAPI, WhisperX STT, BERT 분류기, Qwen3-32B-AWQ
+- **AI 처리 엔진**: FastAPI, WhisperX STT, BERT 분류기, Qwen3-4B-AWQ
 - **데이터 레이어**: PostgreSQL, Prisma ORM, Redis, 사용자·프로젝트 데이터
 - **비즈니스 서비스**: Notion API, JIRA API, 스마트 태스크 배정
 - **외부 서비스 연동**: Slack/Notion/JIRA/AI 서버
