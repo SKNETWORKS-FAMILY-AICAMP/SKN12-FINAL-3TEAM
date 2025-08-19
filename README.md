@@ -28,6 +28,7 @@
 ## 모델 구성
 
 ## ERD
+서비스의 데이터베이스 구조는 아래와 같습니다.
 ![ERD](https://raw.githubusercontent.com/SKNETWORKS-FAMILY-AICAMP/SKN12-FINAL-3TEAM/refs/heads/main/%EC%82%B0%EC%B6%9C%EB%AC%BC/%EB%B0%9C%ED%91%9C%EC%9E%90%EB%A3%8C/img/ERD.webp)
 
 ## 시스템 아키텍쳐
