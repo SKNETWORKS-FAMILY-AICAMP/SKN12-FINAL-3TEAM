@@ -705,17 +705,32 @@ const MainContent = () => {
   };
 
   // 업무 삭제 함수
-  const deleteTask = (taskId: string) => {
-    setColumns(prev => {
-      const newColumns = { ...prev };
-      Object.keys(newColumns).forEach(colId => {
-        newColumns[colId] = {
-          ...newColumns[colId],
-          items: newColumns[colId].items.filter(item => item.id !== taskId)
-        };
+  const deleteTask = async (taskId: string) => {
+    try {
+      // API 호출하여 DB에서 삭제
+      await taskAPI.deleteTask(taskId);
+      
+      // 로컬 상태 업데이트
+      setColumns(prev => {
+        const newColumns = { ...prev };
+        Object.keys(newColumns).forEach(colId => {
+          newColumns[colId] = {
+            ...newColumns[colId],
+            items: newColumns[colId].items.filter(item => item.id !== taskId)
+          };
+        });
+        return newColumns;
       });
-      return newColumns;
-    });
+      
+      // 데이터 새로고침
+      refetchTasks();
+      refetchStats();
+      
+      toast.success('업무가 삭제되었습니다.');
+    } catch (error) {
+      console.error('업무 삭제 실패:', error);
+      toast.error('업무 삭제에 실패했습니다.');
+    }
   };
 
   // 업무 수정 함수
@@ -1453,8 +1468,8 @@ const MainContent = () => {
                   취소
                 </button>
                 <button
-                  onClick={() => {
-                    deleteTask(taskToDelete.id);
+                  onClick={async () => {
+                    await deleteTask(taskToDelete.id);
                     setShowDeleteModal(false);
                     setTaskToDelete(null);
                     setSelectedTask(null);
