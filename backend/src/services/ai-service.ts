@@ -195,7 +195,9 @@ class AIService {
     this.aiAxios = axios.create({
       timeout: this.timeout,
       headers: {
-        'Connection': 'keep-alive'
+        'Connection': 'keep-alive',
+        'User-Agent': 'Mozilla/5.0 (compatible; Backend/1.0)', // Localtunnel 브라우저 체크 통과
+        'Accept': 'application/json'
       }
     });
   }

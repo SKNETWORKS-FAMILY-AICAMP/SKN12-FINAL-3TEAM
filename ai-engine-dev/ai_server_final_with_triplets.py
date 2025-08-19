@@ -140,15 +140,24 @@ RESPOND WITH JSON ONLY (한국어로 작성):"""
             logger.info(f"📝 Raw response length: {len(response)} chars")
             logger.info(f"📝 Response preview: {response[:500]}...")
             
-            # <think> 태그 제거
+            # <think> 태그 제거 (더 강력한 처리)
             if "<think>" in response:
                 think_end = response.find("</think>")
                 if think_end != -1:
+                    # </think> 태그 이후의 내용만 사용
                     response = response[think_end + 8:].strip()
                 else:
-                    # </think> 태그가 없으면 <think> 이후 전체 제거
+                    # </think> 태그가 없으면 <think> 태그부터 모두 제거
                     think_start = response.find("<think>")
-                    response = response[:think_start].strip()
+                    if think_start > 0:
+                        response = response[:think_start].strip()
+                    else:
+                        # <think>로 시작하면 JSON 부분만 찾기
+                        json_start = response.find('{"')
+                        if json_start != -1:
+                            response = response[json_start:]
+                        else:
+                            response = "{}"  # 빈 JSON 반환
             
             # JSON 파싱
             if "```json" in response:
@@ -190,7 +199,26 @@ RESPOND WITH JSON ONLY (한국어로 작성):"""
             # 4. undefined, null 처리
             json_content = json_content.replace('undefined', 'null')
             
-            # 5. 불완전한 JSON 끝 처리
+            # 5. 불완전한 문자열 처리 (끝나지 않은 문자열 닫기)
+            # 마지막 따옴표가 닫히지 않은 경우 처리
+            quote_count = json_content.count('"') - json_content.count('\\"')
+            if quote_count % 2 != 0:
+                # 마지막 열린 따옴표 찾아서 닫기
+                last_quote = json_content.rfind('"')
+                # 마지막 따옴표 이후에 닫는 구조 찾기
+                remaining = json_content[last_quote+1:]
+                if '}' in remaining or ']' in remaining or ',' in remaining:
+                    # 구조가 있으면 따옴표 앞에 닫기
+                    insert_pos = last_quote + 1 + min(
+                        remaining.find(c) if c in remaining else len(remaining) 
+                        for c in ['}', ']', ',']
+                    )
+                    json_content = json_content[:insert_pos] + '"' + json_content[insert_pos:]
+                else:
+                    # 구조가 없으면 끝에 닫기
+                    json_content += '"'
+            
+            # 6. 불완전한 JSON 끝 처리
             open_braces = json_content.count('{') - json_content.count('}')
             open_brackets = json_content.count('[') - json_content.count(']')
             
