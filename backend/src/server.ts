@@ -1367,7 +1367,7 @@ app.patch('/api/tasks/:id',
         assigneeId
       } = req.body;
 
-      // 업무 존재 확인 (metadata 포함해서 조회)
+      // 업무 존재 확인 (metadata와 project.slackInput 포함해서 조회)
       const existingTask = await prisma.task.findFirst({
         where: { 
           id: id as string, 
@@ -1376,7 +1376,11 @@ app.patch('/api/tasks/:id',
         include: {
           metadata: true,
           assignee: true,
-          project: true
+          project: {
+            include: {
+              slackInput: true
+            }
+          }
         }
       });
 
@@ -1430,8 +1434,9 @@ app.patch('/api/tasks/:id',
           const notionPageId = existingTask.project.notionPageUrl.split('-').pop()?.replace(/[^a-zA-Z0-9]/g, '') || '';
           if (notionPageId) {
             const NotionService = (await import('./services/notion-service')).NotionService;
-            // 프로젝트 소유자의 Notion 연동 사용
-            const notionService = await NotionService.createForUser(tenantId, existingTask.project.createdById);
+            // 프로젝트 소유자의 Notion 연동 사용 (slackInput의 userId 사용)
+            const projectOwnerId = existingTask.project.slackInput?.userId || existingTask.assigneeId || '';
+            const notionService = await NotionService.createForUser(tenantId, projectOwnerId);
             
             if (notionService) {
               const updateData: any = {
@@ -1467,7 +1472,9 @@ app.patch('/api/tasks/:id',
       if (existingTask.metadata?.jiraIssueKey) {
         try {
           const JiraService = (await import('./services/jira-service')).JiraService;
-          const jiraService = new JiraService();
+          const { PrismaClient: JiraPrisma } = await import('@prisma/client');
+          const jiraPrisma = new JiraPrisma();
+          const jiraService = new JiraService(jiraPrisma);
           
           const updateData: any = {
             title: title || existingTask.title,
@@ -1485,9 +1492,10 @@ app.patch('/api/tasks/:id',
           }
           
           // 프로젝트 소유자의 Jira 연동 사용
+          const projectOwnerId = existingTask.project?.slackInput?.userId || existingTask.assigneeId || '';
           const result = await jiraService.updateTask(
             tenantId, 
-            existingTask.project?.createdById || existingTask.assigneeId || '',
+            projectOwnerId,
             existingTask.metadata.jiraIssueKey,
             updateData
           );
@@ -1521,7 +1529,7 @@ app.delete('/api/tasks/:id',
 
       console.log(`🗑️ 업무 삭제 요청: Task ID: ${id}, Tenant ID: ${tenantId}`);
 
-      // 업무 존재 확인 (metadata와 project 포함)
+      // 업무 존재 확인 (metadata와 project.slackInput 포함)
       const existingTask = await prisma.task.findFirst({
         where: { 
           id: id as string, 
@@ -1529,7 +1537,11 @@ app.delete('/api/tasks/:id',
         },
         include: {
           metadata: true,
-          project: true
+          project: {
+            include: {
+              slackInput: true
+            }
+          }
         }
       });
 
@@ -1578,8 +1590,9 @@ app.delete('/api/tasks/:id',
           const notionPageId = existingTask.project.notionPageUrl.split('-').pop()?.replace(/[^a-zA-Z0-9]/g, '') || '';
           if (notionPageId) {
             const NotionService = (await import('./services/notion-service')).NotionService;
-            // 프로젝트 소유자의 Notion 연동 사용
-            const notionService = await NotionService.createForUser(tenantId, existingTask.project.createdById);
+            // 프로젝트 소유자의 Notion 연동 사용 (slackInput의 userId 사용)
+            const projectOwnerId = existingTask.project.slackInput?.userId || existingTask.assigneeId || '';
+            const notionService = await NotionService.createForUser(tenantId, projectOwnerId);
             
             if (notionService) {
               const result = await notionService.deleteTask(notionPageId);
@@ -1600,12 +1613,15 @@ app.delete('/api/tasks/:id',
       if (existingTask.metadata?.jiraIssueKey) {
         try {
           const JiraService = (await import('./services/jira-service')).JiraService;
-          const jiraService = new JiraService();
+          const { PrismaClient: JiraPrisma } = await import('@prisma/client');
+          const jiraPrisma = new JiraPrisma();
+          const jiraService = new JiraService(jiraPrisma);
           
           // 프로젝트 소유자의 Jira 연동 사용
+          const projectOwnerId = existingTask.project?.slackInput?.userId || existingTask.assigneeId || '';
           const result = await jiraService.deleteTask(
             tenantId,
-            existingTask.project?.createdById || existingTask.assigneeId || '',
+            projectOwnerId,
             existingTask.metadata.jiraIssueKey
           );
           
