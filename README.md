@@ -46,8 +46,17 @@
 - **외부 서비스 연동**: Slack/Notion/JIRA/AI 서버
 
 ## 시퀀스 다이어그램
+아래 그림은 **TtalKkak AI 프로젝트 관리 시스템**에서 회의 발화 → AI 분석 → 태스크 자동 생성/배정 → Notion/JIRA 연동으로 이어지는 주요 시나리오의 흐름을 나타냅니다.  
 ![시퀀스 다이어그램](https://raw.githubusercontent.com/SKNETWORKS-FAMILY-AICAMP/SKN12-FINAL-3TEAM/refs/heads/main/%EC%82%B0%EC%B6%9C%EB%AC%BC/%EB%B0%9C%ED%91%9C%EC%9E%90%EB%A3%8C/img/%EC%8B%9C%ED%80%80%EC%8A%A4%EB%8B%A4%EC%9D%B4%EC%96%B4%EA%B7%B8%EB%9E%A8.webp)
-
+### 주요 Phase
+- **Phase 1: 음성 입력 및 회의록 처리**
+  - 사용자가 회의 발화를 입력 → WhisperX STT → 텍스트 변환
+- **Phase 2: 요약/의도 분석**
+  - BERT 분류기 & Qwen3 모델이 요약 및 태스크 후보 생성
+- **Phase 3: 스마트 태스크 생성 및 할당**
+  - Express 서버 → Notion/JIRA API 호출 → 업무 자동 등록
+- **Phase 4: 결과 전달**
+  - 사용자에게 Slack/웹 대시보드로 피드백 제공
 
 ---
 
