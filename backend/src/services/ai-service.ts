@@ -702,9 +702,9 @@ class AIService {
     
     for (let i = 0; i < maxAttempts; i++) {
       try {
-        // 상태 확인
+        // 상태 확인 - 타임아웃 증가
         const statusResponse = await this.aiAxios.get(`/job-status/${jobId}`, {
-          timeout: 5000
+          timeout: 15000  // 15초로 증가
         });
         
         const status = statusResponse.data.status;
@@ -713,9 +713,9 @@ class AIService {
         console.log(`📊 Job ${jobId}: ${status} (${progress}%)`);
         
         if (status === 'completed') {
-          // 결과 가져오기
+          // 결과 가져오기 - 타임아웃 증가
           const resultResponse = await this.aiAxios.get(`/job-result/${jobId}`, {
-            timeout: 10000
+            timeout: 30000  // 30초로 증가
           });
           console.log(`✅ Job ${jobId} completed successfully`);
           return resultResponse.data;
@@ -731,7 +731,10 @@ class AIService {
         
       } catch (error: any) {
         console.error(`❌ Error polling job ${jobId}:`, error.message);
-        // 계속 시도
+        // 네트워크 오류인 경우 잠시 대기 후 계속 시도
+        if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
       }
     }
     
