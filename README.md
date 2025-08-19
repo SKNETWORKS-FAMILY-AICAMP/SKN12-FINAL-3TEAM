@@ -137,7 +137,7 @@ Qwen3 생성 (문서화)
 
 ---
 ## 시스템 아키텍쳐
-**TtalKkak AI 프로젝트 관리 시스템**의 전체 아키텍처
+### **TtalKkak AI 프로젝트 관리 시스템**의 전체 아키텍처 </br>
 클라이언트 → 백엔드 API → AI 처리 엔진 → 데이터 레이어 → 비즈니스 서비스 → 외부 연동 API </br>
 
 ![시스템 아키텍처](https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN12-FINAL-3TEAM/blob/main/%EC%82%B0%EC%B6%9C%EB%AC%BC/%EB%B0%9C%ED%91%9C%EC%9E%90%EB%A3%8C/img/%EC%8B%9C%EC%8A%A4%ED%85%9C%EC%95%84%ED%82%A4%ED%85%8D%EC%B2%98.png?raw=true)
@@ -151,7 +151,7 @@ Qwen3 생성 (문서화)
 
 ---
 ## 시퀀스 다이어그램
-**TtalKkak AI 프로젝트 관리 시스템**에서 회의 발화 → AI 분석 → 태스크 자동 생성/배정 → Notion/JIRA 연동으로 이어지는 주요 시나리오의 흐름 </br>
+### **TtalKkak AI 프로젝트 관리 시스템**에서 회의 발화 → AI 분석 → 태스크 자동 생성/배정 → Notion/JIRA 연동으로 이어지는 주요 시나리오의 흐름 </br>
 
 ![시퀀스 다이어그램](https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN12-FINAL-3TEAM/blob/main/%EC%82%B0%EC%B6%9C%EB%AC%BC/%EB%B0%9C%ED%91%9C%EC%9E%90%EB%A3%8C/img/0.%EA%B8%B0%ED%9A%8D_%ED%94%84%EB%A1%9C%EC%A0%9D%ED%8A%B8%20%EA%B8%B0%ED%9A%8D%EC%84%9C_%EB%94%B8%EA%B9%8D_%EC%B2%A8%EB%B6%8001_%EC%8B%9C%ED%80%80%EC%8A%A4%20%EB%8B%A4%EC%9D%B4%EC%96%B4%EA%B7%B8%EB%9E%A8.png?raw=true)
 
