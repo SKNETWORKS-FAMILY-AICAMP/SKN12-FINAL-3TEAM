@@ -770,19 +770,79 @@ const MainContent = () => {
   };
 
   // 업무 수정 함수
-  const updateTask = (taskId: string, updatedData: any) => {
-    setColumns(prev => {
-      const newColumns = { ...prev };
-      Object.keys(newColumns).forEach(colId => {
-        newColumns[colId] = {
-          ...newColumns[colId],
-          items: newColumns[colId].items.map(item => 
-            item.id === taskId ? { ...item, ...updatedData } : item
-          )
-        };
+  const updateTask = async (taskId: string, updatedData: any) => {
+    try {
+      // 먼저 원본 태스크 찾기
+      let originalTask = null;
+      for (const column of Object.values(columns)) {
+        const task = column.items.find(item => item.id === taskId);
+        if (task) {
+          originalTask = task.originalTask;
+          break;
+        }
+      }
+      
+      if (!originalTask) {
+        throw new Error('Task not found');
+      }
+
+      // API 호출하여 DB 업데이트
+      const updatePayload: any = {};
+      
+      // 제목 변경
+      if (updatedData.content) {
+        updatePayload.title = updatedData.content;
+      }
+      
+      // 날짜 변경 (MM.DD 형식을 YYYY-MM-DD로 변환)
+      if (updatedData.date && updatedData.date !== '미정') {
+        const [month, day] = updatedData.date.split('.');
+        const year = new Date().getFullYear();
+        updatePayload.dueDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+      }
+      
+      // 우선순위 변경
+      if (updatedData.priority) {
+        updatePayload.priority = 
+          updatedData.priority === '높음' || updatedData.priority === 'high' ? 'HIGH' :
+          updatedData.priority === '낮음' || updatedData.priority === 'low' ? 'LOW' : 'MEDIUM';
+      }
+      
+      // 담당자 변경
+      if (updatedData.assignee) {
+        const user = users.find(u => u.name === updatedData.assignee);
+        if (user) {
+          updatePayload.assigneeId = user.id;
+        }
+      }
+      
+      console.log('📝 업무 수정 API 호출:', { taskId: originalTask.id, updates: updatePayload });
+      await taskAPI.updateTask(originalTask.id, updatePayload);
+      
+      // 로컬 상태 업데이트
+      setColumns(prev => {
+        const newColumns = { ...prev };
+        Object.keys(newColumns).forEach(colId => {
+          newColumns[colId] = {
+            ...newColumns[colId],
+            items: newColumns[colId].items.map(item => 
+              item.id === taskId ? { ...item, ...updatedData } : item
+            )
+          };
+        });
+        return newColumns;
       });
-      return newColumns;
-    });
+      
+      // 데이터 새로고침
+      refetchTasks();
+      refetchStats();
+      
+      toast.success('업무가 수정되었습니다! ✏️');
+    } catch (error) {
+      console.error('업무 수정 실패:', error);
+      toast.error('업무 수정에 실패했습니다.');
+      throw error;
+    }
   };
 
   // MM.DD 형식을 YYYY-MM-DD로 변환
@@ -821,18 +881,22 @@ const MainContent = () => {
   };
 
   // 편집 저장
-  const saveTaskEdit = () => {
+  const saveTaskEdit = async () => {
     if (selectedTask) {
-      // 달력에서 선택한 날짜를 MM.DD 형식으로 변환
-      const finalTaskData = {
-        ...editedTaskData,
-        date: editedTaskData.dateForInput ? formatDateFromInput(editedTaskData.dateForInput) : editedTaskData.date
-      };
-      
-      updateTask(selectedTask.id, finalTaskData);
-      setSelectedTask({ ...selectedTask, ...finalTaskData });
-      setIsEditingTask(false);
-      toast.success('업무가 수정되었습니다! ✏️');
+      try {
+        // 달력에서 선택한 날짜를 MM.DD 형식으로 변환
+        const finalTaskData = {
+          ...editedTaskData,
+          date: editedTaskData.dateForInput ? formatDateFromInput(editedTaskData.dateForInput) : editedTaskData.date
+        };
+        
+        await updateTask(selectedTask.id, finalTaskData);
+        setSelectedTask({ ...selectedTask, ...finalTaskData });
+        setIsEditingTask(false);
+        // toast는 updateTask 내부에서 처리됨
+      } catch (error) {
+        console.error('업무 수정 실패:', error);
+      }
     }
   };
 
