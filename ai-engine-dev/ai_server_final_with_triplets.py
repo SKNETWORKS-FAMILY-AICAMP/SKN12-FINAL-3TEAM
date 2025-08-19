@@ -2937,6 +2937,102 @@ async def get_job_result(job_id: str):
     
     return job_info["result"]
 
+# ==================== 비동기 태스크 생성 ====================
+
+async def process_tasks_async(job_id: str, prd_data: dict, num_tasks: int):
+    """백그라운드에서 태스크 생성"""
+    try:
+        jobs_store[job_id]["status"] = JobStatus.PROCESSING
+        jobs_store[job_id]["updated_at"] = datetime.now().isoformat()
+        
+        logger.info(f"🎯 Job {job_id}: Generating {num_tasks} tasks from PRD")
+        
+        # 기존 generate_tasks_from_prd 함수 재사용
+        result = await generate_tasks_from_prd(prd_data, num_tasks)
+        
+        # Job 완료
+        jobs_store[job_id]["status"] = JobStatus.COMPLETED
+        jobs_store[job_id]["result"] = {
+            "success": True,
+            "tasks": result if isinstance(result, list) else result.get("tasks", []),
+            "model": "Qwen3-4B"
+        }
+        jobs_store[job_id]["updated_at"] = datetime.now().isoformat()
+        
+        logger.info(f"✅ Job {job_id} completed: {len(result) if isinstance(result, list) else 0} tasks generated")
+        
+    except Exception as e:
+        logger.error(f"❌ Job {job_id} failed: {e}")
+        jobs_store[job_id]["status"] = JobStatus.FAILED
+        jobs_store[job_id]["error"] = str(e)
+        jobs_store[job_id]["updated_at"] = datetime.now().isoformat()
+
+@app.post("/generate-tasks-async")
+async def generate_tasks_async_endpoint(
+    request: Request,
+    prd: str = Form(None),
+    num_tasks: int = Form(5)
+):
+    """🚀 비동기 태스크 생성: Job ID를 즉시 반환"""
+    try:
+        # Job ID 생성
+        job_id = str(uuid.uuid4())
+        
+        # Job 정보 저장
+        jobs_store[job_id] = {
+            "job_id": job_id,
+            "status": JobStatus.PENDING,
+            "created_at": datetime.now().isoformat(),
+            "updated_at": datetime.now().isoformat(),
+            "progress": 0
+        }
+        
+        # JSON 요청 처리
+        if request.headers.get("content-type") == "application/json":
+            body = await request.json()
+            prd = body.get('prd', '')
+            num_tasks = body.get('num_tasks', 5)
+        
+        if not prd:
+            return JSONResponse(
+                content={"success": False, "error": "PRD content is required"},
+                status_code=400
+            )
+        
+        # PRD 파싱
+        if isinstance(prd, str):
+            try:
+                prd_data = json.loads(prd)
+            except:
+                prd_data = {
+                    "overview": prd,
+                    "core_features": "Features from PRD",
+                    "user_experience": "User experience"
+                }
+        else:
+            prd_data = prd
+        
+        # 백그라운드 태스크 시작
+        asyncio.create_task(process_tasks_async(job_id, prd_data, num_tasks))
+        
+        # Job ID 즉시 반환
+        return JSONResponse(
+            content={
+                "success": True,
+                "job_id": job_id,
+                "status": JobStatus.PENDING,
+                "message": f"Task generation job created. Use /job-status/{job_id} to check progress."
+            },
+            status_code=202
+        )
+        
+    except Exception as e:
+        logger.error(f"❌ Failed to create task generation job: {e}")
+        return JSONResponse(
+            content={"success": False, "error": str(e)},
+            status_code=500
+        )
+
 if __name__ == "__main__":
     # 환경 변수 설정
     host = os.getenv("HOST", "0.0.0.0")

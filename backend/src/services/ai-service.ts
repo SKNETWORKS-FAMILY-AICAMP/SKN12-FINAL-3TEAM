@@ -403,19 +403,44 @@ class AIService {
           num_tasks: 5
         };
         
-        const response = await this.aiAxios.post(`${this.baseUrl}/generate-tasks`, requestBody);
-
-        const result: GeneratedTasksResult = response.data;
-
-        if (result.success) {
-          console.log(`✅ Tasks generated successfully via VLLM: ${result.tasks?.length || 0} tasks`);
-          return result;
-        } else {
-          console.error(`❌ AI task generation failed: ${result.error}`);
+        // 비동기 엔드포인트 사용 (/generate-tasks-async)
+        const asyncResponse = await this.aiAxios.post(`${this.baseUrl}/generate-tasks-async`, requestBody, {
+          timeout: 10000 // Job ID만 받기
+        });
+        
+        if (asyncResponse.data.success && asyncResponse.data.job_id) {
+          console.log(`✅ Async task generation job created: ${asyncResponse.data.job_id}`);
+          const result = await this.pollJobResult(asyncResponse.data.job_id);
+          
+          if (result.success) {
+            console.log(`✅ Tasks generated successfully via VLLM: ${result.tasks?.length || 0} tasks`);
+            return result;
+          }
         }
 
       } catch (error: any) {
-        console.warn(`AI 서버 연결 실패: ${error?.response?.data?.error || error.message || 'Unknown error'}`);
+        console.warn(`AI 서버 비동기 실패, 동기 방식 시도: ${error.message}`);
+        
+        // 폴백: 동기 방식 시도
+        try {
+          const requestBody = {
+            prd: typeof prd === 'string' ? prd : JSON.stringify(prd),
+            num_tasks: 5
+          };
+          
+          const response = await this.aiAxios.post(`${this.baseUrl}/generate-tasks`, requestBody, {
+            timeout: 90000 // 90초 제한
+          });
+
+          const result: GeneratedTasksResult = response.data;
+
+          if (result.success) {
+            console.log(`✅ Tasks generated successfully via sync: ${result.tasks?.length || 0} tasks`);
+            return result;
+          }
+        } catch (syncError: any) {
+          console.warn(`AI 서버 연결 실패: ${syncError.message}`);
+        }
       }
 
       // fallback dummy data
