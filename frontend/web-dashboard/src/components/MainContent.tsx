@@ -43,6 +43,7 @@ interface KanbanItem {
   assignee?: string;
   priority?: string;
   originalTask?: any;
+  parentTaskTitle?: string; // 부모 태스크 제목 (서브태스크인 경우)
 }
 
 interface KanbanColumn {
@@ -454,7 +455,9 @@ const MainContent = () => {
           children: task.children
         });
 
-        // 메인 태스크 처리 (일단 다시 표시)
+        // 메인 태스크는 표시하지 않고 서브태스크만 표시
+        // (주석 처리됨 - 서브태스크만 칸반보드에 표시)
+        /*
         const mainKanbanItem: KanbanItem = {
           id: task.id,
           content: task.title,
@@ -472,18 +475,20 @@ const MainContent = () => {
         } else if (task.status === 'DONE') {
           newColumns.done.items.push(mainKanbanItem);
         }
+        */
 
-        // 서브태스크(children) 처리
+        // 서브태스크(children)만 처리
         if (task.children && task.children.length > 0) {
           console.log('✅ 서브태스크 발견:', task.children.length, '개');
           task.children.forEach(subtask => {
             const subtaskItem: KanbanItem = {
               id: subtask.id,
-              content: `[${task.title}] ${subtask.title}`, // 메인태스크 이름 포함
+              content: subtask.title, // 서브태스크 제목만 표시
               date: formatDate(subtask.dueDate),
               assignee: subtask.assignee?.name || '미지정',
               priority: subtask.priority?.toLowerCase() || 'medium',
-              originalTask: subtask
+              originalTask: subtask,
+              parentTaskTitle: task.title // 부모 태스크 제목을 별도로 저장
             };
 
             console.log('📌 서브태스크 추가:', subtaskItem);
