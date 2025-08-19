@@ -50,6 +50,98 @@ export class NotionService {
       throw new Error('Invalid access token');
     }
   }
+
+  // 태스크 업데이트 (웹 대시보드 동기화용)
+  async updateTask(pageId: string, updates: {
+    title?: string;
+    status?: string;
+    assignee?: string;
+    priority?: string;
+    dueDate?: string;
+    description?: string;
+  }): Promise<{ success: boolean; error?: string }> {
+    try {
+      console.log('📝 Notion 태스크 업데이트 시작:', pageId);
+      
+      const properties: any = {};
+      
+      // 제목 업데이트
+      if (updates.title) {
+        properties['이름'] = {
+          title: [{ text: { content: updates.title } }]
+        };
+      }
+      
+      // 상태 업데이트
+      if (updates.status) {
+        const statusMap: { [key: string]: string } = {
+          'TODO': '📋 할 일',
+          'IN_PROGRESS': '🚧 진행 중',
+          'DONE': '✅ 완료'
+        };
+        properties['상태'] = {
+          select: { name: statusMap[updates.status] || updates.status }
+        };
+      }
+      
+      // 담당자 업데이트
+      if (updates.assignee) {
+        properties['담당자'] = {
+          rich_text: [{ text: { content: updates.assignee } }]
+        };
+      }
+      
+      // 우선순위 업데이트
+      if (updates.priority) {
+        const priorityMap: { [key: string]: string } = {
+          'HIGH': '🔴 높음',
+          'MEDIUM': '🟡 중간',
+          'LOW': '🟢 낮음'
+        };
+        properties['우선순위'] = {
+          select: { name: priorityMap[updates.priority] || updates.priority }
+        };
+      }
+      
+      // 마감일 업데이트
+      if (updates.dueDate) {
+        properties['마감일'] = {
+          date: { start: updates.dueDate.split('T')[0] }
+        };
+      }
+      
+      // Notion API 호출
+      await this.notion.pages.update({
+        page_id: pageId,
+        properties: properties
+      });
+      
+      console.log('✅ Notion 태스크 업데이트 성공');
+      return { success: true };
+    } catch (error: any) {
+      console.error('❌ Notion 태스크 업데이트 실패:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // 태스크 삭제 (아카이브 처리)
+  async deleteTask(pageId: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      console.log('🗑️ Notion 태스크 삭제(아카이브) 시작:', pageId);
+      
+      // Notion에서는 실제 삭제 대신 아카이브 처리
+      await this.notion.pages.update({
+        page_id: pageId,
+        archived: true
+      });
+      
+      console.log('✅ Notion 태스크 아카이브 성공');
+      return { success: true };
+    } catch (error: any) {
+      console.error('❌ Notion 태스크 삭제 실패:', error);
+      return { success: false, error: error.message };
+    }
+  }
   
   // 사용자별 NotionService 인스턴스 생성
   static async createForUser(tenantId: string, userId: string): Promise<NotionService | null> {

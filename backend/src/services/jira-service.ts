@@ -923,6 +923,123 @@ class JiraService {
   }
 
   /**
+   * JIRA 이슈 업데이트 (웹 대시보드 동기화용)
+   */
+  async updateTask(tenantId: string, userId: string, issueKey: string, updates: {
+    title?: string;
+    status?: string;
+    assignee?: string;
+    priority?: string;
+    dueDate?: string;
+    description?: string;
+  }): Promise<{ success: boolean; error?: string }> {
+    const integration = await this.getJiraIntegration(tenantId, userId);
+    if (!integration) {
+      return { success: false, error: 'Integration not found' };
+    }
+
+    try {
+      console.log('📝 JIRA 태스크 업데이트 시작:', issueKey);
+      
+      const fields: any = {};
+      
+      // 제목 업데이트
+      if (updates.title) {
+        fields.summary = updates.title;
+      }
+      
+      // 설명 업데이트
+      if (updates.description) {
+        fields.description = {
+          type: 'doc',
+          version: 1,
+          content: [
+            {
+              type: 'paragraph',
+              content: [
+                {
+                  type: 'text',
+                  text: updates.description
+                }
+              ]
+            }
+          ]
+        };
+      }
+      
+      // 우선순위 업데이트
+      if (updates.priority) {
+        const priorityMap: { [key: string]: string } = {
+          'HIGH': 'Highest',
+          'MEDIUM': 'Medium',
+          'LOW': 'Low'
+        };
+        fields.priority = { name: priorityMap[updates.priority] || 'Medium' };
+      }
+      
+      // 마감일 업데이트
+      if (updates.dueDate) {
+        fields.duedate = updates.dueDate.split('T')[0];
+      }
+      
+      // 담당자 업데이트 (accountId 필요)
+      if (updates.assignee) {
+        // assignee는 이메일이나 이름일 수 있으므로, 사용자 검색이 필요할 수 있음
+        // 지금은 null로 설정 (미할당)
+        fields.assignee = null;
+      }
+      
+      // JIRA API 호출
+      if (Object.keys(fields).length > 0) {
+        await this.callJiraAPI(
+          integration,
+          `/issue/${issueKey}`,
+          'PUT',
+          { fields }
+        );
+      }
+      
+      // 상태 업데이트는 별도 트랜지션 API 필요
+      if (updates.status) {
+        await this.updateIssueStatus(tenantId, userId, issueKey, updates.status);
+      }
+      
+      console.log('✅ JIRA 태스크 업데이트 성공');
+      return { success: true };
+    } catch (error: any) {
+      console.error('❌ JIRA 태스크 업데이트 실패:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * JIRA 이슈 삭제
+   */
+  async deleteTask(tenantId: string, userId: string, issueKey: string): Promise<{ success: boolean; error?: string }> {
+    const integration = await this.getJiraIntegration(tenantId, userId);
+    if (!integration) {
+      return { success: false, error: 'Integration not found' };
+    }
+
+    try {
+      console.log('🗑️ JIRA 태스크 삭제 시작:', issueKey);
+      
+      // JIRA API 호출
+      await this.callJiraAPI(
+        integration,
+        `/issue/${issueKey}`,
+        'DELETE'
+      );
+      
+      console.log('✅ JIRA 태스크 삭제 성공');
+      return { success: true };
+    } catch (error: any) {
+      console.error('❌ JIRA 태스크 삭제 실패:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
    * JIRA 이슈 상태 업데이트
    */
   async updateIssueStatus(tenantId: string, userId: string, issueKey: string, status: string) {

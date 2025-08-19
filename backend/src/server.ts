@@ -1367,11 +1367,16 @@ app.patch('/api/tasks/:id',
         assigneeId
       } = req.body;
 
-      // 업무 존재 확인
+      // 업무 존재 확인 (metadata 포함해서 조회)
       const existingTask = await prisma.task.findFirst({
         where: { 
           id: id as string, 
           tenantId 
+        },
+        include: {
+          metadata: true,
+          assignee: true,
+          project: true
         }
       });
 
@@ -1380,8 +1385,9 @@ app.patch('/api/tasks/:id',
       }
 
       // assigneeId가 변경되었고 값이 있으면 해당 사용자가 같은 tenant인지 확인
+      let assigneeUser = null;
       if (assigneeId !== undefined && assigneeId) {
-        const assigneeUser = await prisma.user.findFirst({
+        assigneeUser = await prisma.user.findFirst({
           where: {
             id: assigneeId,
             tenantId: tenantId
@@ -1417,6 +1423,86 @@ app.patch('/api/tasks/:id',
         }
       });
 
+      // Notion 동기화
+      if (existingTask.project?.notionPageUrl) {
+        try {
+          // URL에서 페이지 ID 추출
+          const notionPageId = existingTask.project.notionPageUrl.split('-').pop()?.replace(/[^a-zA-Z0-9]/g, '') || '';
+          if (notionPageId) {
+            const NotionService = (await import('./services/notion-service')).NotionService;
+            // 프로젝트 소유자의 Notion 연동 사용
+            const notionService = await NotionService.createForUser(tenantId, existingTask.project.createdById);
+            
+            if (notionService) {
+              const updateData: any = {
+                title: title || existingTask.title,
+                status: status || existingTask.status,
+                priority: priority || existingTask.priority,
+                assignee: assigneeUser?.name || existingTask.assignee?.name
+              };
+              
+              if (dueDate) {
+                updateData.dueDate = dueDate;
+              }
+              
+              if (description !== undefined) {
+                updateData.description = description;
+              }
+              
+              const result = await notionService.updateTask(notionPageId, updateData);
+              if (result.success) {
+                console.log('✅ Notion 동기화 성공');
+              } else {
+                console.error('⚠️ Notion 동기화 실패:', result.error);
+              }
+            }
+          }
+        } catch (error) {
+          console.error('❌ Notion 동기화 중 오류:', error);
+          // Notion 동기화 실패해도 API는 성공 처리
+        }
+      }
+
+      // Jira 동기화
+      if (existingTask.metadata?.jiraIssueKey) {
+        try {
+          const JiraService = (await import('./services/jira-service')).JiraService;
+          const jiraService = new JiraService();
+          
+          const updateData: any = {
+            title: title || existingTask.title,
+            status: status || existingTask.status,
+            priority: priority || existingTask.priority,
+            assignee: assigneeUser?.email || existingTask.assignee?.email
+          };
+          
+          if (dueDate) {
+            updateData.dueDate = dueDate;
+          }
+          
+          if (description !== undefined) {
+            updateData.description = description;
+          }
+          
+          // 프로젝트 소유자의 Jira 연동 사용
+          const result = await jiraService.updateTask(
+            tenantId, 
+            existingTask.project?.createdById || existingTask.assigneeId || '',
+            existingTask.metadata.jiraIssueKey,
+            updateData
+          );
+          
+          if (result.success) {
+            console.log('✅ Jira 동기화 성공');
+          } else {
+            console.error('⚠️ Jira 동기화 실패:', result.error);
+          }
+        } catch (error) {
+          console.error('❌ Jira 동기화 중 오류:', error);
+          // Jira 동기화 실패해도 API는 성공 처리
+        }
+      }
+
       return res.json(updatedTask);
     } catch (error) {
       console.error('Task update error:', error);
@@ -1435,11 +1521,15 @@ app.delete('/api/tasks/:id',
 
       console.log(`🗑️ 업무 삭제 요청: Task ID: ${id}, Tenant ID: ${tenantId}`);
 
-      // 업무 존재 확인
+      // 업무 존재 확인 (metadata와 project 포함)
       const existingTask = await prisma.task.findFirst({
         where: { 
           id: id as string, 
           tenantId 
+        },
+        include: {
+          metadata: true,
+          project: true
         }
       });
 
@@ -1479,6 +1569,55 @@ app.delete('/api/tasks/:id',
         return res.status(400).json({ 
           error: 'Cannot delete task with subtasks. Please delete subtasks first.' 
         });
+      }
+
+      // Notion 동기화 (삭제 전에 수행)
+      if (existingTask.project?.notionPageUrl) {
+        try {
+          // URL에서 페이지 ID 추출
+          const notionPageId = existingTask.project.notionPageUrl.split('-').pop()?.replace(/[^a-zA-Z0-9]/g, '') || '';
+          if (notionPageId) {
+            const NotionService = (await import('./services/notion-service')).NotionService;
+            // 프로젝트 소유자의 Notion 연동 사용
+            const notionService = await NotionService.createForUser(tenantId, existingTask.project.createdById);
+            
+            if (notionService) {
+              const result = await notionService.deleteTask(notionPageId);
+              if (result.success) {
+                console.log('✅ Notion에서 태스크 아카이브 성공');
+              } else {
+                console.error('⚠️ Notion 태스크 아카이브 실패:', result.error);
+              }
+            }
+          }
+        } catch (error) {
+          console.error('❌ Notion 동기화 중 오류:', error);
+          // Notion 동기화 실패해도 삭제는 진행
+        }
+      }
+
+      // Jira 동기화 (삭제 전에 수행)
+      if (existingTask.metadata?.jiraIssueKey) {
+        try {
+          const JiraService = (await import('./services/jira-service')).JiraService;
+          const jiraService = new JiraService();
+          
+          // 프로젝트 소유자의 Jira 연동 사용
+          const result = await jiraService.deleteTask(
+            tenantId,
+            existingTask.project?.createdById || existingTask.assigneeId || '',
+            existingTask.metadata.jiraIssueKey
+          );
+          
+          if (result.success) {
+            console.log('✅ Jira에서 태스크 삭제 성공');
+          } else {
+            console.error('⚠️ Jira 태스크 삭제 실패:', result.error);
+          }
+        } catch (error) {
+          console.error('❌ Jira 동기화 중 오류:', error);
+          // Jira 동기화 실패해도 삭제는 진행
+        }
       }
 
       // 업무 삭제
