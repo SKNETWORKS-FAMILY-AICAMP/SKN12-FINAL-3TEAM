@@ -194,7 +194,7 @@ class AIService {
     // AI 서버 전용 axios 인스턴스 생성
     this.aiAxios = axios.create({
       baseURL: this.baseUrl,  // 중요: baseURL 설정 필수!
-      timeout: 60000,  // 기본 타임아웃 60초로 설정 (개별 요청에서 오버라이드 가능)
+      timeout: 300000,  // 기본 타임아웃 5분으로 설정 (AI 처리 시간이 긴 경우 대비)
       headers: {
         'Connection': 'keep-alive',
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
@@ -697,14 +697,14 @@ class AIService {
   /**
    * Job 결과를 폴링으로 가져오기
    */
-  private async pollJobResult(jobId: string, maxAttempts: number = 30): Promise<any> {
+  private async pollJobResult(jobId: string, maxAttempts: number = 60): Promise<any> {
     console.log(`⏳ Polling job ${jobId}...`);
     
     for (let i = 0; i < maxAttempts; i++) {
       try {
-        // 상태 확인 - RunPod 프록시 응답 지연 고려하여 타임아웃 대폭 증가
+        // 상태 확인 - 타임아웃을 늘리고 더 자주 체크
         const statusResponse = await this.aiAxios.get(`/job-status/${jobId}`, {
-          timeout: 60000  // 60초로 증가
+          timeout: 30000  // 30초 타임아웃
         });
         
         const status = statusResponse.data.status;
@@ -726,19 +726,23 @@ class AIService {
           throw new Error(statusResponse.data.error || 'Job failed');
         }
         
-        // 30초 대기 (전체 처리 시간이 긴 작업)
-        await new Promise(resolve => setTimeout(resolve, 30000));
+        // 15초 대기 (더 자주 체크하되 총 시간은 늘림)
+        await new Promise(resolve => setTimeout(resolve, 15000));
         
       } catch (error: any) {
-        console.error(`❌ Error polling job ${jobId}:`, error.message);
-        // 네트워크 오류인 경우 잠시 대기 후 계속 시도
+        console.error(`⚠️ Error polling job ${jobId}:`, error.message);
+        // 타임아웃이나 네트워크 오류는 무시하고 계속 시도
         if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+          console.log(`🔄 Retrying poll for job ${jobId}...`);
           await new Promise(resolve => setTimeout(resolve, 2000));
+          continue;  // 다음 반복으로 계속
         }
+        // 다른 오류는 throw
+        throw error;
       }
     }
     
-    throw new Error(`Job ${jobId} timeout after ${maxAttempts * 30} seconds`);
+    throw new Error(`Job ${jobId} timeout after ${maxAttempts * 15} seconds`);
   }
 
   async processTwoStagePipeline(audioBuffer: Buffer, filename?: string): Promise<TwoStagePipelineResult> {
