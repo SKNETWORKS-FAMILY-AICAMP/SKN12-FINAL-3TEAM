@@ -1434,8 +1434,19 @@ app.patch('/api/tasks/:id',
           const notionPageId = existingTask.project.notionPageUrl.split('-').pop()?.replace(/[^a-zA-Z0-9]/g, '') || '';
           if (notionPageId) {
             const NotionService = (await import('./services/notion-service')).NotionService;
-            // 프로젝트 소유자의 Notion 연동 사용 (slackInput의 userId 사용)
-            const projectOwnerId = existingTask.project.slackInput?.userId || existingTask.assigneeId || '';
+            // 프로젝트 소유자의 Notion 연동 사용 (slackUserId로 User 찾기)
+            let projectOwnerId = existingTask.assigneeId || '';
+            if (existingTask.project.slackInput?.slackUserId) {
+              const projectOwner = await prisma.user.findFirst({
+                where: {
+                  tenantId,
+                  slackUserId: existingTask.project.slackInput.slackUserId
+                }
+              });
+              if (projectOwner) {
+                projectOwnerId = projectOwner.id;
+              }
+            }
             const notionService = await NotionService.createForUser(tenantId, projectOwnerId);
             
             if (notionService) {
@@ -1491,8 +1502,19 @@ app.patch('/api/tasks/:id',
             updateData.description = description;
           }
           
-          // 프로젝트 소유자의 Jira 연동 사용
-          const projectOwnerId = existingTask.project?.slackInput?.userId || existingTask.assigneeId || '';
+          // 프로젝트 소유자의 Jira 연동 사용 (slackUserId로 User 찾기)
+          let projectOwnerId = existingTask.assigneeId || '';
+          if (existingTask.project?.slackInput?.slackUserId) {
+            const projectOwner = await prisma.user.findFirst({
+              where: {
+                tenantId,
+                slackUserId: existingTask.project.slackInput.slackUserId
+              }
+            });
+            if (projectOwner) {
+              projectOwnerId = projectOwner.id;
+            }
+          }
           const result = await jiraService.updateTask(
             tenantId, 
             projectOwnerId,
@@ -1590,8 +1612,19 @@ app.delete('/api/tasks/:id',
           const notionPageId = existingTask.project.notionPageUrl.split('-').pop()?.replace(/[^a-zA-Z0-9]/g, '') || '';
           if (notionPageId) {
             const NotionService = (await import('./services/notion-service')).NotionService;
-            // 프로젝트 소유자의 Notion 연동 사용 (slackInput의 userId 사용)
-            const projectOwnerId = existingTask.project.slackInput?.userId || existingTask.assigneeId || '';
+            // 프로젝트 소유자의 Notion 연동 사용 (slackUserId로 User 찾기)
+            let projectOwnerId = existingTask.assigneeId || '';
+            if (existingTask.project.slackInput?.slackUserId) {
+              const projectOwner = await prisma.user.findFirst({
+                where: {
+                  tenantId,
+                  slackUserId: existingTask.project.slackInput.slackUserId
+                }
+              });
+              if (projectOwner) {
+                projectOwnerId = projectOwner.id;
+              }
+            }
             const notionService = await NotionService.createForUser(tenantId, projectOwnerId);
             
             if (notionService) {
