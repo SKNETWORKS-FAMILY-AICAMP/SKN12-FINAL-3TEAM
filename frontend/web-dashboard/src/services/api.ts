@@ -284,10 +284,10 @@ export const taskAPI = {
       }, {} as Record<string, number>);
       console.log('✅ 상태별 태스크 개수:', statusCount);
       
-      // 전체 태스크 목록 (간단히)
+      // 전체 태스크 목록 (ID 포함)
       console.log('✅ 전체 태스크 목록:');
       response.data.forEach((task, index) => {
-        console.log(`  ${index + 1}. ${task.title} (담당: ${task.assignee?.name || '미지정'}, 상태: ${task.status})`);
+        console.log(`  ${index + 1}. ID: ${task.id} | ${task.title} (담당: ${task.assignee?.name || '미지정'}, 상태: ${task.status})`);
       });
       
       return response.data;

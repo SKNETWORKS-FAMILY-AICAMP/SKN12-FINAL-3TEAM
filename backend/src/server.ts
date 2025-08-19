@@ -1453,6 +1453,15 @@ app.delete('/api/tasks/:id',
         
         if (taskInOtherTenant) {
           console.error(`⚠️ 태스크가 다른 tenant에 존재: Task Tenant: ${taskInOtherTenant.tenantId}, Request Tenant: ${tenantId}`);
+        } else {
+          console.error(`❌ 태스크가 DB에 전혀 존재하지 않음: ${id}`);
+          
+          // 현재 tenant의 모든 태스크 ID 출력 (디버깅용)
+          const allTasks = await prisma.task.findMany({
+            where: { tenantId },
+            select: { id: true, title: true }
+          });
+          console.log(`📋 현재 tenant(${tenantId})의 태스크 목록:`, allTasks.map(t => ({ id: t.id, title: t.title })));
         }
         
         return res.status(404).json({ error: 'Task not found' });

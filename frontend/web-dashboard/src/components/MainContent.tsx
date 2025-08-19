@@ -706,6 +706,7 @@ const MainContent = () => {
 
   // 업무 삭제 함수
   const deleteTask = async (taskId: string) => {
+    console.log(`🗑️ 삭제 시도 중: Task ID = ${taskId}`);
     try {
       // API 호출하여 DB에서 삭제
       await taskAPI.deleteTask(taskId);
@@ -1474,6 +1475,7 @@ const MainContent = () => {
                 </button>
                 <button
                   onClick={async () => {
+                    console.log('🗑️ 삭제 버튼 클릭:', taskToDelete);
                     await deleteTask(taskToDelete.id);
                     setShowDeleteModal(false);
                     setTaskToDelete(null);
