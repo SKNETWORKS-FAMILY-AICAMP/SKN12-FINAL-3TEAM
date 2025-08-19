@@ -30,6 +30,18 @@ interface InputData {
     created_at: string;
     updated_at: string | null;
   }>;
+  // AI가 생성한 프로젝트 정보 추가
+  project_info?: {
+    project_name?: string;
+    project_purpose?: string;
+    project_period?: string;
+    project_manager?: string;
+    core_objectives?: string[];
+    core_idea?: string;
+    idea_description?: string;
+    execution_plan?: string;
+    expected_effects?: string[];
+  };
 }
 
 export class NotionService {
@@ -467,7 +479,7 @@ async createMeetingPage(inputData: InputData | string, projectName?: string): Pr
                 paragraph: {
                   rich_text: [
                     { type: 'text' as const, text: { content: '프로젝트명' }, annotations: { bold: true } },
-                    { type: 'text' as const, text: { content: `: ${this.extractProjectName(parsedData)}` } }
+                    { type: 'text' as const, text: { content: `: ${parsedData.project_info?.project_name || projectName || this.extractProjectName(parsedData)}` } }
                   ]
                 }
               },
@@ -479,7 +491,7 @@ async createMeetingPage(inputData: InputData | string, projectName?: string): Pr
                 paragraph: {
                   rich_text: [
                     { type: 'text' as const, text: { content: '목적' }, annotations: { bold: true } },
-                    { type: 'text' as const, text: { content: `: ${this.extractPurposeFromSummary(parsedData)}` } }
+                    { type: 'text' as const, text: { content: `: ${parsedData.project_info?.project_purpose || this.extractPurposeFromSummary(parsedData)}` } }
                   ]
                 }
               },
@@ -491,7 +503,7 @@ async createMeetingPage(inputData: InputData | string, projectName?: string): Pr
                 paragraph: {
                   rich_text: [
                     { type: 'text' as const, text: { content: '수행기간' }, annotations: { bold: true } },
-                    { type: 'text' as const, text: { content: `: ${this.calculateProjectPeriod(parsedData)}` } }
+                    { type: 'text' as const, text: { content: `: ${parsedData.project_info?.project_period || this.calculateProjectPeriod(parsedData)}` } }
                   ]
                 }
               },
@@ -503,7 +515,7 @@ async createMeetingPage(inputData: InputData | string, projectName?: string): Pr
                 paragraph: {
                   rich_text: [
                     { type: 'text' as const, text: { content: '담당자' }, annotations: { bold: true } },
-                    { type: 'text' as const, text: { content: `: ${this.extractAssignees(parsedData).join(', ')}` } }
+                    { type: 'text' as const, text: { content: `: ${parsedData.project_info?.project_manager || this.extractAssignees(parsedData).join(', ') || '미지정'}` } }
                   ]
                 }
               },
@@ -521,8 +533,8 @@ async createMeetingPage(inputData: InputData | string, projectName?: string): Pr
                 }
               },
               
-              // 목표 불릿 리스트 (기획안 데이터 또는 high priority 업무들 사용)
-              ...this.extractObjectives(parsedData).map(objective => ({
+              // 목표 불릿 리스트 (AI가 생성한 core_objectives 사용)
+              ...(parsedData.project_info?.core_objectives || this.extractObjectives(parsedData)).map(objective => ({
                 object: 'block' as const,
                 type: 'bulleted_list_item' as const,
                 bulleted_list_item: {
@@ -560,7 +572,7 @@ async createMeetingPage(inputData: InputData | string, projectName?: string): Pr
                       paragraph: {
                         rich_text: [{ 
                           type: 'text' as const, 
-                          text: { content: this.extractCoreIdea(parsedData) }
+                          text: { content: parsedData.project_info?.core_idea || this.extractCoreIdea(parsedData) }
                         }]
                       }
                     }
@@ -585,7 +597,7 @@ async createMeetingPage(inputData: InputData | string, projectName?: string): Pr
                       paragraph: {
                         rich_text: [{ 
                           type: 'text' as const, 
-                          text: { content: this.extractTechnologies(parsedData) }
+                          text: { content: parsedData.project_info?.idea_description || this.extractTechnologies(parsedData) }
                         }]
                       }
                     }
@@ -610,7 +622,7 @@ async createMeetingPage(inputData: InputData | string, projectName?: string): Pr
                       paragraph: {
                         rich_text: [{ 
                           type: 'text' as const, 
-                          text: { content: this.getExecutionPlanDescription(parsedData) }
+                          text: { content: parsedData.project_info?.execution_plan || this.getExecutionPlanDescription(parsedData) }
                         }]
                       }
                     },
@@ -618,7 +630,29 @@ async createMeetingPage(inputData: InputData | string, projectName?: string): Pr
                     ...this.createExecutionPlan(parsedData.action_items)
                   ]
                 }
-              }
+              },
+              
+              // 기대 효과 (초록 배경) - 새로 추가
+              {
+                object: 'block' as const,
+                type: 'heading_2' as const,
+                heading_2: {
+                  rich_text: [{ 
+                    type: 'text' as const, 
+                    text: { content: '기대 효과' }
+                  }],
+                  color: 'green_background' as const
+                }
+              },
+              
+              // 기대 효과 불릿 리스트
+              ...(parsedData.project_info?.expected_effects || []).map(effect => ({
+                object: 'block' as const,
+                type: 'bulleted_list_item' as const,
+                bulleted_list_item: {
+                  rich_text: [{ type: 'text' as const, text: { content: effect } }]
+                }
+              }))
             ]
           }
         }

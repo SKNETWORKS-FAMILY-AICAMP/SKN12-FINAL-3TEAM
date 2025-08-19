@@ -3815,6 +3815,7 @@ async function processTranscriptWithAI(transcript, client, channelId) {
     let aiData;
     let projectTitle;
     let projectSummary;
+    let result = null; // AI 서버 응답 저장용
     
     // JSON 형식인지 확인 (WhisperX에서 온 데이터)
     let isJsonFormat = false;
@@ -3849,7 +3850,7 @@ async function processTranscriptWithAI(transcript, client, channelId) {
       
       // 회의록 → PRD → 업무 생성 (WhisperX 건너뛰고 바로 AI 서버로)
       console.log('🚀 AI 서버로 회의록 전송 중...');
-      const result = await aiService.processTwoStagePipeline(
+      result = await aiService.processTwoStagePipeline(
         Buffer.from(transcript, 'utf-8'), 
         'transcript-input.txt'
       );
@@ -4075,10 +4076,12 @@ async function processTranscriptWithAI(transcript, client, channelId) {
       if (notionService) {
         console.log('📝 Notion 페이지 생성 시도...');
         
-        // ⭐ InputData 인터페이스에 맞게 데이터 구성
+        // ⭐ InputData 인터페이스에 맞게 데이터 구성 (프로젝트 정보 포함)
         const notionInputData = {
           summary: aiData.summary,
-          action_items: aiData.action_items
+          action_items: aiData.action_items,
+          // AI가 생성한 프로젝트 정보 추가
+          project_info: result?.stage1?.notion_project || null
         };
         
         // Notion 페이지 생성 직전에 정확히 어떤 데이터가 전달되는지 확인
