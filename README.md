@@ -102,9 +102,22 @@ AMI/ICSI: The University of Edinburgh 공개 데이터셋(허가 라이선스 �
 
 ---
 ## 모델 구성
-### WhisperX : 음성 → 텍스트 변환 & 화자 분리
-### KoBERT/KoBART : 필요문맥 분류
-### Qwen3 / GPT-4o : 회의 요약 및 액션 아이템 추출
+### 1. WhisperX (음성인식)
+- **Base Model**: OpenAI Whisper base
+- **언어**: 한국어 특화
+- **서버**: 독립 서버 (Port 8001)
+
+### 2. BERT (노이즈 필터링)
+- **Base Model**: KLUE/BERT-base
+- **Fine-tuning**: Ttalkkak_model_v3.pt
+- **분류**: Binary (업무/노이즈)
+- **정확도**: 92.5%
+
+### 3. Qwen3 (텍스트 생성)
+- **Models**: 4B 버전
+- **Fine-tuning**: LoRA 어댑터
+- **Quantization**: 4-bit (QLoRA)
+- **컨텍스트**: 8192 토큰
 
 ---
 ## ERD
