@@ -836,39 +836,44 @@ const MainContent = () => {
 
     setIsDocumentUploading(true);
     try {
-      // 문서 분석 API 호출 (예시)
-      // const result = await projectAPI.analyzeDocument(file);
-      
-      // 임시로 성공 처리
-      setTimeout(() => {
-        setIsDocumentUploading(false);
-        toast.success(`문서 "${file.name}"이 성공적으로 분석되었습니다! 📄`, {
-          description: `크기: ${(file.size / 1024).toFixed(1)}KB • 새로운 업무들이 추출되었습니다.`
-        });
-        
-        // 예시로 새 업무 추가
-        const newTask = {
-          id: Date.now().toString(),
-          content: `문서 분석 결과: ${file.name.split('.')[0]}`,
-          date: new Date().toLocaleDateString('ko-KR').replace(/\./g, '').replace(/ /g, '.'),
-          assignee: '자동 할당',
-          priority: '중간'
-        };
+      // 실제 업무 생성 API 호출
+      const createdTask = await taskAPI.createTask({
+        title: `문서 분석: ${file.name.split('.')[0]}`,
+        description: `문서 "${file.name}" (크기: ${(file.size / 1024).toFixed(1)}KB)에서 추출된 업무`,
+        status: 'TODO',
+        priority: 'MEDIUM'
+      });
 
-        setColumns((prev: any) => ({
-          ...prev,
-          todo: {
-            ...prev.todo,
-            items: [...prev.todo.items, newTask]
-          }
-        }));
+      // 로컬 상태 업데이트 - API에서 받은 실제 ID 사용
+      const newTask = {
+        id: createdTask.id,  // DB에서 생성된 실제 ID 사용
+        content: createdTask.title,
+        date: new Date(createdTask.createdAt || Date.now()).toLocaleDateString('ko-KR').replace(/\./g, '').replace(/ /g, '.'),
+        assignee: createdTask.assignee?.name || '미할당',
+        priority: createdTask.priority === 'HIGH' ? '높음' : createdTask.priority === 'LOW' ? '낮음' : '중간',
+        status: createdTask.status,
+        description: createdTask.description
+      };
 
-        refetchStats();
-        refetchTasks();
-      }, 2000);
+      setColumns((prev: any) => ({
+        ...prev,
+        todo: {
+          ...prev.todo,
+          items: [...prev.todo.items, newTask]
+        }
+      }));
+
+      // 데이터 새로고침
+      refetchTasks();
+      refetchStats();
+
+      toast.success(`문서 "${file.name}"이 성공적으로 분석되었습니다! 📄`, {
+        description: '새로운 업무가 생성되었습니다.'
+      });
     } catch (error) {
-      console.error('Document analysis failed:', error);
-      toast.error('문서 분석 중 오류가 발생했습니다. 😞');
+      console.error('Document upload failed:', error);
+      toast.error('문서 분석 중 오류가 발생했습니다.');
+    } finally {
       setIsDocumentUploading(false);
     }
   };

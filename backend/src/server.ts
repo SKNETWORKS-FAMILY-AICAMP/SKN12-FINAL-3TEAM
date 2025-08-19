@@ -1433,6 +1433,8 @@ app.delete('/api/tasks/:id',
       const { id } = req.params;
       const tenantId = req.tenantId!;
 
+      console.log(`🗑️ 업무 삭제 요청: Task ID: ${id}, Tenant ID: ${tenantId}`);
+
       // 업무 존재 확인
       const existingTask = await prisma.task.findFirst({
         where: { 
@@ -1442,6 +1444,17 @@ app.delete('/api/tasks/:id',
       });
 
       if (!existingTask) {
+        console.error(`❌ 업무를 찾을 수 없음: Task ID: ${id}, Tenant ID: ${tenantId}`);
+        
+        // 디버깅을 위해 해당 ID의 태스크가 다른 tenant에 있는지 확인
+        const taskInOtherTenant = await prisma.task.findUnique({
+          where: { id: id as string }
+        });
+        
+        if (taskInOtherTenant) {
+          console.error(`⚠️ 태스크가 다른 tenant에 존재: Task Tenant: ${taskInOtherTenant.tenantId}, Request Tenant: ${tenantId}`);
+        }
+        
         return res.status(404).json({ error: 'Task not found' });
       }
 
@@ -1464,6 +1477,7 @@ app.delete('/api/tasks/:id',
         where: { id: id as string }
       });
 
+      console.log(`✅ 업무 삭제 성공: Task ID: ${id}, Title: ${existingTask.title}`);
       return res.status(204).send();
     } catch (error) {
       console.error('Task deletion error:', error);
