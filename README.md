@@ -24,15 +24,26 @@
 
 
 ## 데이터
+데이터셋은 CSV/JSON 형태로 구성되어 있으며, 주요 Feature는 다음과 같습니다.
 
 ## 모델 구성
+아래 그림은 전체 모델 파이프라인을 나타냅니다.
 
 ## ERD
 서비스의 데이터베이스 구조는 아래와 같습니다.
 ![ERD](https://raw.githubusercontent.com/SKNETWORKS-FAMILY-AICAMP/SKN12-FINAL-3TEAM/refs/heads/main/%EC%82%B0%EC%B6%9C%EB%AC%BC/%EB%B0%9C%ED%91%9C%EC%9E%90%EB%A3%8C/img/ERD.webp)
 
 ## 시스템 아키텍쳐
+아래 그림은 **TtalKkak AI 프로젝트 관리 시스템**의 전체 아키텍처를 보여줍니다.  
+클라이언트 → 백엔드 API → AI 처리 엔진 → 데이터 레이어 → 비즈니스 서비스 → 외부 연동 API 로 이어지는 흐름을 한눈에 확인할 수 있습니다.
 ![시스템 아키텍처](https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN12-FINAL-3TEAM/blob/main/%EC%82%B0%EC%B6%9C%EB%AC%BC/%EB%B0%9C%ED%91%9C%EC%9E%90%EB%A3%8C/img/%EC%8B%9C%EC%8A%A4%ED%85%9C%EC%95%84%ED%82%A4%ED%85%8D%EC%B2%98.png?raw=true)
+### 주요 구성 요소
+- **클라이언트 레이어**: 웹 대시보드(React), Slack App, 모바일 앱
+- **백엔드 API 레이어**: Express 서버, Slack 핸들러, 멀티테넌트 지원
+- **AI 처리 엔진**: FastAPI, WhisperX STT, BERT 분류기, Qwen3-32B-AWQ
+- **데이터 레이어**: PostgreSQL, Prisma ORM, Redis, 사용자·프로젝트 데이터
+- **비즈니스 서비스**: Notion API, JIRA API, 스마트 태스크 배정
+- **외부 서비스 연동**: Slack/Notion/JIRA/AI 서버
 
 ## 시퀀스 다이어그램
 ![시퀀스 다이어그램](https://raw.githubusercontent.com/SKNETWORKS-FAMILY-AICAMP/SKN12-FINAL-3TEAM/refs/heads/main/%EC%82%B0%EC%B6%9C%EB%AC%BC/%EB%B0%9C%ED%91%9C%EC%9E%90%EB%A3%8C/img/%EC%8B%9C%ED%80%80%EC%8A%A4%EB%8B%A4%EC%9D%B4%EC%96%B4%EA%B7%B8%EB%9E%A8.webp)
