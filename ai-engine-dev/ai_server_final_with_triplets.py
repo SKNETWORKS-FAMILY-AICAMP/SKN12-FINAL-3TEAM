@@ -1866,11 +1866,26 @@ async def two_stage_analysis(request: TwoStageAnalysisRequest):
                 )
             
             stage1_result = stage1_response.notion_project
+            
+            # Stage1 결과 검증 로깅
+            logger.info("✅ Stage 1 완료 - 프로젝트 정보:")
+            for key in ['project_name', 'project_purpose', 'project_period', 'project_manager', 
+                       'core_objectives', 'core_idea', 'idea_description', 'execution_plan', 'expected_effects']:
+                if key in stage1_result:
+                    if isinstance(stage1_result[key], list):
+                        logger.info(f"  - {key}: {len(stage1_result[key])}개 항목")
+                    elif isinstance(stage1_result[key], str):
+                        logger.info(f"  - {key}: {stage1_result[key][:100]}...")
+                    else:
+                        logger.info(f"  - {key}: {stage1_result[key]}")
+                else:
+                    logger.info(f"  - {key}: ❌ 없음")
         
         # 2단계: Task Master PRD 변환
         stage2_result = None
         if request.generate_tasks and stage1_result:
             logger.info("🔄 Stage 2: Converting to Task Master PRD...")
+            logger.info(f"  입력 데이터 키: {list(stage1_result.keys())}")
             stage2_response = await generate_task_master_prd(stage1_result)
             
             if not stage2_response.success:

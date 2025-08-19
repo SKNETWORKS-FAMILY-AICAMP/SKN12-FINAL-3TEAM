@@ -4084,6 +4084,34 @@ async function processTranscriptWithAI(transcript, client, channelId) {
           project_info: result?.stage1?.notion_project || null
         };
         
+        // 프로젝트 정보 디버깅 - 더 상세하게
+        if (notionInputData.project_info) {
+          console.log('📊 AI가 생성한 프로젝트 정보 상세:');
+          console.log('  ✓ project_name:', notionInputData.project_info.project_name || '❌ 없음');
+          console.log('  ✓ project_purpose:', notionInputData.project_info.project_purpose?.substring(0, 50) || '❌ 없음');
+          console.log('  ✓ project_period:', notionInputData.project_info.project_period || '❌ 없음');
+          console.log('  ✓ project_manager:', notionInputData.project_info.project_manager || '❌ 없음');
+          console.log('  ✓ core_objectives:', notionInputData.project_info.core_objectives?.length || 0, '개');
+          console.log('  ✓ core_idea:', notionInputData.project_info.core_idea?.substring(0, 50) || '❌ 없음');
+          console.log('  ✓ idea_description:', notionInputData.project_info.idea_description?.substring(0, 50) || '❌ 없음');
+          console.log('  ✓ execution_plan:', notionInputData.project_info.execution_plan?.substring(0, 50) || '❌ 없음');
+          console.log('  ✓ expected_effects:', notionInputData.project_info.expected_effects?.length || 0, '개');
+          
+          // Stage2 PRD 검증
+          if (result?.stage2?.prd_data) {
+            console.log('📄 Stage2 PRD 생성됨:', {
+              overview: !!result.stage2.prd_data.overview,
+              core_features: !!result.stage2.prd_data.core_features,
+              technical_architecture: !!result.stage2.prd_data.technical_architecture
+            });
+          }
+        } else {
+          console.log('⚠️ 프로젝트 정보가 없습니다');
+          console.log('  전체 result 구조:', Object.keys(result || {}));
+          console.log('  stage1 존재:', !!result?.stage1);
+          console.log('  stage1.notion_project 존재:', !!result?.stage1?.notion_project);
+        }
+        
         // Notion 페이지 생성 직전에 정확히 어떤 데이터가 전달되는지 확인
         console.log('📋 Notion에 전달할 데이터 최종 검증:', {
           summary: notionInputData.summary.substring(0, 50) + '...',
