@@ -97,7 +97,9 @@ ICSI: "@", ".", "" 등 빈/무의미 발화 제거.  </br>
 AMI/ICSI: The University of Edinburgh 공개 데이터셋(허가 라이선스 포함).  </br>
 
 ## 모델 구성
-아래 그림은 전체 모델 파이프라인을 나타냄.
+### WhisperX : 음성 → 텍스트 변환 & 화자 분리
+### KoBERT/KoBART : 필요문맥 분류
+### Qwen3 / GPT-4o : 회의 요약 및 액션 아이템 추출
 
 ## ERD
 서비스의 데이터베이스 구조
