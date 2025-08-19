@@ -587,9 +587,9 @@ private extractTechnologies(parsedData: InputData): string {
     
     // 서브태스크의 required_skills
     if (item.subtasks && Array.isArray(item.subtasks)) {
-      item.subtasks.forEach(subtask => {
+      item.subtasks.forEach((subtask: any) => {
         if (subtask.required_skills && Array.isArray(subtask.required_skills)) {
-          subtask.required_skills.forEach(skill => allSkills.add(skill));
+          subtask.required_skills.forEach((skill: string) => allSkills.add(skill));
         }
       });
     }

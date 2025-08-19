@@ -2629,6 +2629,40 @@ async def final_pipeline(
         
         logger.info("=" * 80)
         
+        # 결과를 파일로 저장 (동기 처리에서도)
+        import json
+        import os
+        from datetime import datetime as dt
+        
+        # 저장 디렉토리 생성
+        save_dir = "/workspace/ai_results"
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir)
+        
+        # 타임스탬프 기반 파일명
+        timestamp = dt.now().strftime("%Y%m%d_%H%M%S")
+        job_id = f"sync_{timestamp}"
+        filename = f"{save_dir}/job_{job_id}.json"
+        
+        # 결과 객체 생성
+        result_to_save = {
+            "success": True,
+            "job_id": job_id,
+            "timestamp": timestamp,
+            "stage1_notion": analysis_result.stage1_notion,
+            "stage2_prd": analysis_result.stage2_prd,
+            "stage3_tasks": analysis_result.stage3_tasks,
+            "formatted_notion": analysis_result.formatted_notion,
+            "formatted_prd": analysis_result.formatted_prd,
+            "processing_time": total_time
+        }
+        
+        # 파일로 저장
+        with open(filename, 'w', encoding='utf-8') as f:
+            json.dump(result_to_save, f, ensure_ascii=False, indent=2)
+        
+        logger.info(f"📁 Result saved to: {filename}")
+        
         # 결과 반환 - 백엔드가 기대하는 형식으로
         return {
             "success": True,
@@ -2823,11 +2857,49 @@ async def process_pipeline_async(job_id: str, audio_data: Optional[bytes],
             stage2_result = stage2_response.prd_data
             jobs_store[job_id]["progress"] = 70
         
-        # Stage 3: Tasks
+        # Stage 3: Tasks with Subtasks
         stage3_result = None
         if generate_tasks and stage2_result:
             logger.info(f"📝 Job {job_id}: Generating tasks")
-            stage3_result = await generate_tasks_from_prd(stage2_result, num_tasks)
+            # Step 3-1: Generate tasks
+            task_items = await generate_tasks_from_prd(stage2_result, num_tasks)
+            jobs_store[job_id]["progress"] = 75
+            
+            if task_items:
+                # Step 3-2: Analyze complexity
+                logger.info(f"🔍 Job {job_id}: Analyzing task complexity")
+                complexity_analysis = await analyze_task_complexity(task_items)
+                jobs_store[job_id]["progress"] = 80
+                
+                # Step 3-3: Generate subtasks based on complexity
+                logger.info(f"🔧 Job {job_id}: Generating subtasks")
+                task_items_with_subtasks = await generate_subtasks_for_all_tasks(
+                    task_items, 
+                    complexity_analysis=complexity_analysis
+                )
+                jobs_store[job_id]["progress"] = 85
+                
+                # Step 3-4: Extract skills and task types
+                logger.info(f"💼 Job {job_id}: Extracting skills and types")
+                task_items_with_skills = await extract_skills_and_task_types(task_items_with_subtasks)
+                
+                # Convert to dict format
+                stage3_result = {
+                    "success": True,
+                    "action_items": [task.dict() for task in task_items_with_skills],
+                    "tasks": [task.dict() for task in task_items_with_skills],
+                    "complexity_analysis": complexity_analysis,
+                    "total_tasks": len(task_items_with_skills),
+                    "total_subtasks": sum(len(task.subtasks) for task in task_items_with_skills)
+                }
+            else:
+                stage3_result = {
+                    "success": False,
+                    "error": "Failed to generate tasks",
+                    "tasks": [],
+                    "action_items": []
+                }
+            
             jobs_store[job_id]["progress"] = 90
         
         # 최종 결과
@@ -2840,9 +2912,30 @@ async def process_pipeline_async(job_id: str, audio_data: Optional[bytes],
             "formatted_prd": format_task_master_prd(stage2_result) if stage2_result else None
         }
         
+        # 결과를 파일로 저장 (RunPod 내부)
+        import json
+        import os
+        from datetime import datetime
+        
+        # 저장 디렉토리 생성
+        save_dir = "/workspace/ai_results"
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir)
+        
+        # 타임스탬프 기반 파일명
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"{save_dir}/job_{job_id}_{timestamp}.json"
+        
+        # 결과 저장
+        with open(filename, 'w', encoding='utf-8') as f:
+            json.dump(result, f, ensure_ascii=False, indent=2)
+        
+        logger.info(f"📁 Result saved to: {filename}")
+        
         # Job 완료
         jobs_store[job_id]["status"] = JobStatus.COMPLETED
         jobs_store[job_id]["result"] = result
+        jobs_store[job_id]["result_file"] = filename  # 파일 경로 추가
         jobs_store[job_id]["progress"] = 100
         jobs_store[job_id]["updated_at"] = datetime.now().isoformat()
         
@@ -2953,6 +3046,57 @@ async def get_job_result(job_id: str):
         )
     
     return job_info["result"]
+
+@app.get("/list-saved-results")
+async def list_saved_results():
+    """저장된 결과 파일 목록 조회"""
+    import os
+    import json
+    
+    save_dir = "/workspace/ai_results"
+    if not os.path.exists(save_dir):
+        return {"files": [], "message": "No results directory found"}
+    
+    files = []
+    for filename in os.listdir(save_dir):
+        if filename.endswith('.json'):
+            filepath = os.path.join(save_dir, filename)
+            # 파일 정보 추가
+            stat = os.stat(filepath)
+            files.append({
+                "filename": filename,
+                "path": filepath,
+                "size_kb": round(stat.st_size / 1024, 2),
+                "created": datetime.fromtimestamp(stat.st_ctime).isoformat()
+            })
+    
+    # 최신 파일 순으로 정렬
+    files.sort(key=lambda x: x["created"], reverse=True)
+    
+    return {
+        "total": len(files),
+        "files": files,
+        "directory": save_dir
+    }
+
+@app.get("/read-saved-result/{filename}")
+async def read_saved_result(filename: str):
+    """저장된 결과 파일 읽기"""
+    import os
+    import json
+    
+    save_dir = "/workspace/ai_results"
+    filepath = os.path.join(save_dir, filename)
+    
+    if not os.path.exists(filepath):
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            content = json.load(f)
+        return content
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error reading file: {str(e)}")
 
 # ==================== 비동기 태스크 생성 ====================
 
