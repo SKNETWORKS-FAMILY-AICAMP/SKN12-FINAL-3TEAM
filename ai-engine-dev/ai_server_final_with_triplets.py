@@ -2799,17 +2799,29 @@ async def process_pipeline_async(job_id: str, audio_data: Optional[bytes],
         stage1_result = None
         if generate_notion:
             logger.info(f"📋 Job {job_id}: Generating Notion project")
-            stage1_result = await generate_notion_project_from_transcript(full_text)
+            notion_request = AnalysisRequest(
+                transcript=full_text,
+                additional_context=""
+            )
+            stage1_response = await generate_notion_project(notion_request)
+            
+            if not stage1_response.success:
+                raise Exception(f"Stage 1 failed: {stage1_response.error}")
+            
+            stage1_result = stage1_response.notion_project
             jobs_store[job_id]["progress"] = 50
         
         # Stage 2: PRD
         stage2_result = None
-        logger.info(f"📄 Job {job_id}: Generating PRD")
-        stage2_result = await generate_task_master_prd_from_transcript(
-            full_text, 
-            notion_data=stage1_result
-        )
-        jobs_store[job_id]["progress"] = 70
+        if stage1_result:
+            logger.info(f"📄 Job {job_id}: Generating PRD")
+            stage2_response = await generate_task_master_prd(stage1_result)
+            
+            if not stage2_response.success:
+                raise Exception(f"Stage 2 failed: {stage2_response.error}")
+            
+            stage2_result = stage2_response.prd_data
+            jobs_store[job_id]["progress"] = 70
         
         # Stage 3: Tasks
         stage3_result = None
