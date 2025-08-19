@@ -30,11 +30,15 @@ from typing import Optional, Dict, Any, List
 from contextlib import asynccontextmanager
 import time
 import httpx  # WhisperX 원격 서버 호출용
+import uuid
+import asyncio
+from datetime import datetime
 
 import torch
 import numpy as np
 from fastapi import FastAPI, File, UploadFile, HTTPException, Body, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 # 로컬 모듈 임포트
@@ -1518,11 +1522,30 @@ async def lifespan(app: FastAPI):
     
     logger.info("🛑 Shutting down TtalKkak Final AI Server...")
 
+# Job 저장소 (실제로는 Redis나 DB 사용 권장)
+jobs_store = {}
+
+# Job 상태 정의
+class JobStatus:
+    PENDING = "pending"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+class JobInfo(BaseModel):
+    job_id: str
+    status: str
+    created_at: str
+    updated_at: str
+    result: Optional[Dict[str, Any]] = None
+    error: Optional[str] = None
+    progress: Optional[int] = None
+
 # FastAPI 앱 생성
 app = FastAPI(
     title="TtalKkak Final AI Server with Triplets",
-    description="WhisperX (Remote) + Triplet + BERT + Qwen3-4B + 2-Stage PRD Process",
-    version="3.2.0",
+    description="WhisperX (Remote) + Triplet + BERT + Qwen3-4B + 2-Stage PRD Process + Async Jobs",
+    version="3.3.0",
     lifespan=lifespan
 )
 
@@ -2730,6 +2753,189 @@ async def generate_tasks_endpoint(
             "success": False,
             "error": str(e)
         }
+
+# ==================== 비동기 처리 엔드포인트 ====================
+
+async def process_pipeline_async(job_id: str, audio_data: Optional[bytes], 
+                                transcript: Optional[str], generate_notion: bool,
+                                generate_tasks: bool, num_tasks: int,
+                                apply_bert_filtering: bool):
+    """백그라운드에서 파이프라인 처리"""
+    try:
+        # Job 상태 업데이트
+        jobs_store[job_id]["status"] = JobStatus.PROCESSING
+        jobs_store[job_id]["updated_at"] = datetime.now().isoformat()
+        jobs_store[job_id]["progress"] = 10
+        
+        # 실제 처리 (기존 final_pipeline 로직 재사용)
+        if transcript:
+            logger.info(f"📝 Job {job_id}: Text input processing")
+            full_text = transcript
+            jobs_store[job_id]["progress"] = 30
+        elif audio_data:
+            logger.info(f"🎤 Job {job_id}: Audio transcription starting")
+            # 임시 파일로 저장
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".m4a") as tmp_file:
+                tmp_file.write(audio_data)
+                tmp_file_path = tmp_file.name
+            
+            # 가짜 UploadFile 객체 생성
+            from fastapi import UploadFile
+            audio_file = UploadFile(filename="audio.m4a", file=open(tmp_file_path, "rb"))
+            
+            transcribe_result = await transcribe_audio(audio_file)
+            if not transcribe_result.success:
+                raise Exception(f"Transcription failed: {transcribe_result.error}")
+            
+            full_text = transcribe_result.transcription.get("full_text", "")
+            jobs_store[job_id]["progress"] = 30
+            
+            # 임시 파일 삭제
+            os.unlink(tmp_file_path)
+        else:
+            raise Exception("No input provided")
+        
+        # Stage 1: 노션 기획안
+        stage1_result = None
+        if generate_notion:
+            logger.info(f"📋 Job {job_id}: Generating Notion project")
+            stage1_result = await generate_notion_project_from_transcript(full_text)
+            jobs_store[job_id]["progress"] = 50
+        
+        # Stage 2: PRD
+        stage2_result = None
+        logger.info(f"📄 Job {job_id}: Generating PRD")
+        stage2_result = await generate_task_master_prd_from_transcript(
+            full_text, 
+            notion_data=stage1_result
+        )
+        jobs_store[job_id]["progress"] = 70
+        
+        # Stage 3: Tasks
+        stage3_result = None
+        if generate_tasks and stage2_result:
+            logger.info(f"📝 Job {job_id}: Generating tasks")
+            stage3_result = await generate_tasks_from_prd(stage2_result, num_tasks)
+            jobs_store[job_id]["progress"] = 90
+        
+        # 최종 결과
+        result = {
+            "success": True,
+            "stage1_notion": stage1_result,
+            "stage2_prd": stage2_result,
+            "stage3_tasks": stage3_result,
+            "formatted_notion": format_notion_project(stage1_result) if stage1_result else None,
+            "formatted_prd": format_task_master_prd(stage2_result) if stage2_result else None
+        }
+        
+        # Job 완료
+        jobs_store[job_id]["status"] = JobStatus.COMPLETED
+        jobs_store[job_id]["result"] = result
+        jobs_store[job_id]["progress"] = 100
+        jobs_store[job_id]["updated_at"] = datetime.now().isoformat()
+        
+        logger.info(f"✅ Job {job_id} completed successfully")
+        
+    except Exception as e:
+        logger.error(f"❌ Job {job_id} failed: {e}")
+        jobs_store[job_id]["status"] = JobStatus.FAILED
+        jobs_store[job_id]["error"] = str(e)
+        jobs_store[job_id]["updated_at"] = datetime.now().isoformat()
+
+@app.post("/pipeline-final-async")
+async def final_pipeline_async(
+    request: Request,
+    audio: UploadFile = File(None),
+    transcript: str = Form(None),
+    generate_notion: bool = Form(True),
+    generate_tasks: bool = Form(True),
+    num_tasks: int = Form(5),
+    apply_bert_filtering: bool = Form(False)
+):
+    """🚀 비동기 파이프라인: Job ID를 즉시 반환하고 백그라운드에서 처리"""
+    try:
+        # Job ID 생성
+        job_id = str(uuid.uuid4())
+        
+        # Job 정보 저장
+        jobs_store[job_id] = {
+            "job_id": job_id,
+            "status": JobStatus.PENDING,
+            "created_at": datetime.now().isoformat(),
+            "updated_at": datetime.now().isoformat(),
+            "progress": 0
+        }
+        
+        # JSON 요청 처리
+        if request.headers.get("content-type") == "application/json":
+            body = await request.json()
+            transcript = body.get('transcript')
+            generate_notion = body.get('generate_notion', True)
+            generate_tasks = body.get('generate_tasks', True)
+            num_tasks = body.get('num_tasks', 5)
+            apply_bert_filtering = body.get('apply_bert_filtering', False)
+        
+        # 오디오 데이터 읽기
+        audio_data = None
+        if audio and audio.filename:
+            audio_data = await audio.read()
+        
+        # 백그라운드 태스크 시작
+        asyncio.create_task(
+            process_pipeline_async(
+                job_id, audio_data, transcript,
+                generate_notion, generate_tasks, num_tasks,
+                apply_bert_filtering
+            )
+        )
+        
+        # Job ID 즉시 반환
+        return JSONResponse(
+            content={
+                "success": True,
+                "job_id": job_id,
+                "status": JobStatus.PENDING,
+                "message": "Job created successfully. Use /job-status/{job_id} to check progress."
+            },
+            status_code=202  # Accepted
+        )
+        
+    except Exception as e:
+        logger.error(f"❌ Failed to create job: {e}")
+        return JSONResponse(
+            content={"success": False, "error": str(e)},
+            status_code=500
+        )
+
+@app.get("/job-status/{job_id}")
+async def get_job_status(job_id: str):
+    """Job 상태 확인"""
+    if job_id not in jobs_store:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    job_info = jobs_store[job_id]
+    return job_info
+
+@app.get("/job-result/{job_id}")
+async def get_job_result(job_id: str):
+    """Job 결과 가져오기"""
+    if job_id not in jobs_store:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    job_info = jobs_store[job_id]
+    
+    if job_info["status"] != JobStatus.COMPLETED:
+        return JSONResponse(
+            content={
+                "success": False,
+                "status": job_info["status"],
+                "progress": job_info.get("progress", 0),
+                "message": "Job is not completed yet"
+            },
+            status_code=202
+        )
+    
+    return job_info["result"]
 
 if __name__ == "__main__":
     # 환경 변수 설정

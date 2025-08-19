@@ -196,8 +196,11 @@ class AIService {
       timeout: this.timeout,
       headers: {
         'Connection': 'keep-alive',
-        'User-Agent': 'Mozilla/5.0 (compatible; Backend/1.0)', // Localtunnel 브라우저 체크 통과
-        'Accept': 'application/json'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Bypass-Tunnel-Reminder': 'true' // Localtunnel bypass 시도
       }
     });
   }
@@ -665,9 +668,153 @@ class AIService {
   /**
    * 2단계 전체 파이프라인: 음성 → 전사 → 노션 프로젝트 → PRD → 업무 생성
    */
+  /**
+   * Job 결과를 폴링으로 가져오기
+   */
+  private async pollJobResult(jobId: string, maxAttempts: number = 120): Promise<any> {
+    console.log(`⏳ Polling job ${jobId}...`);
+    
+    for (let i = 0; i < maxAttempts; i++) {
+      try {
+        // 상태 확인
+        const statusResponse = await this.aiAxios.get(`/job-status/${jobId}`, {
+          timeout: 5000
+        });
+        
+        const status = statusResponse.data.status;
+        const progress = statusResponse.data.progress || 0;
+        
+        console.log(`📊 Job ${jobId}: ${status} (${progress}%)`);
+        
+        if (status === 'completed') {
+          // 결과 가져오기
+          const resultResponse = await this.aiAxios.get(`/job-result/${jobId}`, {
+            timeout: 10000
+          });
+          console.log(`✅ Job ${jobId} completed successfully`);
+          return resultResponse.data;
+        }
+        
+        if (status === 'failed') {
+          console.error(`❌ Job ${jobId} failed: ${statusResponse.data.error}`);
+          throw new Error(statusResponse.data.error || 'Job failed');
+        }
+        
+        // 5초 대기
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        
+      } catch (error: any) {
+        console.error(`❌ Error polling job ${jobId}:`, error.message);
+        // 계속 시도
+      }
+    }
+    
+    throw new Error(`Job ${jobId} timeout after ${maxAttempts * 5} seconds`);
+  }
+
   async processTwoStagePipeline(audioBuffer: Buffer, filename?: string): Promise<TwoStagePipelineResult> {
+    // 먼저 비동기 처리 시도
     try {
-      console.log(`🚀 Starting 2-stage pipeline: ${filename || 'unknown'}`);
+      console.log(`🚀 Starting async 2-stage pipeline: ${filename || 'unknown'}`);
+      console.log(`📊 Audio buffer size: ${(audioBuffer.length / 1024 / 1024).toFixed(2)} MB`);
+      
+      const isTextInput = filename?.endsWith('.txt') || audioBuffer.toString('utf-8').length < 10000;
+      
+      if (isTextInput) {
+        const transcript = audioBuffer.toString('utf-8');
+        
+        // 비동기 엔드포인트 호출
+        const response = await this.aiAxios.post(`${this.baseUrl}/pipeline-final-async`, {
+          transcript,
+          generate_notion: true,
+          generate_tasks: true,
+          num_tasks: 5
+        }, { timeout: 10000 });
+        
+        if (response.data.success && response.data.job_id) {
+          console.log(`✅ Async job created: ${response.data.job_id}`);
+          const result = await this.pollJobResult(response.data.job_id);
+          
+          // 결과 포맷팅
+          let tasks = [];
+          if (result.stage3_tasks) {
+            if (Array.isArray(result.stage3_tasks)) {
+              tasks = result.stage3_tasks;
+            } else if (result.stage3_tasks.action_items) {
+              tasks = result.stage3_tasks.action_items;
+            } else if (result.stage3_tasks.tasks) {
+              tasks = result.stage3_tasks.tasks;
+            }
+          }
+          
+          return {
+            success: result.success,
+            stage1: {
+              transcript: transcript,
+              notion_project: result.stage1_notion
+            },
+            stage2: {
+              task_master_prd: {
+                ...result.stage2_prd,
+                tasks: tasks
+              }
+            }
+          };
+        }
+      } else {
+        const formData = new FormData();
+        formData.append('audio', audioBuffer, {
+          filename: filename || 'audio.mp3',
+          contentType: 'audio/mpeg'
+        });
+        formData.append('generate_notion', 'true');
+        formData.append('generate_tasks', 'true');
+        formData.append('num_tasks', '5');
+        
+        // 비동기 엔드포인트 호출
+        const response = await this.aiAxios.post(`${this.baseUrl}/pipeline-final-async`, formData, {
+          headers: formData.getHeaders(),
+          timeout: 10000
+        });
+        
+        if (response.data.success && response.data.job_id) {
+          console.log(`✅ Async job created: ${response.data.job_id}`);
+          const result = await this.pollJobResult(response.data.job_id);
+          
+          // 결과 포맷팅
+          let tasks = [];
+          if (result.stage3_tasks) {
+            if (Array.isArray(result.stage3_tasks)) {
+              tasks = result.stage3_tasks;
+            } else if (result.stage3_tasks.action_items) {
+              tasks = result.stage3_tasks.action_items;
+            } else if (result.stage3_tasks.tasks) {
+              tasks = result.stage3_tasks.tasks;
+            }
+          }
+          
+          return {
+            success: result.success,
+            stage1: {
+              transcript: result.transcript || '',
+              notion_project: result.stage1_notion
+            },
+            stage2: {
+              task_master_prd: {
+                ...result.stage2_prd,
+                tasks: tasks
+              }
+            }
+          };
+        }
+      }
+    } catch (error: any) {
+      console.log(`⚠️ Async pipeline failed: ${error.message}, falling back to sync...`);
+    }
+    
+    // 폴백: 동기 처리
+    try {
+      console.log(`🚀 Starting sync 2-stage pipeline: ${filename || 'unknown'}`);
       console.log(`📊 Audio buffer size: ${(audioBuffer.length / 1024 / 1024).toFixed(2)} MB`);
       
       // 파일 크기 체크 제거 - AI 서버가 처리할 수 있는 크기까지 허용
