@@ -170,7 +170,7 @@ WhisperX 기반 STT 엔진이 오디오를 텍스트로 변환 </br>
 #### 주요 처리 단계: 
 화자 분리(Speaker Diarization) -->
 키워드 추출(Pyanodot) -->
-의도 분류(OpenAI / Qwen3) -->
+의도 분류(OpenAI / Qwen3) --> </br>
 요약 생성(Claude, Qwen3 등 LLM 엔진) -->
 Task Master를 통한 업무 분류 및 정리 </br>
 
