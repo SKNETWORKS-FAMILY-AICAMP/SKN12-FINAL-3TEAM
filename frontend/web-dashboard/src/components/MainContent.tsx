@@ -83,6 +83,30 @@ const isOverdue = (dateString: string, columnId: string) => {
 
 
 
+// 부모 태스크별 색상 생성 함수
+const getParentTaskColor = (parentTitle?: string) => {
+  if (!parentTitle) return { bg: 'bg-gray-100', border: 'border-gray-300', text: 'text-gray-700', badge: 'bg-gray-200' };
+  
+  // 문자열 해시를 이용한 색상 배정
+  const colors = [
+    { bg: 'bg-blue-50', border: 'border-blue-300', text: 'text-blue-700', badge: 'bg-blue-100' },
+    { bg: 'bg-purple-50', border: 'border-purple-300', text: 'text-purple-700', badge: 'bg-purple-100' },
+    { bg: 'bg-green-50', border: 'border-green-300', text: 'text-green-700', badge: 'bg-green-100' },
+    { bg: 'bg-yellow-50', border: 'border-yellow-300', text: 'text-yellow-700', badge: 'bg-yellow-100' },
+    { bg: 'bg-pink-50', border: 'border-pink-300', text: 'text-pink-700', badge: 'bg-pink-100' },
+    { bg: 'bg-indigo-50', border: 'border-indigo-300', text: 'text-indigo-700', badge: 'bg-indigo-100' },
+    { bg: 'bg-red-50', border: 'border-red-300', text: 'text-red-700', badge: 'bg-red-100' },
+    { bg: 'bg-teal-50', border: 'border-teal-300', text: 'text-teal-700', badge: 'bg-teal-100' },
+  ];
+  
+  let hash = 0;
+  for (let i = 0; i < parentTitle.length; i++) {
+    hash = parentTitle.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  
+  return colors[Math.abs(hash) % colors.length];
+};
+
 // @dnd-kit을 사용한 드래그 앤 드롭 컴포넌트
 const TaskCard = ({ task, columnId, onTaskSelect, isOverTarget }: any) => {
   const {
@@ -113,45 +137,51 @@ const TaskCard = ({ task, columnId, onTaskSelect, isOverTarget }: any) => {
     };
     return colors[colId] || 'bg-white';
   };
+  
+  // 부모 태스크 색상 가져오기
+  const parentColor = getParentTaskColor(task.parentTaskTitle);
 
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className={`group rounded-lg ${getColumnBgColor(columnId)} ${
+      className={`group rounded-lg ${parentColor.bg} ${
         isDragging ? 'opacity-90 rotate-1 scale-105 shadow-xl z-50 border-2 border-blue-400' : 
         isOverTarget ? 'ring-2 ring-blue-400 ring-offset-2 bg-blue-50/50 scale-105 border-blue-300' : 'hover:shadow-md shadow-sm'
-      } transition-all duration-200 border border-gray-200 cursor-grab active:cursor-grabbing`}
+      } transition-all duration-200 border ${parentColor.border} cursor-grab active:cursor-grabbing`}
       {...attributes}
       {...listeners}
     >
       {/* 전체 카드가 드래그 영역 */}
-      <div className="px-6 py-6 w-full">
-        <div className="flex items-start justify-between">
-          <div className="flex-1 min-w-0">
-            {/* 서브태스크인 경우 시각적 구분 */}
-            {task.content.startsWith('[') && (
-              <div className="text-xs text-blue-600 font-medium mb-1">
-                {task.content.substring(1, task.content.indexOf(']'))}
-              </div>
-            )}
-            <div className="flex items-center gap-2">
-              <div className={`w-1 h-4 ${task.content.startsWith('[') ? 'bg-blue-400' : 'bg-current'} opacity-30 rounded-full group-hover:opacity-60 transition-opacity`} />
-              <span className="font-medium text-sm text-gray-900 line-clamp-2">
-                {task.content.startsWith('[') 
-                  ? task.content.substring(task.content.indexOf(']') + 2) 
-                  : task.content}
-              </span>
-            </div>
-            <div className="flex items-center justify-between mt-3">
-              <span className={`text-xs ${isOverdue(task.date, columnId) ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>
-                📅 {task.date}
-              </span>
-              {task.assignee && (
-                <span className="text-xs px-2 py-1 bg-white/50 rounded-full">
-                  👤 {task.assignee}
+      <div className="w-full">
+        {/* 부모 태스크 제목 헤더 */}
+        {task.parentTaskTitle && (
+          <div className={`px-4 py-2 ${parentColor.badge} border-b ${parentColor.border}`}>
+            <span className={`text-xs font-semibold ${parentColor.text}`}>
+              📁 {task.parentTaskTitle}
+            </span>
+          </div>
+        )}
+        
+        <div className="px-6 py-4">
+          <div className="flex items-start justify-between">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <div className={`w-1 h-4 ${parentColor.border} ${parentColor.bg} rounded-full group-hover:opacity-80 transition-opacity`} />
+                <span className="font-medium text-sm text-gray-900 line-clamp-2">
+                  {task.content}
                 </span>
-              )}
+              </div>
+              <div className="flex items-center justify-between mt-3">
+                <span className={`text-xs ${isOverdue(task.date, columnId) ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>
+                  📅 {task.date}
+                </span>
+                {task.assignee && (
+                  <span className={`text-xs px-2 py-1 ${parentColor.badge} rounded-full`}>
+                    👤 {task.assignee}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         </div>
