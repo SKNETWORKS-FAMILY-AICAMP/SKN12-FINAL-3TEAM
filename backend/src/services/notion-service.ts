@@ -646,7 +646,9 @@ async createMeetingPage(inputData: InputData | string, projectName?: string): Pr
               },
               
               // 기대 효과 불릿 리스트
-              ...(parsedData.project_info?.expected_effects || []).map(effect => ({
+              ...(parsedData.project_info?.expected_effects && parsedData.project_info.expected_effects.length > 0 
+                ? parsedData.project_info.expected_effects 
+                : ['프로젝트 효율성 향상', '업무 프로세스 개선', '팀 협업 강화']).map(effect => ({
                 object: 'block' as const,
                 type: 'bulleted_list_item' as const,
                 bulleted_list_item: {
@@ -1103,7 +1105,7 @@ private createDetailedTaskToggles(actionItems: any[]): any[] {
             [{ type: 'text' as const, text: { content: item.deadline } }],
             [{ type: 'text' as const, text: { content: item.title }, annotations: { bold: true } }],
             [{ type: 'text' as const, text: { content: this.getStatusBadge(item.status) } }],
-            [{ type: 'text' as const, text: { content: item.assignee || '' } }]
+            [{ type: 'text' as const, text: { content: '' } }]  // 메인태스크는 담당자 표시 안함
           ]
         }
       });

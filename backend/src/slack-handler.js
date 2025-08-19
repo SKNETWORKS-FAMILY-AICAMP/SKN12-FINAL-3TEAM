@@ -3873,18 +3873,66 @@ async function processTranscriptWithAI(transcript, client, channelId) {
       const tasks = result.stage2?.task_master_prd?.tasks || [];
       
       // InputData 인터페이스에 맞게 구성
+      // User 정보를 가져와서 담당자 이름 설정
+      const assigneeName = user ? (user.name || user.email || 'unassigned') : 'unassigned';
+      
+      // 스프린트 기반 날짜 계산 함수
+      const calculateSprintDates = (tasks) => {
+        const sprintDuration = 14; // 2주 스프린트
+        const today = new Date();
+        const sprintStart = new Date(today);
+        
+        // 우선순위별로 그룹화
+        const highPriority = tasks.filter(t => t.priority === 'high');
+        const mediumPriority = tasks.filter(t => t.priority === 'medium');
+        const lowPriority = tasks.filter(t => t.priority === 'low' || !t.priority);
+        
+        let currentDate = new Date(sprintStart);
+        const assignDates = (taskList, offsetDays = 0) => {
+          return taskList.map((task, idx) => {
+            const estimatedDays = Math.ceil((task.estimated_hours || 8) / 8);
+            const startDate = new Date(currentDate);
+            startDate.setDate(startDate.getDate() + offsetDays);
+            
+            const deadline = new Date(startDate);
+            deadline.setDate(deadline.getDate() + estimatedDays - 1);
+            
+            // 스프린트 범위를 벗어나면 다음 스프린트로
+            if (deadline > new Date(sprintStart.getTime() + sprintDuration * 24 * 60 * 60 * 1000)) {
+              startDate.setDate(sprintStart.getDate() + sprintDuration);
+              deadline.setDate(startDate.getDate() + estimatedDays - 1);
+            }
+            
+            return {
+              ...task,
+              start_date: startDate.toISOString().split('T')[0],
+              deadline: deadline.toISOString().split('T')[0]
+            };
+          });
+        };
+        
+        // 우선순위별로 다른 시작 시점 설정
+        return [
+          ...assignDates(highPriority, 0),      // 즉시 시작
+          ...assignDates(mediumPriority, 3),    // 3일 후 시작
+          ...assignDates(lowPriority, 7)        // 1주 후 시작
+        ];
+      };
+      
+      const tasksWithDates = calculateSprintDates(tasks);
+      
       aiData = {
         summary: extractedSummary,
-        action_items: tasks.map((task, index) => ({
+        action_items: tasksWithDates.map((task, index) => ({
           id: index + 1,
           title: task.title,  // 'task'가 아니라 'title' 사용
           description: task.description || '',
           details: task.description || '',
           priority: task.priority || 'medium',
           status: 'pending',
-          assignee: task.assignee || 'unassigned',
-          start_date: task.startDate || new Date().toISOString().split('T')[0],
-          deadline: task.dueDate || new Date(Date.now() + 7*24*60*60*1000).toISOString().split('T')[0],
+          assignee: assigneeName,  // 실제 사용자 이름 사용
+          start_date: task.start_date,  // 계산된 시작일 사용
+          deadline: task.deadline,      // 계산된 마감일 사용
           estimated_hours: task.estimated_hours || 8,
           complexity: task.complexity || 5,
           dependencies: [],
@@ -4076,10 +4124,45 @@ async function processTranscriptWithAI(transcript, client, channelId) {
       if (notionService) {
         console.log('📝 Notion 페이지 생성 시도...');
         
+        // DB에서 생성된 태스크들을 다시 조회하여 실제 담당자 정보 가져오기
+        const dbTasksWithAssignee = await prisma.task.findMany({
+          where: {
+            projectId: createdProject.id
+          },
+          include: {
+            assignee: true  // 담당자 정보 포함
+          },
+          orderBy: {
+            createdAt: 'asc'
+          }
+        });
+        
+        console.log(`📊 DB에서 조회한 태스크 수: ${dbTasksWithAssignee.length}`);
+        
+        // aiData.action_items에 실제 담당자 정보 업데이트
+        // 메인태스크는 담당자를 표시하지 않음
+        const updatedActionItems = aiData.action_items.map((item, index) => {
+          const dbTask = dbTasksWithAssignee[index];
+          console.log(`📌 Task ${index + 1}: ${item.title} (메인태스크 - 담당자 미표시)`);
+          
+          // 서브태스크가 있으면 서브태스크의 담당자만 표시
+          if (item.subtasks && Array.isArray(item.subtasks)) {
+            item.subtasks = item.subtasks.map((subtask, subIdx) => {
+              console.log(`  └ Subtask ${subIdx + 1}: ${subtask.title} → 담당자: ${subtask.assignee || '미지정'}`);
+              return subtask;
+            });
+          }
+          
+          return {
+            ...item,
+            assignee: ''  // 메인태스크는 담당자 빈 문자열
+          };
+        });
+        
         // ⭐ InputData 인터페이스에 맞게 데이터 구성 (프로젝트 정보 포함)
         const notionInputData = {
           summary: aiData.summary,
-          action_items: aiData.action_items,
+          action_items: updatedActionItems,  // 업데이트된 action_items 사용
           // AI가 생성한 프로젝트 정보 추가
           project_info: result?.stage1?.notion_project || null
         };
@@ -4119,10 +4202,17 @@ async function processTranscriptWithAI(transcript, client, channelId) {
           firstItem: notionInputData.action_items[0] ? {
             id: notionInputData.action_items[0].id,
             title: notionInputData.action_items[0].title,
+            assignee: notionInputData.action_items[0].assignee,  // 담당자 추가
             start_date: notionInputData.action_items[0].start_date,
             deadline: notionInputData.action_items[0].deadline,
             start_date_type: typeof notionInputData.action_items[0].start_date
           } : 'NONE'
+        });
+        
+        // 각 업무의 담당자 확인
+        console.log('👥 업무별 담당자:');
+        notionInputData.action_items.slice(0, 5).forEach((item, idx) => {
+          console.log(`  ${idx + 1}. ${item.title} → 담당자: ${item.assignee}`);
         });
         
         // 프로젝트 이름을 함께 전달

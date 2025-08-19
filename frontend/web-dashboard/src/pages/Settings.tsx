@@ -93,7 +93,11 @@ const Settings = () => {
     name: '',
     role: '',
     email: '',
-    department: ''
+    department: '',
+    experienceLevel: 'junior',
+    availableHours: 40,
+    skills: [] as string[],
+    preferredTypes: [] as string[]
   });
 
   // 필터링 및 페이지네이션 상태
@@ -155,17 +159,32 @@ const Settings = () => {
   // 팀원 관리 함수들
   const openAddMemberModal = () => {
     setEditingMember(null);
-    setMemberFormData({ name: '', role: '', email: '', department: '' });
+    setMemberFormData({ 
+      name: '', 
+      role: '', 
+      email: '', 
+      department: '',
+      experienceLevel: 'junior',
+      availableHours: 40,
+      skills: [],
+      preferredTypes: []
+    });
     setShowTeamMemberModal(true);
   };
 
   const openEditMemberModal = (member: TeamMember) => {
     setEditingMember(member);
+    // DB에서 사용자 정보 가져오기
+    const user = users.find(u => u.id === member.id);
     setMemberFormData({
       name: member.name,
       role: member.role,
       email: member.email,
-      department: member.department
+      department: member.department,
+      experienceLevel: user?.experienceLevel || 'junior',
+      availableHours: user?.availableHours || 40,
+      skills: user?.skills || [],
+      preferredTypes: user?.preferredTypes || []
     });
     setShowTeamMemberModal(true);
   };
@@ -188,10 +207,38 @@ const Settings = () => {
       });
       
       // role 값을 API 형식으로 변환
+      // 프로젝트 오너와 관리자만 실제 role 변경, 나머지는 department로 구분
       let apiRole: 'OWNER' | 'ADMIN' | 'MEMBER' = 'MEMBER';
-      if (memberFormData.role === '프로젝트 오너') apiRole = 'OWNER';
-      else if (memberFormData.role === '관리자') apiRole = 'ADMIN';
-      else apiRole = 'MEMBER';
+      let department = memberFormData.department || '일반팀';
+      
+      if (memberFormData.role === '프로젝트 오너') {
+        apiRole = 'OWNER';
+      } else if (memberFormData.role === '관리자') {
+        apiRole = 'ADMIN';
+      } else {
+        // 나머지 역할은 MEMBER로 설정하고 department로 구분
+        apiRole = 'MEMBER';
+        // 역할별 부서 매핑
+        switch(memberFormData.role) {
+          case '프로젝트 매니저':
+            department = 'PM팀';
+            break;
+          case '개발자':
+            department = '개발팀';
+            break;
+          case '디자이너':
+            department = '디자인팀';
+            break;
+          case '기획자':
+            department = '기획팀';
+            break;
+          case 'QA':
+            department = 'QA팀';
+            break;
+          default:
+            department = memberFormData.department || '일반팀';
+        }
+      }
       
       // API 호출
       updateUserMutation.mutate({
@@ -199,21 +246,65 @@ const Settings = () => {
         updates: {
           name: memberFormData.name,
           email: memberFormData.email,
-          role: apiRole
+          role: apiRole,
+          experienceLevel: memberFormData.experienceLevel,
+          availableHours: memberFormData.availableHours,
+          skills: memberFormData.skills,
+          preferredTypes: memberFormData.preferredTypes,
+          // department 정보도 함께 저장 (백엔드에서 지원하는 경우)
+          metadata: {
+            department: department,
+            displayRole: memberFormData.role  // 표시용 역할 저장
+          }
         }
       });
     } else {
       // 추가 - role 값을 API 형식으로 변환
       let apiRole: 'OWNER' | 'ADMIN' | 'MEMBER' = 'MEMBER';
-      if (memberFormData.role === '프로젝트 오너') apiRole = 'OWNER';
-      else if (memberFormData.role === '관리자') apiRole = 'ADMIN';
-      else apiRole = 'MEMBER';
+      let department = memberFormData.department || '일반팀';
+      
+      if (memberFormData.role === '프로젝트 오너') {
+        apiRole = 'OWNER';
+      } else if (memberFormData.role === '관리자') {
+        apiRole = 'ADMIN';
+      } else {
+        // 나머지 역할은 MEMBER로 설정하고 department로 구분
+        apiRole = 'MEMBER';
+        // 역할별 부서 매핑
+        switch(memberFormData.role) {
+          case '프로젝트 매니저':
+            department = 'PM팀';
+            break;
+          case '개발자':
+            department = '개발팀';
+            break;
+          case '디자이너':
+            department = '디자인팀';
+            break;
+          case '기획자':
+            department = '기획팀';
+            break;
+          case 'QA':
+            department = 'QA팀';
+            break;
+          default:
+            department = memberFormData.department || '일반팀';
+        }
+      }
       
       // API 호출
       createUserMutation.mutate({
         name: memberFormData.name,
         email: memberFormData.email,
-        role: apiRole
+        role: apiRole,
+        experienceLevel: memberFormData.experienceLevel,
+        availableHours: memberFormData.availableHours,
+        skills: memberFormData.skills,
+        preferredTypes: memberFormData.preferredTypes,
+        metadata: {
+          department: department,
+          displayRole: memberFormData.role  // 표시용 역할 저장
+        }
       });
     }
 
@@ -604,7 +695,7 @@ const Settings = () => {
       {/* 팀원 추가/수정 모달 */}
       {showTeamMemberModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">
               {editingMember ? '팀원 정보 수정' : '새 팀원 추가'}
             </h3>
@@ -629,14 +720,18 @@ const Settings = () => {
                   className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value="">역할 선택</option>
-                  <option value="프로젝트 오너">프로젝트 오너</option>
-                  <option value="관리자">관리자</option>
-                  <option value="팀원">팀원</option>
-                  <option value="프로젝트 매니저">프로젝트 매니저</option>
-                  <option value="개발자">개발자</option>
-                  <option value="디자이너">디자이너</option>
-                  <option value="기획자">기획자</option>
-                  <option value="QA">QA</option>
+                  <optgroup label="권한 역할">
+                    <option value="프로젝트 오너">프로젝트 오너</option>
+                    <option value="관리자">관리자</option>
+                  </optgroup>
+                  <optgroup label="직무 역할">
+                    <option value="프로젝트 매니저">프로젝트 매니저</option>
+                    <option value="개발자">개발자</option>
+                    <option value="디자이너">디자이너</option>
+                    <option value="기획자">기획자</option>
+                    <option value="QA">QA</option>
+                    <option value="팀원">일반 팀원</option>
+                  </optgroup>
                 </select>
               </div>
               
@@ -666,6 +761,94 @@ const Settings = () => {
                   <option value="기획팀">기획팀</option>
                   <option value="운영팀">운영팀</option>
                 </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">경험 수준</label>
+                <select
+                  value={memberFormData.experienceLevel}
+                  onChange={(e) => setMemberFormData({...memberFormData, experienceLevel: e.target.value})}
+                  className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="junior">주니어 (1-3년)</option>
+                  <option value="mid">미드 (3-7년)</option>
+                  <option value="senior">시니어 (7년+)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">주간 가능 시간</label>
+                <input
+                  type="number"
+                  value={memberFormData.availableHours}
+                  onChange={(e) => setMemberFormData({...memberFormData, availableHours: Number(e.target.value)})}
+                  className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="40"
+                  min="0"
+                  max="168"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">보유 기술</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {['JavaScript', 'TypeScript', 'Python', 'Java', 'React', 'Vue.js', 'Node.js', 'Spring', 'Django', 'MongoDB', 'PostgreSQL', 'MySQL', 'AWS', 'Docker', 'Kubernetes', 'Git', 'AI/ML', 'Flutter', 'Swift', 'Kotlin'].map(skill => (
+                    <label key={skill} className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        checked={memberFormData.skills.includes(skill)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setMemberFormData({...memberFormData, skills: [...memberFormData.skills, skill]});
+                          } else {
+                            setMemberFormData({...memberFormData, skills: memberFormData.skills.filter(s => s !== skill)});
+                          }
+                        }}
+                        className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-gray-700 dark:text-gray-300">{skill}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">선호 업무</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { value: 'frontend', label: '프론트엔드 개발' },
+                    { value: 'backend', label: '백엔드 개발' },
+                    { value: 'fullstack', label: '풀스택 개발' },
+                    { value: 'mobile', label: '모바일 개발' },
+                    { value: 'design', label: 'UI/UX 디자인' },
+                    { value: 'database', label: '데이터베이스 설계' },
+                    { value: 'devops', label: '인프라/DevOps' },
+                    { value: 'cloud', label: '클라우드 아키텍처' },
+                    { value: 'data', label: '데이터 분석' },
+                    { value: 'ai', label: 'AI/ML 개발' },
+                    { value: 'testing', label: '테스팅/QA' },
+                    { value: 'documentation', label: '문서화' },
+                    { value: 'pm', label: '프로젝트 관리' },
+                    { value: 'security', label: '보안' },
+                    { value: 'optimization', label: '성능 최적화' }
+                  ].map(type => (
+                    <label key={type.value} className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        checked={memberFormData.preferredTypes.includes(type.value)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setMemberFormData({...memberFormData, preferredTypes: [...memberFormData.preferredTypes, type.value]});
+                          } else {
+                            setMemberFormData({...memberFormData, preferredTypes: memberFormData.preferredTypes.filter(t => t !== type.value)});
+                          }
+                        }}
+                        className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-gray-700 dark:text-gray-300">{type.label}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
             </div>
             

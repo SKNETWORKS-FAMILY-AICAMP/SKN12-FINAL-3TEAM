@@ -1772,6 +1772,14 @@ async def generate_notion_project(request: AnalysisRequest):
         logger.info(f"🔍 AI 모델 응답 키: {list(result.keys())}")
         logger.info(f"🔍 AI 모델 응답 샘플: {json.dumps(result, indent=2, ensure_ascii=False)[:500]}")
         
+        # expected_effects 상세 확인
+        if 'expected_effects' in result:
+            logger.info(f"📊 expected_effects 타입: {type(result['expected_effects'])}")
+            logger.info(f"📊 expected_effects 내용: {result['expected_effects']}")
+            logger.info(f"📊 expected_effects 길이: {len(result['expected_effects']) if isinstance(result['expected_effects'], list) else 'N/A'}")
+        else:
+            logger.warning("⚠️ expected_effects 필드가 없습니다!")
+        
         # 데이터 검증
         validated_result = validate_notion_project(result)
         
