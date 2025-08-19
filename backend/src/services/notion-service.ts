@@ -508,14 +508,14 @@ async createMeetingPage(inputData: InputData | string, projectName?: string): Pr
                 }
               },
               
-              // 담당자
+              // 참여 팀원 (서브태스크 담당자들)
               {
                 object: 'block' as const,
                 type: 'paragraph' as const,
                 paragraph: {
                   rich_text: [
-                    { type: 'text' as const, text: { content: '담당자' }, annotations: { bold: true } },
-                    { type: 'text' as const, text: { content: `: ${parsedData.project_info?.project_manager || this.extractAssignees(parsedData).join(', ') || '미지정'}` } }
+                    { type: 'text' as const, text: { content: '참여 팀원' }, annotations: { bold: true } },
+                    { type: 'text' as const, text: { content: `: ${this.extractAssignees(parsedData).join(', ') || '배정 예정'}` } }
                   ]
                 }
               },
@@ -648,7 +648,7 @@ async createMeetingPage(inputData: InputData | string, projectName?: string): Pr
               // 기대 효과 불릿 리스트
               ...(parsedData.project_info?.expected_effects && parsedData.project_info.expected_effects.length > 0 
                 ? parsedData.project_info.expected_effects 
-                : ['프로젝트 효율성 향상', '업무 프로세스 개선', '팀 협업 강화']).map(effect => ({
+                : []).map(effect => ({
                 object: 'block' as const,
                 type: 'bulleted_list_item' as const,
                 bulleted_list_item: {
@@ -778,17 +778,28 @@ private calculateProjectPeriod(parsedData: InputData): string {
 
 // 담당자 목록 추출 - 기획안 데이터 우선 사용
 private extractAssignees(parsedData: InputData): string[] {
-  const notionData = (parsedData as any).notion_project;
-  if (notionData?.project_manager) {
-    return [notionData.project_manager];
-  }
-  
   const actionItems = parsedData.action_items;
-  if (!actionItems || actionItems.length === 0) return ['담당자 미지정'];
+  if (!actionItems || actionItems.length === 0) return [];
   
-  const assignees = [...new Set(actionItems.map(item => item.assignee))];
-  const filtered = assignees.filter(assignee => assignee && assignee.trim() !== '');
-  return filtered.length > 0 ? filtered : ['담당자 미지정'];
+  // 서브태스크 담당자들 수집
+  const assignees = new Set<string>();
+  
+  actionItems.forEach(item => {
+    // 서브태스크가 있는 경우 서브태스크 담당자 수집
+    if (item.subtasks && Array.isArray(item.subtasks)) {
+      item.subtasks.forEach((subtask: any) => {
+        if (subtask.assignee && subtask.assignee.trim() !== '') {
+          assignees.add(subtask.assignee);
+        }
+      });
+    }
+    // 메인태스크에도 담당자가 있는 경우 (보통 없음)
+    if (item.assignee && item.assignee.trim() !== '' && item.assignee !== '미지정') {
+      assignees.add(item.assignee);
+    }
+  });
+  
+  return Array.from(assignees);
 }
 
 // AI 업무 목록에서 목표 추출 - 기획안 데이터 우선 사용
