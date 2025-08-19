@@ -188,16 +188,13 @@ class AIService {
 
   constructor() {
     this.baseUrl = process.env.RUNPOD_AI_URL || 'http://localhost:8000';
-    this.timeout = parseInt(process.env.AI_TIMEOUT || '600000'); // 10분으로 증가
+    // Localtunnel 등 시간 제한 없는 서비스 사용 시 10분으로 설정
+    this.timeout = parseInt(process.env.AI_TIMEOUT || '600000'); // 10분
     
     // AI 서버 전용 axios 인스턴스 생성
-    // Node.js 환경변수로 SSL 검증 비활성화
-    process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = "0";
-    
     this.aiAxios = axios.create({
       timeout: this.timeout,
       headers: {
-        'ngrok-skip-browser-warning': 'true',
         'Connection': 'keep-alive'
       }
     });

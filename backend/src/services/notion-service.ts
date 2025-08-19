@@ -399,7 +399,7 @@ async createMeetingPage(inputData: InputData | string, projectName?: string): Pr
                 paragraph: {
                   rich_text: [
                     { type: 'text' as const, text: { content: '수행기간' }, annotations: { bold: true } },
-                    { type: 'text' as const, text: { content: `: ${this.calculateProjectPeriod(parsedData.action_items)}` } }
+                    { type: 'text' as const, text: { content: `: ${this.calculateProjectPeriod(parsedData)}` } }
                   ]
                 }
               },
@@ -411,7 +411,7 @@ async createMeetingPage(inputData: InputData | string, projectName?: string): Pr
                 paragraph: {
                   rich_text: [
                     { type: 'text' as const, text: { content: '담당자' }, annotations: { bold: true } },
-                    { type: 'text' as const, text: { content: `: ${this.extractAssignees(parsedData.action_items).join(', ')}` } }
+                    { type: 'text' as const, text: { content: `: ${this.extractAssignees(parsedData).join(', ')}` } }
                   ]
                 }
               },
@@ -429,8 +429,8 @@ async createMeetingPage(inputData: InputData | string, projectName?: string): Pr
                 }
               },
               
-              // 목표 불릿 리스트 (high priority 업무들 사용)
-              ...this.extractObjectives(parsedData.action_items).map(objective => ({
+              // 목표 불릿 리스트 (기획안 데이터 또는 high priority 업무들 사용)
+              ...this.extractObjectives(parsedData).map(objective => ({
                 object: 'block' as const,
                 type: 'bulleted_list_item' as const,
                 bulleted_list_item: {
@@ -493,7 +493,7 @@ async createMeetingPage(inputData: InputData | string, projectName?: string): Pr
                       paragraph: {
                         rich_text: [{ 
                           type: 'text' as const, 
-                          text: { content: this.extractTechnologies(parsedData.action_items) }
+                          text: { content: this.extractTechnologies(parsedData) }
                         }]
                       }
                     }
@@ -518,7 +518,7 @@ async createMeetingPage(inputData: InputData | string, projectName?: string): Pr
                       paragraph: {
                         rich_text: [{ 
                           type: 'text' as const, 
-                          text: { content: `총 ${parsedData.action_items.length}개 업무를 단계별로 실행합니다.` }
+                          text: { content: this.getExecutionPlanDescription(parsedData) }
                         }]
                       }
                     },
@@ -566,17 +566,37 @@ private getStatusBadge(status: string): string {
   }
 }
 
-private extractTechnologies(actionItems: any[]): string {
+private extractTechnologies(parsedData: InputData): string {
+  // notion_project 데이터 확인
+  const notionData = (parsedData as any).notion_project;
+  if (notionData?.idea_description) {
+    return notionData.idea_description;
+  }
+  
+  const actionItems = parsedData.action_items;
   if (!actionItems || actionItems.length === 0) return '기술 스택이 정의되지 않았습니다.';
   
-  // tags에서 기술 관련 태그들 추출
-  const allTags = actionItems.flatMap(item => item.tags || []);
-  const techTags = allTags.filter(tag => 
-    ['backend', 'frontend', 'database', 'api', 'ui', 'ux', 'mongodb', 'react', 'node'].includes(tag.toLowerCase())
-  );
+  // subtasks의 required_skills 수집
+  const allSkills = new Set<string>();
   
-  if (techTags.length > 0) {
-    return `주요 기술: ${[...new Set(techTags)].join(', ')}`;
+  actionItems.forEach(item => {
+    // 메인 태스크의 태그
+    if (item.tags) {
+      item.tags.forEach(tag => allSkills.add(tag));
+    }
+    
+    // 서브태스크의 required_skills
+    if (item.subtasks && Array.isArray(item.subtasks)) {
+      item.subtasks.forEach(subtask => {
+        if (subtask.required_skills && Array.isArray(subtask.required_skills)) {
+          subtask.required_skills.forEach(skill => allSkills.add(skill));
+        }
+      });
+    }
+  });
+  
+  if (allSkills.size > 0) {
+    return `주요 기술: ${Array.from(allSkills).join(', ')}`;
   }
   
   return '프로젝트 기술 스택과 구현 방법론을 정의합니다.';
@@ -596,9 +616,14 @@ private getWeekFromDate(dateString: string): string {
   }
 }
 
-// 프로젝트 종료일 계산
-// 기존 함수 수정
-private calculateProjectPeriod(actionItems: any[]): string {
+// 프로젝트 기간 계산 - 기획안 데이터 우선 사용
+private calculateProjectPeriod(parsedData: InputData): string {
+  const notionData = (parsedData as any).notion_project;
+  if (notionData?.project_period) {
+    return notionData.project_period;
+  }
+  
+  const actionItems = parsedData.action_items;
   if (!actionItems || actionItems.length === 0) return '[기간 미정]';
   
   const firstItem = actionItems[0];
@@ -623,28 +648,46 @@ private calculateProjectPeriod(actionItems: any[]): string {
   return `${earliestStart} ~ ${latestEnd}`;
 }
 
-// 담당자 목록 추출
-private extractAssignees(actionItems: any[]): string[] {
+// 담당자 목록 추출 - 기획안 데이터 우선 사용
+private extractAssignees(parsedData: InputData): string[] {
+  const notionData = (parsedData as any).notion_project;
+  if (notionData?.project_manager) {
+    return [notionData.project_manager];
+  }
+  
+  const actionItems = parsedData.action_items;
   if (!actionItems || actionItems.length === 0) return ['담당자 미지정'];
   
   const assignees = [...new Set(actionItems.map(item => item.assignee))];
-  return assignees.filter(assignee => assignee && assignee.trim() !== '');
+  const filtered = assignees.filter(assignee => assignee && assignee.trim() !== '');
+  return filtered.length > 0 ? filtered : ['담당자 미지정'];
 }
 
-// AI 업무 목록에서 목표 추출
-private extractObjectives(actionItems: any[]): string[] {
+// AI 업무 목록에서 목표 추출 - 기획안 데이터 우선 사용
+private extractObjectives(parsedData: InputData): string[] {
+  // notion_project 데이터가 있으면 우선 사용
+  const notionData = (parsedData as any).notion_project;
+  if (notionData?.core_objectives && Array.isArray(notionData.core_objectives)) {
+    return notionData.core_objectives;
+  }
+  
+  const actionItems = parsedData.action_items;
   if (!actionItems || actionItems.length === 0) {
     return ['프로젝트 목표가 설정되지 않았습니다.'];
   }
   
-  // 높은 우선순위 업무들의 제목을 목표로 사용
+  // 높은 우선순위 업무들의 설명(description)을 목표로 사용 (제목보다 구체적)
   const highPriorityTasks = actionItems.filter(task => task.priority === 'high');
   if (highPriorityTasks.length > 0) {
-    return highPriorityTasks.slice(0, 5).map(task => task.title);
+    return highPriorityTasks.slice(0, 5).map(task => 
+      task.description || task.title || '목표 설정 필요'
+    );
   }
   
-  // 높은 우선순위가 없으면 처음 5개 업무를 목표로 사용
-  return actionItems.slice(0, 5).map(task => task.title);
+  // 높은 우선순위가 없으면 처음 5개 업무의 설명을 목표로 사용
+  return actionItems.slice(0, 5).map(task => 
+    task.description || task.title || '목표 설정 필요'
+  );
 }
 // 헬퍼 함수들
 private createDetailedTaskToggles(actionItems: any[]): any[] {
@@ -963,8 +1006,14 @@ private createDetailedTaskToggles(actionItems: any[]): any[] {
     return rows;
   }
 
-  // AI 응답에서 목적 추출
+  // AI 응답에서 목적 추출 - 기획안 데이터 우선 사용
   private extractPurposeFromSummary(parsedData: InputData): string {
+    // parsedData에 notion_project 데이터가 있는지 확인
+    const notionData = (parsedData as any).notion_project;
+    if (notionData?.project_purpose) {
+      return notionData.project_purpose;
+    }
+    
     // AI 응답 형식에서 목적 부분 추출
     const summary = parsedData.summary;
     
@@ -984,8 +1033,14 @@ private createDetailedTaskToggles(actionItems: any[]): any[] {
     return firstSentence ? firstSentence.trim() : summary.substring(0, 100) + '...';
   }
 
-  // 핵심 아이디어 추출
+  // 핵심 아이디어 추출 - 기획안 데이터 우선 사용
   private extractCoreIdea(parsedData: InputData): string {
+    // parsedData에 notion_project 데이터가 있는지 확인
+    const notionData = (parsedData as any).notion_project;
+    if (notionData?.core_idea) {
+      return notionData.core_idea;
+    }
+    
     const summary = parsedData.summary;
     
     // "핵심 아이디어" 패턴 찾기
@@ -996,6 +1051,21 @@ private createDetailedTaskToggles(actionItems: any[]): any[] {
     
     // summary 전체 반환
     return summary;
+  }
+
+  // 실행 계획 설명 가져오기
+  private getExecutionPlanDescription(parsedData: InputData): string {
+    const notionData = (parsedData as any).notion_project;
+    if (notionData?.execution_plan) {
+      return notionData.execution_plan;
+    }
+    
+    const actionItems = parsedData.action_items;
+    if (!actionItems || actionItems.length === 0) {
+      return '실행 계획이 수립되지 않았습니다.';
+    }
+    
+    return `총 ${actionItems.length}개 업무를 단계별로 실행합니다.`;
   }
 
   // 실행 계획 생성 (서브태스크 포함)
@@ -1039,8 +1109,14 @@ private createDetailedTaskToggles(actionItems: any[]): any[] {
     return planItems;
   }
 
-  // 프로젝트명 추출
+  // 프로젝트명 추출 - AI가 생성한 기획안 데이터에서 추출
   private extractProjectName(parsedData: InputData): string {
+    // parsedData에 notion_project 데이터가 있는지 확인
+    const notionData = (parsedData as any).notion_project;
+    if (notionData?.project_name) {
+      return notionData.project_name;
+    }
+    
     const summary = parsedData.summary;
     
     // "프로젝트명: " 패턴 찾기
