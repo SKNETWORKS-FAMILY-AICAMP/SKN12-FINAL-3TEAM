@@ -2673,7 +2673,7 @@ async def generate_tasks_endpoint(
         
         # 복잡도 기반 서브태스크 생성
         logger.info("   Step 3: Generating complexity-based subtasks...")
-        task_items_with_subtasks = await generate_complexity_based_subtasks(
+        task_items_with_subtasks = await generate_subtasks_for_all_tasks(
             task_items, 
             task_complexity_analysis
         )

@@ -191,10 +191,15 @@ class AIService {
     this.timeout = parseInt(process.env.AI_TIMEOUT || '600000'); // 10분으로 증가
     
     // AI 서버 전용 axios 인스턴스 생성
+    // Node.js 환경변수로 SSL 검증 비활성화
+    process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = "0";
+    
     this.aiAxios = axios.create({
       timeout: this.timeout,
-      // ngrok SSL 문제로 인해 HTTPS 에이전트 설정 제거
-      // 대신 타임아웃만 증가시켜 처리
+      headers: {
+        'ngrok-skip-browser-warning': 'true',
+        'Connection': 'keep-alive'
+      }
     });
   }
 
