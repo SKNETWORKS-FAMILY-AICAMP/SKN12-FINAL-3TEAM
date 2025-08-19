@@ -3867,9 +3867,9 @@ async function processTranscriptWithAI(transcript, client, channelId) {
         throw new Error(result.error || 'AI 처리 실패');
       }
       
-      // 결과에서 데이터 추출
-      const extractedSummary = result.stage1?.notion_project?.overview || '프로젝트 개요가 생성되었습니다.';
-      const extractedTitle = result.stage1?.notion_project?.title || '생성된 프로젝트';
+      // 결과에서 데이터 추출 - 올바른 필드명 사용
+      const extractedSummary = result.stage1?.notion_project?.project_purpose || '프로젝트 개요가 생성되었습니다.';
+      const extractedTitle = result.stage1?.notion_project?.project_name || '생성된 프로젝트';
       const tasks = result.stage2?.task_master_prd?.tasks || [];
       
       // InputData 인터페이스에 맞게 구성
@@ -4506,10 +4506,10 @@ async function processTextWithAIFromModal(text, client, channelId) {
     console.log('🔍 AI 응답 구조:', JSON.stringify(result, null, 2));
     
     if (result.success && result.notion_project) {
-      // 안전한 데이터 추출
-      const title = result.notion_project.title || '생성된 프로젝트';
-      const overview = result.notion_project.overview || '프로젝트 개요가 생성되었습니다.';
-      const objectives = Array.isArray(result.notion_project.objectives) ? result.notion_project.objectives : ['목표가 생성되었습니다.'];
+      // 안전한 데이터 추출 - 올바른 필드명 사용
+      const title = result.notion_project.project_name || '생성된 프로젝트';
+      const overview = result.notion_project.project_purpose || '프로젝트 개요가 생성되었습니다.';
+      const objectives = Array.isArray(result.notion_project.core_objectives) ? result.notion_project.core_objectives : ['목표가 생성되었습니다.'];
       
       // 텍스트 길이 제한
       const shortOverview = overview.length > 200 ? overview.substring(0, 200) + '...' : overview;
@@ -5234,7 +5234,7 @@ async function processUploadedFile(file, projectName, client, userId) {
             user.id,
             {
               title: projectName || 'TtalKkak Project',
-              overview: result.stage1?.notion_project?.overview || 'AI generated project',
+              overview: result.stage1?.notion_project?.project_purpose || 'AI generated project',
               tasks: result.stage2.task_master_prd.tasks.map(task => ({
                 title: task.title || task.task,
                 description: task.description || '',
@@ -5302,7 +5302,7 @@ async function processUploadedFile(file, projectName, client, userId) {
               tenantId: user.tenantId,
               slackInputId: slackInput.id,
               title: projectName,
-              overview: result.stage1?.notion_project?.overview || result.stage1?.transcript?.substring(0, 500) || '',
+              overview: result.stage1?.notion_project?.project_purpose || result.stage1?.transcript?.substring(0, 500) || '',
               content: {
                 notion_project: result.stage1?.notion_project || {},
                 prd: result.stage2?.task_master_prd || {},
@@ -5513,7 +5513,7 @@ async function processUploadedFile(file, projectName, client, userId) {
                 
                 // AI가 생성한 데이터를 Notion 페이지로 변환
                 const notionData = {
-                  summary: result.stage1?.notion_project?.title || projectName,
+                  summary: result.stage1?.notion_project?.project_purpose || projectName,
                   action_items: result.stage2.task_master_prd.tasks?.map((task, index) => {
                     // DB에서 해당 태스크 찾기
                     const dbTask = dbTasks.find(t => t.title === (task.title || task.task));
@@ -5608,8 +5608,8 @@ async function processUploadedFile(file, projectName, client, userId) {
                 // 메인 이슈 생성
                 const mainIssue = await jiraService.createIssue({
                   projectKey: projectKey,
-                  summary: projectName || result.stage1?.notion_project?.title || 'AI 생성 업무',
-                  description: result.stage1?.notion_project?.overview || result.stage1?.transcript || '회의 내용 기반 업무',
+                  summary: projectName || result.stage1?.notion_project?.project_name || 'AI 생성 업무',
+                  description: result.stage1?.notion_project?.project_purpose || result.stage1?.transcript || '회의 내용 기반 업무',
                   issueType: 'Task'
                 });
                 
@@ -5816,7 +5816,7 @@ async function processUploadedFile(file, projectName, client, userId) {
       
       if (result.success) {
         // summary 가져오기 (stage1 또는 stage2에서)
-        const summary = result.stage1?.notion_project?.title || 
+        const summary = result.stage1?.notion_project?.project_name || 
                        result.stage2?.task_master_prd?.title || 
                        'AI 분석 완료';
         
