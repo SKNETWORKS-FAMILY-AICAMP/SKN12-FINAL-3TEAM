@@ -191,16 +191,11 @@ class AIService {
     this.timeout = parseInt(process.env.AI_TIMEOUT || '600000'); // 10분으로 증가
     
     // AI 서버 전용 axios 인스턴스 생성
-    const httpsAgent = new https.Agent({
-      rejectUnauthorized: false, // ngrok SSL 인증서 문제 우회
-      keepAlive: true,
-      keepAliveMsecs: 60000
-    });
-    
     this.aiAxios = axios.create({
       timeout: this.timeout,
-      httpsAgent: httpsAgent
-    } as any);
+      // ngrok SSL 문제로 인해 HTTPS 에이전트 설정 제거
+      // 대신 타임아웃만 증가시켜 처리
+    });
   }
 
   /**
@@ -395,7 +390,13 @@ class AIService {
       console.log(`⚡ Generating tasks from PRD using VLLM AI server`);
 
       try {
-        const response = await this.aiAxios.post(`${this.baseUrl}/generate-tasks`, prd);
+        // AI 서버는 prd 필드를 요구함
+        const requestBody = {
+          prd: typeof prd === 'string' ? prd : JSON.stringify(prd),
+          num_tasks: 5
+        };
+        
+        const response = await this.aiAxios.post(`${this.baseUrl}/generate-tasks`, requestBody);
 
         const result: GeneratedTasksResult = response.data;
 
