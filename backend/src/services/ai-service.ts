@@ -193,6 +193,7 @@ class AIService {
     
     // AI 서버 전용 axios 인스턴스 생성
     this.aiAxios = axios.create({
+      baseURL: this.baseUrl,  // 중요: baseURL 설정 필수!
       timeout: this.timeout,
       headers: {
         'Connection': 'keep-alive',
@@ -404,7 +405,7 @@ class AIService {
         };
         
         // 비동기 엔드포인트 사용 (/generate-tasks-async)
-        const asyncResponse = await this.aiAxios.post(`${this.baseUrl}/generate-tasks-async`, requestBody, {
+        const asyncResponse = await this.aiAxios.post('/generate-tasks-async', requestBody, {
           timeout: 10000 // Job ID만 받기
         });
         
@@ -428,7 +429,7 @@ class AIService {
             num_tasks: 5
           };
           
-          const response = await this.aiAxios.post(`${this.baseUrl}/generate-tasks`, requestBody, {
+          const response = await this.aiAxios.post('/generate-tasks', requestBody, {
             timeout: 90000 // 90초 제한
           });
 
@@ -749,7 +750,7 @@ class AIService {
         const transcript = audioBuffer.toString('utf-8');
         
         // 비동기 엔드포인트 호출
-        const response = await this.aiAxios.post(`${this.baseUrl}/pipeline-final-async`, {
+        const response = await this.aiAxios.post('/pipeline-final-async', {
           transcript,
           generate_notion: true,
           generate_tasks: true,
@@ -797,7 +798,7 @@ class AIService {
         formData.append('num_tasks', '5');
         
         // 비동기 엔드포인트 호출
-        const response = await this.aiAxios.post(`${this.baseUrl}/pipeline-final-async`, formData, {
+        const response = await this.aiAxios.post('/pipeline-final-async', formData, {
           headers: formData.getHeaders(),
           timeout: 10000
         });
@@ -860,7 +861,7 @@ class AIService {
         if (isTextInput) {
           const transcript = audioBuffer.toString('utf-8');
 
-          const response = await this.aiAxios.post(`${this.baseUrl}/pipeline-final`, {
+          const response = await this.aiAxios.post('/pipeline-final', {
             transcript,
             generate_notion: true,
             generate_tasks: true,
@@ -921,7 +922,7 @@ class AIService {
             headers: formData.getHeaders()
           });
 
-          const response = await this.aiAxios.post(`${this.baseUrl}/pipeline-final`, formData, {
+          const response = await this.aiAxios.post('/pipeline-final', formData, {
             headers: {
               ...formData.getHeaders(),
               'Accept': 'application/json'
