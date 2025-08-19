@@ -188,13 +188,13 @@ class AIService {
 
   constructor() {
     this.baseUrl = process.env.RUNPOD_AI_URL || 'http://localhost:8000';
-    // Localtunnel 등 시간 제한 없는 서비스 사용 시 10분으로 설정
+    // RunPod 프록시 고려하여 충분한 타임아웃 설정
     this.timeout = parseInt(process.env.AI_TIMEOUT || '600000'); // 10분
     
     // AI 서버 전용 axios 인스턴스 생성
     this.aiAxios = axios.create({
       baseURL: this.baseUrl,  // 중요: baseURL 설정 필수!
-      timeout: this.timeout,
+      timeout: 60000,  // 기본 타임아웃 60초로 설정 (개별 요청에서 오버라이드 가능)
       headers: {
         'Connection': 'keep-alive',
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
@@ -702,9 +702,9 @@ class AIService {
     
     for (let i = 0; i < maxAttempts; i++) {
       try {
-        // 상태 확인 - 타임아웃 증가
+        // 상태 확인 - RunPod 프록시 응답 지연 고려하여 타임아웃 대폭 증가
         const statusResponse = await this.aiAxios.get(`/job-status/${jobId}`, {
-          timeout: 15000  // 15초로 증가
+          timeout: 60000  // 60초로 증가
         });
         
         const status = statusResponse.data.status;
@@ -715,7 +715,7 @@ class AIService {
         if (status === 'completed') {
           // 결과 가져오기 - 타임아웃 증가
           const resultResponse = await this.aiAxios.get(`/job-result/${jobId}`, {
-            timeout: 30000  // 30초로 증가
+            timeout: 120000  // 120초(2분)로 증가
           });
           console.log(`✅ Job ${jobId} completed successfully`);
           return resultResponse.data;
