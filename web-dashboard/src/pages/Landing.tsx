@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import ttalkkakLogo from '../assets/logo.png';
 import { useState } from 'react';
 import SplitText from '../components/SplitText';
-import CountUpAnimation from '../components/CountUpAnimation';
+import { RandomNumberAnimation as CountUpAnimation } from '../components/AnimatedCounter';
 
 
 
