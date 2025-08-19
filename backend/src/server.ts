@@ -1710,7 +1710,8 @@ app.get('/api/users',
           role: true,
           skills: true,
           availableHours: true,
-          experienceLevel: true
+          experienceLevel: true,
+          preferredTypes: true
         },
         orderBy: { name: 'asc' }
       });
@@ -1729,7 +1730,7 @@ app.post('/api/users',
   async (req, res) => {
     try {
       const tenantId = req.tenantId!;
-      const { name, email, role = 'MEMBER', skills = [], availableHours = 40, experienceLevel = 'junior' } = req.body;
+      const { name, email, role = 'MEMBER', skills = [], availableHours = 40, experienceLevel = 'junior', preferredTypes = [] } = req.body;
 
       // 필수 필드 검증
       if (!name || !email) {
@@ -1754,7 +1755,8 @@ app.post('/api/users',
           role,
           skills,
           availableHours,
-          experienceLevel
+          experienceLevel,
+          preferredTypes
         },
         select: {
           id: true,
@@ -1763,7 +1765,8 @@ app.post('/api/users',
           role: true,
           skills: true,
           availableHours: true,
-          experienceLevel: true
+          experienceLevel: true,
+          preferredTypes: true
         }
       });
 

@@ -10,7 +10,6 @@ interface TeamMember {
   role: string;
   email: string;
   phone: string;
-  department: string;
 }
 
 const Settings = () => {
@@ -82,8 +81,7 @@ const Settings = () => {
       role: user.role === 'OWNER' ? '프로젝트 오너' : 
             user.role === 'ADMIN' ? '관리자' : '팀원',
       email: user.email || '',
-      phone: '', // API에서 전화번호가 없으므로 빈 문자열
-      department: user.skills?.length ? '개발팀' : '일반팀' // 스킬이 있으면 개발팀으로 가정
+      phone: '' // API에서 전화번호가 없으므로 빈 문자열
     };
   });
 
@@ -93,15 +91,13 @@ const Settings = () => {
     name: '',
     role: '',
     email: '',
-    department: '',
     experienceLevel: 'junior',
     availableHours: 40,
     skills: [] as string[],
     preferredTypes: [] as string[]
   });
 
-  // 필터링 및 페이지네이션 상태
-  const [selectedDepartment, setSelectedDepartment] = useState<string>('전체');
+  // 페이지네이션 상태
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 6; // 페이지당 6명씩 표시
 
@@ -180,7 +176,6 @@ const Settings = () => {
       name: member.name,
       role: member.role,
       email: member.email,
-      department: member.department,
       experienceLevel: user?.experienceLevel || 'junior',
       availableHours: user?.availableHours || 40,
       skills: user?.skills || [],
@@ -207,37 +202,14 @@ const Settings = () => {
       });
       
       // role 값을 API 형식으로 변환
-      // 프로젝트 오너와 관리자만 실제 role 변경, 나머지는 department로 구분
       let apiRole: 'OWNER' | 'ADMIN' | 'MEMBER' = 'MEMBER';
-      let department = memberFormData.department || '일반팀';
       
       if (memberFormData.role === '프로젝트 오너') {
         apiRole = 'OWNER';
       } else if (memberFormData.role === '관리자') {
         apiRole = 'ADMIN';
       } else {
-        // 나머지 역할은 MEMBER로 설정하고 department로 구분
         apiRole = 'MEMBER';
-        // 역할별 부서 매핑
-        switch(memberFormData.role) {
-          case '프로젝트 매니저':
-            department = 'PM팀';
-            break;
-          case '개발자':
-            department = '개발팀';
-            break;
-          case '디자이너':
-            department = '디자인팀';
-            break;
-          case '기획자':
-            department = '기획팀';
-            break;
-          case 'QA':
-            department = 'QA팀';
-            break;
-          default:
-            department = memberFormData.department || '일반팀';
-        }
       }
       
       // API 호출
@@ -250,46 +222,19 @@ const Settings = () => {
           experienceLevel: memberFormData.experienceLevel,
           availableHours: memberFormData.availableHours,
           skills: memberFormData.skills,
-          preferredTypes: memberFormData.preferredTypes,
-          // department 정보도 함께 저장 (백엔드에서 지원하는 경우)
-          metadata: {
-            department: department,
-            displayRole: memberFormData.role  // 표시용 역할 저장
-          }
+          preferredTypes: memberFormData.preferredTypes
         }
       });
     } else {
       // 추가 - role 값을 API 형식으로 변환
       let apiRole: 'OWNER' | 'ADMIN' | 'MEMBER' = 'MEMBER';
-      let department = memberFormData.department || '일반팀';
       
       if (memberFormData.role === '프로젝트 오너') {
         apiRole = 'OWNER';
       } else if (memberFormData.role === '관리자') {
         apiRole = 'ADMIN';
       } else {
-        // 나머지 역할은 MEMBER로 설정하고 department로 구분
         apiRole = 'MEMBER';
-        // 역할별 부서 매핑
-        switch(memberFormData.role) {
-          case '프로젝트 매니저':
-            department = 'PM팀';
-            break;
-          case '개발자':
-            department = '개발팀';
-            break;
-          case '디자이너':
-            department = '디자인팀';
-            break;
-          case '기획자':
-            department = '기획팀';
-            break;
-          case 'QA':
-            department = 'QA팀';
-            break;
-          default:
-            department = memberFormData.department || '일반팀';
-        }
       }
       
       // API 호출
@@ -300,11 +245,7 @@ const Settings = () => {
         experienceLevel: memberFormData.experienceLevel,
         availableHours: memberFormData.availableHours,
         skills: memberFormData.skills,
-        preferredTypes: memberFormData.preferredTypes,
-        metadata: {
-          department: department,
-          displayRole: memberFormData.role  // 표시용 역할 저장
-        }
+        preferredTypes: memberFormData.preferredTypes
       });
     }
 
@@ -352,29 +293,15 @@ const Settings = () => {
     deleteUserMutation.mutate(id);
   };
 
-  // 필터링된 팀원 목록
-  const filteredMembers = teamMembers.filter(member => 
-    selectedDepartment === '전체' || member.department === selectedDepartment
-  );
-
   // 페이지네이션 계산
-  const totalPages = Math.ceil(filteredMembers.length / itemsPerPage);
+  const totalPages = Math.ceil(teamMembers.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
-  const currentMembers = filteredMembers.slice(startIndex, endIndex);
-
-  // 부서 목록 (중복 제거)
-  const departments = ['전체', ...Array.from(new Set(teamMembers.map(member => member.department)))];
+  const currentMembers = teamMembers.slice(startIndex, endIndex);
 
   // 페이지 변경 핸들러
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
-  };
-
-  // 부서 필터 변경 핸들러
-  const handleDepartmentChange = (department: string) => {
-    setSelectedDepartment(department);
-    setCurrentPage(1); // 필터 변경 시 첫 페이지로 이동
   };
 
   return (
@@ -399,28 +326,10 @@ const Settings = () => {
               </button>
             </div>
 
-            {/* 부서 필터 */}
+            {/* 팀원 수 표시 */}
             <div className="mb-6">
-              <div className="flex items-center gap-2 mb-3">
-                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">부서별 필터:</span>
-                <div className="flex flex-wrap gap-2">
-                  {departments.map((dept) => (
-                    <button
-                      key={dept}
-                      onClick={() => handleDepartmentChange(dept)}
-                      className={`px-3 py-1 text-sm rounded-full transition-colors ${
-                        selectedDepartment === dept
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
-                      }`}
-                    >
-                      {dept}
-                    </button>
-                  ))}
-                </div>
-              </div>
               <div className="text-sm text-gray-600 dark:text-gray-400">
-                총 {filteredMembers.length}명의 팀원이 있습니다.
+                총 {teamMembers.length}명의 팀원이 있습니다.
               </div>
             </div>
             
@@ -439,11 +348,6 @@ const Settings = () => {
                     {/* 역할 */}
                     <span className="px-3 py-1 text-sm bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded-full font-medium">
                       {member.role}
-                    </span>
-                    
-                    {/* 부서 */}
-                    <span className="px-3 py-1 text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-full">
-                      {member.department}
                     </span>
                     
                     {/* 이메일 */}
@@ -477,10 +381,10 @@ const Settings = () => {
                 <div className="col-span-full text-center py-12 text-gray-500 dark:text-gray-400">
                   <Users className="w-16 h-16 mx-auto mb-4 opacity-50" />
                   <h3 className="text-lg font-medium mb-2">
-                    {filteredMembers.length === 0 ? '등록된 팀원이 없습니다' : '해당 부서의 팀원이 없습니다'}
+                    등록된 팀원이 없습니다
                   </h3>
                   <p className="text-sm">
-                    {filteredMembers.length === 0 ? '새 팀원을 추가해서 팀을 구성해보세요.' : '다른 부서를 선택해보세요.'}
+                    새 팀원을 추가해서 팀을 구성해보세요.
                   </p>
                 </div>
               )}
@@ -537,7 +441,7 @@ const Settings = () => {
             {/* 페이지 정보 */}
             {totalPages > 1 && (
               <div className="text-center mt-3 text-sm text-gray-600 dark:text-gray-400">
-                {currentPage} / {totalPages} 페이지 ({startIndex + 1}-{Math.min(endIndex, filteredMembers.length)} / {filteredMembers.length}명)
+                {currentPage} / {totalPages} 페이지 ({startIndex + 1}-{Math.min(endIndex, teamMembers.length)} / {teamMembers.length}명)
               </div>
             )}
           </div>
@@ -746,22 +650,6 @@ const Settings = () => {
                 />
               </div>
               
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">부서</label>
-                <select
-                  value={memberFormData.department}
-                  onChange={(e) => setMemberFormData({...memberFormData, department: e.target.value})}
-                  className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="">부서 선택</option>
-                  <option value="개발팀">개발팀</option>
-                  <option value="디자인팀">디자인팀</option>
-                  <option value="데이터팀">데이터팀</option>
-                  <option value="마케팅팀">마케팅팀</option>
-                  <option value="기획팀">기획팀</option>
-                  <option value="운영팀">운영팀</option>
-                </select>
-              </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">경험 수준</label>
