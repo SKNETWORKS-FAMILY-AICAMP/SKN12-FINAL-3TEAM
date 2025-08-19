@@ -155,15 +155,35 @@ Qwen3 생성 (문서화)
 
 ![시퀀스 다이어그램](https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN12-FINAL-3TEAM/blob/main/%EC%82%B0%EC%B6%9C%EB%AC%BC/%EB%B0%9C%ED%91%9C%EC%9E%90%EB%A3%8C/img/0.%EA%B8%B0%ED%9A%8D_%ED%94%84%EB%A1%9C%EC%A0%9D%ED%8A%B8%20%EA%B8%B0%ED%9A%8D%EC%84%9C_%EB%94%B8%EA%B9%8D_%EC%B2%A8%EB%B6%8001_%EC%8B%9C%ED%80%80%EC%8A%A4%20%EB%8B%A4%EC%9D%B4%EC%96%B4%EA%B7%B8%EB%9E%A8.png?raw=true)
 
-### 주요 Phase
-- **Phase 1: 음성 입력 및 회의록 처리**
-  - 사용자가 회의 발화를 입력 → WhisperX STT → 텍스트 변환
-- **Phase 2: 요약/의도 분석**
-  - BERT 분류기 & Qwen3 모델이 요약 및 태스크 후보 생성
-- **Phase 3: 스마트 태스크 생성 및 할당**
-  - Express 서버 → Notion/JIRA API 호출 → 업무 자동 등록
-- **Phase 4: 결과 전달**
-  - 사용자에게 Slack/웹 대시보드로 피드백 제공
+1. 회의 시작 & 세션 초기화
+사용자가 Slack App을 통해 회의를 시작하면
+POST /meetings/create 요청이 API Gateway를 통해 Backend API로 전달됩니다.
+Backend는 회의 세션을 생성하고 WebSocket 연결을 설정하여 실시간 오디오 스트리밍을 준비합니다.
+
+2. 실시간 음성 전송 & 텍스트 변환
+사용자의 오디오 스트림이 WebSocket을 통해 서버로 전달됩니다.
+WhisperX 기반 STT 엔진이 오디오를 텍스트로 변환합니다.
+변환된 텍스트는 즉시 사용자에게 실시간 자막 형태로 표시됩니다.
+
+3. 회의 종료 & 분석 파이프라인 실행
+사용자가 회의를 종료하면 POST /meetings/{id}/finish 요청이 전달되어 전체 분석이 시작됩니다.
+주요 처리 단계:
+화자 분리(Speaker Diarization)
+키워드 추출(Pyanodot)
+의도 분류(OpenAI / Qwen3)
+요약 생성(Claude, Qwen3 등 LLM 엔진)
+Task Master를 통한 업무 분류 및 정리
+
+4️. 결과 저장 & 통합
+분석된 결과는 데이터베이스에 저장되며,
+Slack, Notion, Jira 등 외부 API와 연동되어 회의록/업무로 자동 배포됩니다.
+결과 문서는 GPU 클러스터와 캐시 서버를 활용하여 최적화된 속도로 생성됩니다.
+
+5️. 시스템 성능 지표
+평균 처리 시간: 약 3분 이내
+STT 지연 시간: 약 2초
+LLM 처리 : 약 2분
+Task 분석 지연: 약 30초
 
 ---
 ## 💬 팀원 한 줄 회고
