@@ -82,6 +82,122 @@ AMI/ICSI: The University of Edinburgh 공개 데이터셋(허가 라이선스 �
 
 ## ERD
 서비스의 데이터베이스 구조는 아래와 같습니다.
+
+erDiagram
+  tenants ||--o{ users : has
+  tenants ||--o{ projects : has
+  tenants ||--o{ tasks : has
+  tenants ||--o{ slack_inputs : has
+  tenants ||--o{ integrations : has
+
+  tasks ||--|| task_metadata : "1:1"
+  tasks ||--o{ task_assignment_logs : "배정 로그"
+  users ||--o{ task_assignment_logs : "배정 주체"
+  users ||--o{ tasks : "assignee (nullable)"
+  slack_inputs ||--o| projects : "원천 입력(선택)"
+
+  tenants {
+    varchar id PK
+    varchar name
+    varchar slug
+    timestamp created_at
+  }
+
+  users {
+    varchar id PK
+    varchar tenant_id FK
+    varchar email
+    varchar name
+    user_role role
+    varchar slack_user_id
+    json skills
+    json available_hours
+    json preferred_types
+    varchar experience_level
+    timestamp last_assigned_at
+    timestamp created_at
+  }
+
+  slack_inputs {
+    varchar id PK
+    varchar tenant_id FK
+    varchar slack_channel_id
+    varchar slack_user_id
+    input_type type
+    timestamp created_at
+    text content
+    processing_status status
+  }
+
+  projects {
+    varchar id PK
+    varchar tenant_id FK
+    varchar slack_input_id FK
+    varchar title
+    text overview
+    json content
+    varchar notion_page_url
+    varchar notion_status
+    timestamp created_at
+  }
+
+  tasks {
+    varchar id PK
+    varchar tenant_id FK
+    varchar project_id FK
+    varchar title
+    text description
+    task_status status
+    varchar assignee_id FK
+    varchar parent_id
+    varchar task_number
+    task_priority priority
+    varchar complexity
+    timestamp created_at
+    timestamp updated_at
+    timestamp due_date
+    timestamp completed_at
+  }
+
+  task_metadata {
+    varchar id PK
+    varchar task_id FK UNIQUE
+    float estimated_hours
+    float actual_hours
+    json required_skills
+    varchar task_type
+    float assignment_score
+    text assignment_reason
+    varchar jira_issue_key
+    varchar jira_status
+    timestamp created_at
+    timestamp updated_at
+  }
+
+  task_assignment_logs {
+    varchar id PK
+    varchar task_id FK
+    varchar user_id FK
+    timestamp assigned_at
+    float assignment_score
+    json score_breakdown
+    text reason
+    json alternatives
+    varchar algorithm_version
+  }
+
+  integrations {
+    varchar id PK
+    varchar tenant_id FK
+    varchar user_id FK
+    varchar service_type
+    text access_token
+    boolean is_active
+    json config
+    timestamp created_at
+  }
+
+
 ![ERD](https://raw.githubusercontent.com/SKNETWORKS-FAMILY-AICAMP/SKN12-FINAL-3TEAM/refs/heads/main/%EC%82%B0%EC%B6%9C%EB%AC%BC/%EB%B0%9C%ED%91%9C%EC%9E%90%EB%A3%8C/img/ERD.webp)
 
 ## 시스템 아키텍쳐
