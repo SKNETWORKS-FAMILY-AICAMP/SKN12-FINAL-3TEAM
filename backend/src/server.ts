@@ -1650,8 +1650,19 @@ app.delete('/api/tasks/:id',
           const jiraPrisma = new JiraPrisma();
           const jiraService = new JiraService(jiraPrisma);
           
-          // 프로젝트 소유자의 Jira 연동 사용
-          const projectOwnerId = existingTask.project?.slackInput?.userId || existingTask.assigneeId || '';
+          // 프로젝트 소유자의 Jira 연동 사용 (slackUserId로 User 찾기)
+          let projectOwnerId = existingTask.assigneeId || '';
+          if (existingTask.project?.slackInput?.slackUserId) {
+            const projectOwner = await prisma.user.findFirst({
+              where: {
+                tenantId,
+                slackUserId: existingTask.project.slackInput.slackUserId
+              }
+            });
+            if (projectOwner) {
+              projectOwnerId = projectOwner.id;
+            }
+          }
           const result = await jiraService.deleteTask(
             tenantId,
             projectOwnerId,
