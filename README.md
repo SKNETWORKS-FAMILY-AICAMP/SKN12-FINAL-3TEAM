@@ -44,7 +44,7 @@ ICSI 다자 대화록(한글 번역): 75개 세션 / 94,793 발화, 정제 JSONL
 
 ### 2) 공통 스키마 (정제 후 JSONL) </br>
 
-각 라인은 아래 4개 필드를 갖습니다. </br>
+각 라인은 아래 4개 필드를 갖는다. </br>
 
 <img width="732" height="142" alt="image" src="https://github.com/user-attachments/assets/0a30dd26-a1e0-4b51-917b-ea12cd8666e0" />
 
@@ -78,16 +78,16 @@ ICSI: "@", ".", "" 등 빈/무의미 발화 제거.  </br>
 AMI/ICSI: The University of Edinburgh 공개 데이터셋(허가 라이선스 포함).  </br>
 
 ## 모델 구성
-아래 그림은 전체 모델 파이프라인을 나타냅니다.
+아래 그림은 전체 모델 파이프라인을 나타냄.
 
 ## ERD
-서비스의 데이터베이스 구조는 아래와 같습니다.
+서비스의 데이터베이스 구조
 
 ![ERD](https://raw.githubusercontent.com/SKNETWORKS-FAMILY-AICAMP/SKN12-FINAL-3TEAM/refs/heads/main/%EC%82%B0%EC%B6%9C%EB%AC%BC/%EB%B0%9C%ED%91%9C%EC%9E%90%EB%A3%8C/img/ERD.webp)
 
 ## 시스템 아키텍쳐
-아래 그림은 **TtalKkak AI 프로젝트 관리 시스템**의 전체 아키텍처를 보여줍니다.  
-클라이언트 → 백엔드 API → AI 처리 엔진 → 데이터 레이어 → 비즈니스 서비스 → 외부 연동 API 로 이어지는 흐름을 한눈에 확인할 수 있습니다.
+**TtalKkak AI 프로젝트 관리 시스템**의 전체 아키텍처
+클라이언트 → 백엔드 API → AI 처리 엔진 → 데이터 레이어 → 비즈니스 서비스 → 외부 연동 API 로 이어지는 흐름을 한눈에 확인
 ![시스템 아키텍처](https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN12-FINAL-3TEAM/blob/main/%EC%82%B0%EC%B6%9C%EB%AC%BC/%EB%B0%9C%ED%91%9C%EC%9E%90%EB%A3%8C/img/%EC%8B%9C%EC%8A%A4%ED%85%9C%EC%95%84%ED%82%A4%ED%85%8D%EC%B2%98.png?raw=true)
 ### 주요 구성 요소
 - **클라이언트 레이어**: 웹 대시보드(React), Slack App, 모바일 앱
@@ -98,7 +98,7 @@ AMI/ICSI: The University of Edinburgh 공개 데이터셋(허가 라이선스 �
 - **외부 서비스 연동**: Slack/Notion/JIRA/AI 서버
 
 ## 시퀀스 다이어그램
-아래 그림은 **TtalKkak AI 프로젝트 관리 시스템**에서 회의 발화 → AI 분석 → 태스크 자동 생성/배정 → Notion/JIRA 연동으로 이어지는 주요 시나리오의 흐름을 나타냅니다.  
+**TtalKkak AI 프로젝트 관리 시스템**에서 회의 발화 → AI 분석 → 태스크 자동 생성/배정 → Notion/JIRA 연동으로 이어지는 주요 시나리오의 흐름
 ![시퀀스 다이어그램](https://raw.githubusercontent.com/SKNETWORKS-FAMILY-AICAMP/SKN12-FINAL-3TEAM/refs/heads/main/%EC%82%B0%EC%B6%9C%EB%AC%BC/%EB%B0%9C%ED%91%9C%EC%9E%90%EB%A3%8C/img/%EC%8B%9C%ED%80%80%EC%8A%A4%EB%8B%A4%EC%9D%B4%EC%96%B4%EA%B7%B8%EB%9E%A8.webp)
 ### 주요 Phase
 - **Phase 1: 음성 입력 및 회의록 처리**
