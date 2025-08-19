@@ -100,6 +100,18 @@ ICSI: "@", ".", "" 등 빈/무의미 발화 제거.  </br>
 국회 회의록: 대한민국 국회 정보공개포털 공개 자료. </br>
 AMI/ICSI: The University of Edinburgh 공개 데이터셋(허가 라이선스 포함).  </br>
 
+### 데이터처리 파이프라인
+```
+음성 파일 (.mp3/.wav)
+    ↓
+WhisperX 전사 (segments)
+    ↓
+Triplet 구조화 (주체-행동-객체)
+    ↓
+BERT 분류 (중요도 필터링)
+    ↓
+Qwen3 생성 (문서화)
+```
 ---
 ## 모델 구성
 ### 1. WhisperX (음성인식)
