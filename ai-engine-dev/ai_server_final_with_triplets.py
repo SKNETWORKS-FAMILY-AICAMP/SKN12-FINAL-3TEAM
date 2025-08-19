@@ -2629,39 +2629,8 @@ async def final_pipeline(
         
         logger.info("=" * 80)
         
-        # 결과를 파일로 저장 (동기 처리에서도)
-        import json
-        import os
-        from datetime import datetime as dt
-        
-        # 저장 디렉토리 생성
-        save_dir = "/workspace/ai_results"
-        if not os.path.exists(save_dir):
-            os.makedirs(save_dir)
-        
-        # 타임스탬프 기반 파일명
-        timestamp = dt.now().strftime("%Y%m%d_%H%M%S")
-        job_id = f"sync_{timestamp}"
-        filename = f"{save_dir}/job_{job_id}.json"
-        
-        # 결과 객체 생성
-        result_to_save = {
-            "success": True,
-            "job_id": job_id,
-            "timestamp": timestamp,
-            "stage1_notion": analysis_result.stage1_notion,
-            "stage2_prd": analysis_result.stage2_prd,
-            "stage3_tasks": analysis_result.stage3_tasks,
-            "formatted_notion": analysis_result.formatted_notion,
-            "formatted_prd": analysis_result.formatted_prd,
-            "processing_time": total_time
-        }
-        
-        # 파일로 저장
-        with open(filename, 'w', encoding='utf-8') as f:
-            json.dump(result_to_save, f, ensure_ascii=False, indent=2)
-        
-        logger.info(f"📁 Result saved to: {filename}")
+        # 파일 저장 기능 임시 비활성화
+        logger.info(f"📁 Processing completed (file saving temporarily disabled)")
         
         # 결과 반환 - 백엔드가 기대하는 형식으로
         return {
@@ -2912,25 +2881,9 @@ async def process_pipeline_async(job_id: str, audio_data: Optional[bytes],
             "formatted_prd": format_task_master_prd(stage2_result) if stage2_result else None
         }
         
-        # 결과를 파일로 저장 (RunPod 내부)
-        import json
-        import os
-        
-        # 저장 디렉토리 생성
-        save_dir = "/workspace/ai_results"
-        if not os.path.exists(save_dir):
-            os.makedirs(save_dir)
-        
-        # 타임스탬프 기반 파일명
-        from datetime import datetime as dt_save
-        timestamp = dt_save.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"{save_dir}/job_{job_id}_{timestamp}.json"
-        
-        # 결과 저장
-        with open(filename, 'w', encoding='utf-8') as f:
-            json.dump(result, f, ensure_ascii=False, indent=2)
-        
-        logger.info(f"📁 Result saved to: {filename}")
+        # 파일 저장 기능 임시 비활성화 (import 오류 해결 필요)
+        # TODO: Fix import issues and re-enable file saving
+        logger.info(f"📁 Job {job_id} completed (file saving temporarily disabled)")
         
         # Job 완료
         jobs_store[job_id]["status"] = JobStatus.COMPLETED
