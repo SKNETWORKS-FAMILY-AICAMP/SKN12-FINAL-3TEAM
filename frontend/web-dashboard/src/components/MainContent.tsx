@@ -1173,12 +1173,16 @@ const MainContent = () => {
                     onChange={(e) => setSelectedProjectId(e.target.value)}
                     className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white text-sm"
                   >
-                    <option value="all">전체 프로젝트</option>
-                    {projects.map((project: any) => (
-                      <option key={project.id} value={project.id}>
-                        {project.title} ({project.tasks?.length || 0}개 업무)
-                      </option>
-                    ))}
+                    <option value="all">전체 프로젝트 ({tasks.length}개 업무)</option>
+                    {projects.map((project: any) => {
+                      // 현재 tasks 배열에서 해당 프로젝트의 실제 업무 개수 계산
+                      const projectTaskCount = tasks.filter((task: any) => task.projectId === project.id).length;
+                      return (
+                        <option key={project.id} value={project.id}>
+                          {project.title} ({projectTaskCount}개 업무)
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
                 

@@ -3737,14 +3737,16 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 // 개발용 테스트 API - 대시보드 통계 (인증 없이)
-app.get('/test/stats', async (req, res) => {
+app.get('/test/stats', tenantMiddleware.createDevTenant, async (req, res) => {
   try {
+    const tenantId = req.tenantId!;
+    
     const [totalTasks, todoTasks, inProgressTasks, doneTasks, totalUsers] = await Promise.all([
-      prisma.task.count(),
-      prisma.task.count({ where: { status: 'TODO' } }),
-      prisma.task.count({ where: { status: 'IN_PROGRESS' } }),
-      prisma.task.count({ where: { status: 'DONE' } }),
-      prisma.user.count()
+      prisma.task.count({ where: { tenantId } }),
+      prisma.task.count({ where: { status: 'TODO', tenantId } }),
+      prisma.task.count({ where: { status: 'IN_PROGRESS', tenantId } }),
+      prisma.task.count({ where: { status: 'DONE', tenantId } }),
+      prisma.user.count({ where: { tenantId } })
     ]);
     
     const stats = {
