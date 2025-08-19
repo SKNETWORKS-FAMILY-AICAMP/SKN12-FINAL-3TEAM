@@ -697,7 +697,7 @@ class AIService {
   /**
    * Job 결과를 폴링으로 가져오기
    */
-  private async pollJobResult(jobId: string, maxAttempts: number = 120): Promise<any> {
+  private async pollJobResult(jobId: string, maxAttempts: number = 30): Promise<any> {
     console.log(`⏳ Polling job ${jobId}...`);
     
     for (let i = 0; i < maxAttempts; i++) {
@@ -726,8 +726,8 @@ class AIService {
           throw new Error(statusResponse.data.error || 'Job failed');
         }
         
-        // 5초 대기
-        await new Promise(resolve => setTimeout(resolve, 5000));
+        // 30초 대기 (전체 처리 시간이 긴 작업)
+        await new Promise(resolve => setTimeout(resolve, 30000));
         
       } catch (error: any) {
         console.error(`❌ Error polling job ${jobId}:`, error.message);
@@ -738,7 +738,7 @@ class AIService {
       }
     }
     
-    throw new Error(`Job ${jobId} timeout after ${maxAttempts * 5} seconds`);
+    throw new Error(`Job ${jobId} timeout after ${maxAttempts * 30} seconds`);
   }
 
   async processTwoStagePipeline(audioBuffer: Buffer, filename?: string): Promise<TwoStagePipelineResult> {
@@ -764,16 +764,21 @@ class AIService {
           console.log(`✅ Async job created: ${response.data.job_id}`);
           const result = await this.pollJobResult(response.data.job_id);
           
-          // 결과 포맷팅
-          let tasks = [];
+          // 결과 포맷팅 - stage3_tasks에 subtasks가 포함되어 있음
+          let tasksWithSubtasks = [];
           if (result.stage3_tasks) {
             if (Array.isArray(result.stage3_tasks)) {
-              tasks = result.stage3_tasks;
+              tasksWithSubtasks = result.stage3_tasks;
             } else if (result.stage3_tasks.action_items) {
-              tasks = result.stage3_tasks.action_items;
+              tasksWithSubtasks = result.stage3_tasks.action_items;
             } else if (result.stage3_tasks.tasks) {
-              tasks = result.stage3_tasks.tasks;
+              tasksWithSubtasks = result.stage3_tasks.tasks;
             }
+          }
+          
+          // stage4_skills가 있으면 tasks에 병합
+          if (result.stage4_skills && Array.isArray(result.stage4_skills)) {
+            tasksWithSubtasks = result.stage4_skills;
           }
           
           return {
@@ -785,7 +790,7 @@ class AIService {
             stage2: {
               task_master_prd: {
                 ...result.stage2_prd,
-                tasks: tasks
+                tasks: tasksWithSubtasks  // subtasks가 포함된 tasks
               }
             }
           };
@@ -810,16 +815,21 @@ class AIService {
           console.log(`✅ Async job created: ${response.data.job_id}`);
           const result = await this.pollJobResult(response.data.job_id);
           
-          // 결과 포맷팅
-          let tasks = [];
+          // 결과 포맷팅 - stage3_tasks에 subtasks가 포함되어 있음
+          let tasksWithSubtasks = [];
           if (result.stage3_tasks) {
             if (Array.isArray(result.stage3_tasks)) {
-              tasks = result.stage3_tasks;
+              tasksWithSubtasks = result.stage3_tasks;
             } else if (result.stage3_tasks.action_items) {
-              tasks = result.stage3_tasks.action_items;
+              tasksWithSubtasks = result.stage3_tasks.action_items;
             } else if (result.stage3_tasks.tasks) {
-              tasks = result.stage3_tasks.tasks;
+              tasksWithSubtasks = result.stage3_tasks.tasks;
             }
+          }
+          
+          // stage4_skills가 있으면 tasks에 병합
+          if (result.stage4_skills && Array.isArray(result.stage4_skills)) {
+            tasksWithSubtasks = result.stage4_skills;
           }
           
           return {
@@ -831,7 +841,7 @@ class AIService {
             stage2: {
               task_master_prd: {
                 ...result.stage2_prd,
-                tasks: tasks
+                tasks: tasksWithSubtasks  // subtasks가 포함된 tasks
               }
             }
           };

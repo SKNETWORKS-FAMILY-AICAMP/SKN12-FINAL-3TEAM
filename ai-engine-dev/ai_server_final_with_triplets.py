@@ -2888,7 +2888,7 @@ async def process_pipeline_async(job_id: str, audio_data: Optional[bytes],
         # Job 완료
         jobs_store[job_id]["status"] = JobStatus.COMPLETED
         jobs_store[job_id]["result"] = result
-        jobs_store[job_id]["result_file"] = filename  # 파일 경로 추가
+        # jobs_store[job_id]["result_file"] = filename  # 파일 저장 비활성화됨
         jobs_store[job_id]["progress"] = 100
         jobs_store[job_id]["updated_at"] = datetime.now().isoformat()
         
