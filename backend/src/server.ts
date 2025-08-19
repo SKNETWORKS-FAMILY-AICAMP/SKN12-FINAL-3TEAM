@@ -1788,7 +1788,7 @@ app.patch('/api/users/:id',
       if (!tenantId) {
         return res.status(401).json({ error: 'Unauthorized' });
       }
-      const { name, email, role, skills, availableHours, experienceLevel } = req.body;
+      const { name, email, role, skills, availableHours, experienceLevel, preferredTypes } = req.body;
       
       console.log('👤 사용자 수정 요청:', { id, tenantId, name, email });
 
@@ -1835,7 +1835,8 @@ app.patch('/api/users/:id',
           role: role ?? existingUser.role,
           skills: skills ?? existingUser.skills,
           availableHours: availableHours ?? existingUser.availableHours,
-          experienceLevel: experienceLevel ?? existingUser.experienceLevel
+          experienceLevel: experienceLevel ?? existingUser.experienceLevel,
+          preferredTypes: preferredTypes ?? existingUser.preferredTypes
         },
         select: {
           id: true,
@@ -1844,7 +1845,8 @@ app.patch('/api/users/:id',
           role: true,
           skills: true,
           availableHours: true,
-          experienceLevel: true
+          experienceLevel: true,
+          preferredTypes: true
         }
       });
 
