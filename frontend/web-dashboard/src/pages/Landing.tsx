@@ -3,29 +3,35 @@ import { motion } from 'framer-motion';
 import ttalkkakLogo from '../assets/logo.png';
 import { useState } from 'react';
 import SplitText from '../components/SplitText';
+import CountUpAnimation from '../components/CountUpAnimation';
 
 
 
-// Slack 앱 설치 URL (OAuth 인증 포함)
-const getSlackInstallUrl = () => {
-  const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3500';
-  return `${backendUrl}/api/auth/slack/install`;
-};
-
-// Dashboard URL (세션 체크 포함)
-const getDashboardUrl = () => {
-  const backendUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3500';
-  return `${backendUrl}/api/auth/check-session`;
-};
+const slackUrl = 'https://slack.com/app_redirect?app=YOUR_APP_ID';
 
 const Landing = () => {
   const navigate = useNavigate();
   const [currentReview, setCurrentReview] = useState(0);
   const [isTtalKkakHovered, setIsTtalKkakHovered] = useState(false);
   const [isDashboardHovered, setIsDashboardHovered] = useState(false);
-  
-  // Slack URL 정의
-  const slackUrl = getSlackInstallUrl();
+  const [heroAnimationComplete, setHeroAnimationComplete] = useState(false);
+  const [hasAnimated, setHasAnimated] = useState(false);
+  const [card1Clicked, setCard1Clicked] = useState(false);
+  const [card2Clicked, setCard2Clicked] = useState(false);
+  const [card3Clicked, setCard3Clicked] = useState(false);
+  const [problemCardsClicked, setProblemCardsClicked] = useState<Record<number, boolean>>({
+    0: false,
+    1: false,
+    2: false,
+    3: false,
+    4: false,
+    5: false
+  });
+  const [successCardsClicked, setSuccessCardsClicked] = useState<Record<number, boolean>>({
+    0: false,
+    1: false,
+    2: false
+  });
 
   return (
     <div className="min-h-screen bg-white">
@@ -63,9 +69,9 @@ const Landing = () => {
         initial={{ y: -100, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ duration: 0.8, ease: "easeOut" }}
-        className="fixed top-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-md border-b border-neutral-100"
+        className="fixed top-0 left-0 right-0 z-50 bg-gray-50/90 backdrop-blur-md border-b border-gray-100"
       >
-        <div className="px-8 py-6 flex items-center justify-between">
+        <div className="px-8 py-4 flex items-center justify-between">
           <motion.div
             className="flex items-center space-x-4"
             whileHover={{ scale: 1.05, rotate: 2 }}
@@ -74,14 +80,14 @@ const Landing = () => {
             <motion.img 
               src={ttalkkakLogo} 
               alt="TtalKkak Logo" 
-              className="w-36 h-22"
+              className="h-12 w-auto"
               animate={{ 
                 y: [0, -5, 0],
                 rotate: [0, 1, 0]
               }}
               transition={{ 
                 duration: 4,
-                repeat: Infinity,
+                repeat: 0,
                 ease: "easeInOut"
               }}
             />
@@ -106,7 +112,7 @@ const Landing = () => {
                   viewBox="0 0 24 24" 
                   fill="currentColor"
                   animate={{ rotate: [0, 360] }}
-                  transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                  transition={{ duration: 2, repeat: 0, ease: "linear" }}
                 >
                   <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
                 </motion.svg>
@@ -136,6 +142,9 @@ const Landing = () => {
     playsInline
     className="absolute inset-0 w-full h-full object-cover z-0 pointer-events-none blur-sm"
   />
+  
+  {/* 어두운 오버레이 추가 */}
+  <div className="absolute inset-0 bg-black/50 z-10"></div>
 
   {/* 글씨 & 버튼 (맨 위, 절대 사라지지 않음) */}
   <div className="max-w-4xl mx-auto px-8 text-center relative z-20">
@@ -144,66 +153,79 @@ const Landing = () => {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 1.2, ease: "easeOut" }}
     >
-      <motion.h1
+              <motion.h1
         initial={{ opacity: 0, y: 30 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 1, delay: 0.3 }}
-        className="text-6xl lg:text-7xl font-extrabold tracking-tight mb-8 leading-tight text-white"
-        style={{
-          textShadow: `
-            -1px -1px 0 #000,
-             1px -1px 0 #000,
-            -1px  1px 0 #000,
-             1px  1px 0 #000
-          `,
-        }}
+        className="text-6xl lg:text-7xl font-black tracking-tight mb-8 leading-tight text-white"
       >
         <motion.div
           initial={{ opacity: 0, y: 60 }}
-          animate={{ opacity: 1, y: 0 }}
+          animate={heroAnimationComplete ? { opacity: 1, y: 0 } : { opacity: 1, y: 0 }}
           transition={{ duration: 1, delay: 0.3 }}
           className="block mb-4"
         >
-          <SplitText
-            text="회의에서"
-            className="text-6xl lg:text-7xl font-bold text-white"
-            delay={100}
-            duration={0.6}
-            ease="power3.out"
-            splitType="chars"
-            from={{ opacity: 0, y: 40 }}
-            to={{ opacity: 1, y: 0 }}
-            threshold={0.1}
-            rootMargin="-100px"
-            textAlign="center"
-          />
+          {hasAnimated ? (
+            <span className="text-6xl lg:text-7xl font-bold text-white">회의에서</span>
+          ) : (
+            <SplitText
+              text="회의에서"
+              className="text-4xl lg:text-5xl font-bold text-white"
+              delay={100}
+              duration={0.6}
+              ease="power3.out"
+              splitType="chars"
+              from={{ opacity: 0, y: 40 }}
+              to={{ opacity: 1, y: 0 }}
+              threshold={0.1}
+              rootMargin="-100px"
+              textAlign="center"
+              onLetterAnimationComplete={() => {
+                if (!heroAnimationComplete) {
+                  setTimeout(() => {
+                    setHeroAnimationComplete(true);
+                    setHasAnimated(true);
+                  }, 500);
+                }
+              }}
+            />
+          )}
         </motion.div>
         <motion.div
           initial={{ opacity: 0, y: 60 }}
-          animate={{ opacity: 1, y: 0 }}
+          animate={heroAnimationComplete ? { opacity: 1, y: 0 } : { opacity: 1, y: 0 }}
           transition={{ duration: 1, delay: 1.5 }}
           className="block"
         >
-          <SplitText
-            text="자동으로 분석까지"
-            className="text-6xl lg:text-7xl font-bold text-white"
-            delay={100}
-            duration={0.6}
-            ease="power3.out"
-            splitType="chars"
-            from={{ opacity: 0, y: 40 }}
-            to={{ opacity: 1, y: 0 }}
-            threshold={0.1}
-            rootMargin="-100px"
-            textAlign="center"
-          />
+          {hasAnimated ? (
+            <span className="text-6xl lg:text-7xl font-bold text-white">자동으로 분석까지</span>
+          ) : (
+            <SplitText
+              text="자동으로 분석까지"
+              className="text-4xl lg:text-5xl font-bold text-white"
+              delay={100}
+              duration={0.6}
+              ease="power3.out"
+              splitType="chars"
+              from={{ opacity: 0, y: 40 }}
+              to={{ opacity: 1, y: 0 }}
+              threshold={0.1}
+              rootMargin="-100px"
+              textAlign="center"
+              onLetterAnimationComplete={() => {
+                if (!heroAnimationComplete) {
+                  setTimeout(() => setHeroAnimationComplete(true), 500);
+                }
+              }}
+            />
+          )}
         </motion.div>
       </motion.h1>
       <motion.p 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 1, delay: 0.6 }}
-        className="text-2xl font-semibold text-white mb-10" 
+        className="text-lg lg:text-xl font-semibold text-white mb-10" 
         style={{ textShadow: '2px 2px 6px rgba(0,0,0,0.6)' }}
       >
         음성 업로드만 하면, AI가 요약하고 업무를 생성해줍니다.<br />
@@ -215,16 +237,12 @@ const Landing = () => {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 1, delay: 0.9 }}
       >
-        <motion.button
-          onClick={() => {
-            // Go to Market - Slack 앱 설치 및 채널 초대
-            window.location.href = getSlackInstallUrl();
-          }}
+        <motion.a
+          href={slackUrl}
           whileHover={{ 
-            scale: 1.05, 
-            y: -2
+            scale: 1.02
           }}
-          whileTap={{ scale: 0.95 }}
+          whileTap={{ scale: 0.98 }}
           onMouseEnter={() => setIsTtalKkakHovered(true)}
           onMouseLeave={() => setIsTtalKkakHovered(false)}
           className="group relative px-8 py-4 rounded-xl font-semibold bg-white text-slate-800 overflow-hidden transition-all duration-300"
@@ -240,31 +258,22 @@ const Landing = () => {
             >
               <path d="M6 15a2 2 0 1 1 0-4 2 2 0 0 1 0 4zm0 2a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm6-8a2 2 0 1 1 0-4 2 2 0 0 1 0 4zm0 2a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm6 8a2 2 0 1 1 0-4 2 2 0 0 1 0 4zm0 2a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"/>
             </svg>
-            <span>Go to Market</span>
+            <span>Go to TtalKkak</span>
           </span>
-        </motion.button>
+        </motion.a>
         
         <motion.button
-          onClick={() => {
-            // Go to Dashboard - 세션 체크 후 이동
-            const token = localStorage.getItem('token');
-            if (token) {
-              navigate('/dashboard');
-            } else {
-              navigate('/login');
-            }
-          }}
+          onClick={() => navigate('/dashboard')}
           whileHover={{ 
-            scale: 1.05, 
-            y: -2
+            scale: 1.02
           }}
-          whileTap={{ scale: 0.95 }}
+          whileTap={{ scale: 0.98 }}
           onMouseEnter={() => setIsDashboardHovered(true)}
           onMouseLeave={() => setIsDashboardHovered(false)}
           className="group relative px-8 py-4 rounded-xl font-semibold border-2 border-white text-white overflow-hidden transition-all duration-300"
         >
           {/* 왼쪽에서 오른쪽으로 채워지는 효과 */}
-          <div className={`absolute inset-0 bg-gradient-to-r from-[#1e3a8a] to-[#3b82f6] transform transition-transform duration-500 ease-out ${isDashboardHovered ? 'translate-x-0' : '-translate-x-full'}`}></div>
+          <div className={`absolute inset-0 bg-[#1e3a8a] transform transition-transform duration-500 ease-out ${isDashboardHovered ? 'translate-x-0' : '-translate-x-full'}`}></div>
           
           <span className="relative flex items-center space-x-2">
             <svg 
@@ -292,10 +301,10 @@ const Landing = () => {
             transition={{ duration: 0.8 }}
             className="text-center mb-16"
           >
-            <h2 className="text-5xl lg:text-6xl font-bold text-neutral-900 mb-6">
+            <h2 className="text-3xl lg:text-4xl font-bold text-neutral-900 mb-6">
               이런 문제 겪고 있지 않나요?
             </h2>
-            <p className="text-xl lg:text-2xl text-neutral-600">
+            <p className="text-lg lg:text-xl text-neutral-600">
               회의 후 업무 정리에 시간을 너무 많이 쓰고 있나요?
             </p>
           </motion.div>
@@ -303,46 +312,67 @@ const Landing = () => {
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
             {[
               {
-                icon: '⏰',
                 title: '회의록 작성에 시간 낭비',
-                desc: '회의 후 수동으로 회의록을 정리하는데 평균 2시간이 소요됩니다.'
+                desc: '회의 후 수동으로 회의록을 정리하는데 평균 2시간이 소요됩니다.',
+                impact: '매일 2시간 낭비!',
+                color: 'from-red-500 to-pink-500'
               },
               {
-                icon: '📝',
                 title: '업무 배정의 어려움',
-                desc: '회의 내용을 바탕으로 팀원들에게 업무를 배정하는 과정이 복잡합니다.'
+                desc: '회의 내용을 바탕으로 팀원들에게 업무를 배정하는 과정이 복잡합니다.',
+                impact: '복잡한 업무 배정!',
+                color: 'from-orange-500 to-red-500'
               },
               {
-                icon: '🔍',
                 title: '중요 정보 놓치기',
-                desc: '긴 회의 중 핵심 내용을 놓치거나 기록하지 못하는 경우가 많습니다.'
+                desc: '긴 회의 중 핵심 내용을 놓치거나 기록하지 못하는 경우가 많습니다.',
+                impact: '핵심 정보 유실!',
+                color: 'from-yellow-500 to-orange-500'
               },
               {
-                icon: '📊',
                 title: '업무 추적의 어려움',
-                desc: '회의에서 결정된 사항들이 실제로 진행되는지 추적하기 어렵습니다.'
+                desc: '회의에서 결정된 사항들이 실제로 진행되는지 추적하기 어렵습니다.',
+                impact: '업무 추적 불가!',
+                color: 'from-green-500 to-blue-500'
               },
               {
-                icon: '🤝',
                 title: '팀 협업의 비효율',
-                desc: '각자 다른 방식으로 정보를 정리해서 팀 간 소통이 원활하지 않습니다.'
+                desc: '각자 다른 방식으로 정보를 정리해서 팀 간 소통이 원활하지 않습니다.',
+                impact: '팀 소통 차단!',
+                color: 'from-blue-500 to-indigo-500'
               },
               {
-                icon: '💸',
                 title: '시간과 비용 낭비',
-                desc: '수동 작업으로 인한 시간 낭비가 회사의 생산성을 저하시킵니다.'
+                desc: '수동 작업으로 인한 시간 낭비가 회사의 생산성을 저하시킵니다.',
+                impact: '생산성 저하!',
+                color: 'from-purple-500 to-pink-500'
               }
             ].map((problem, index) => (
               <motion.div
                 key={problem.title}
                 initial={{ opacity: 0, y: 30 }}
                 whileInView={{ opacity: 1, y: 0 }}
+                whileHover={{ 
+                  scale: 1.05, 
+                  y: -10,
+                  boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)"
+                }}
                 transition={{ duration: 0.6, delay: index * 0.1 }}
-                className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-all duration-300"
+                className="bg-white rounded-2xl p-8 shadow-lg transition-all duration-300 group cursor-pointer"
               >
-                <div className="text-4xl mb-4">{problem.icon}</div>
-                <h3 className="text-xl font-semibold text-neutral-900 mb-3">{problem.title}</h3>
-                <p className="text-neutral-600 leading-relaxed">{problem.desc}</p>
+                {/* 상단 임팩트 배지 */}
+                <div className={`bg-gradient-to-r ${problem.color} text-white px-4 py-2 rounded-full text-sm font-bold mb-4 inline-block transform rotate-0 group-hover:-rotate-2 transition-transform duration-300`}>
+                  {problem.impact}
+                </div>
+                
+                {/* 제목 */}
+                <h3 className="text-xl font-bold text-neutral-900 mb-4 group-hover:text-slate-700 transition-colors duration-300">{problem.title}</h3>
+                
+                {/* 설명 */}
+                <p className="text-neutral-600 leading-relaxed group-hover:text-neutral-800 transition-colors duration-300">{problem.desc}</p>
+                
+                {/* 하단 강조선 */}
+                <div className={`h-1 bg-gradient-to-r ${problem.color} mt-4 transition-all duration-500 ease-out group-hover:w-full w-0`}></div>
               </motion.div>
             ))}
           </div>
@@ -358,7 +388,7 @@ const Landing = () => {
             transition={{ duration: 0.8 }}
             className="text-center mb-12"
           >
-            <h2 className="text-5xl lg:text-6xl font-bold text-neutral-900 mb-4">
+            <h2 className="text-3xl lg:text-4xl font-bold text-neutral-900 mb-4">
               TtalKkak으로 해결하세요
             </h2>
             <p className="text-xl text-neutral-600">
@@ -371,87 +401,129 @@ const Landing = () => {
             <motion.div
               initial={{ opacity: 0, y: 50, scale: 0.8 }}
               whileInView={{ opacity: 1, y: 0, scale: 1 }}
-              whileHover={{ 
-                scale: 1.05, 
-                y: -10,
-                boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)"
+              whileTap={{ 
+                scale: 0.95, 
+                y: 5
               }}
+              onClick={() => setCard1Clicked(!card1Clicked)}
               transition={{ 
                 duration: 0.8, 
                 type: "spring", 
                 stiffness: 300 
               }}
-              className="bg-slate-800 text-white rounded-2xl p-10 text-center shadow-md hover:shadow-lg transition-all duration-300"
+              className="bg-gradient-to-br from-slate-800 to-slate-900 text-white rounded-2xl p-10 text-center shadow-xl transition-all duration-300 group relative overflow-hidden cursor-pointer"
             >
+              {/* 배경 패턴 */}
+              <div className="absolute inset-0 opacity-10">
+                <div className="absolute inset-0" style={{
+                  backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.1'%3E%3Ccircle cx='30' cy='30' r='1'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+                  backgroundSize: '60px 60px'
+                }}></div>
+              </div>
+              
+
+              
               <motion.div 
-                className="text-5xl font-extrabold mb-2"
-                animate={{ 
+                className="text-5xl font-black mb-3 relative z-10"
+                animate={card1Clicked ? { 
                   scale: [1, 1.1, 1],
                   color: ["#ffffff", "#fbbf24", "#ffffff"]
-                }}
-                transition={{ duration: 2, repeat: Infinity }}
+                } : {}}
+                transition={{ duration: 0.5 }}
               >
-                95%
+                <CountUpAnimation end={95} duration={2.5} suffix="%" />
               </motion.div>
-              <div className="text-lg text-white/80">음성 인식 정확도</div>
+              <div className="text-xl font-bold text-white/90 mb-2 relative z-10">음성 인식 정확도</div>
+              <div className="text-sm text-white/70 relative z-10">WhisperX 기반 고정밀 분석</div>
+              
+              {/* 하단 강조선 */}
+              <div className={`h-1 bg-gradient-to-r from-green-500 to-emerald-500 mt-4 transition-all duration-500 ease-out relative z-10 ${card1Clicked ? 'w-full' : 'w-0'}`}></div>
             </motion.div>
 
             <motion.div
               initial={{ opacity: 0, y: 50, scale: 0.8 }}
               whileInView={{ opacity: 1, y: 0, scale: 1 }}
-              whileHover={{ 
-                scale: 1.05, 
-                y: -10,
-                boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)"
+              whileTap={{ 
+                scale: 0.95, 
+                y: 5
               }}
+              onClick={() => setCard2Clicked(!card2Clicked)}
               transition={{ 
                 duration: 0.8, 
                 delay: 0.2,
                 type: "spring", 
                 stiffness: 300 
               }}
-              className="bg-slate-800 text-white rounded-2xl p-10 text-center shadow-md hover:shadow-lg transition-all duration-300"
+              className="bg-gradient-to-br from-slate-800 to-slate-900 text-white rounded-2xl p-10 text-center shadow-xl transition-all duration-300 group relative overflow-hidden cursor-pointer"
             >
+              {/* 배경 패턴 */}
+              <div className="absolute inset-0 opacity-10">
+                <div className="absolute inset-0" style={{
+                  backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.1'%3E%3Ccircle cx='30' cy='30' r='1'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+                  backgroundSize: '60px 60px'
+                }}></div>
+              </div>
+              
+
+              
               <motion.div 
-                className="text-5xl font-extrabold mb-2"
-                animate={{ 
+                className="text-5xl font-black mb-3 relative z-10"
+                animate={card2Clicked ? { 
                   scale: [1, 1.1, 1],
                   color: ["#ffffff", "#fbbf24", "#ffffff"]
-                }}
-                transition={{ duration: 2, repeat: Infinity, delay: 0.5 }}
+                } : {}}
+                transition={{ duration: 0.5 }}
               >
-                2.5배
+                <CountUpAnimation end={2.5} duration={3} suffix="배" decimals={1} />
               </motion.div>
-              <div className="text-lg text-white/80">업무 효율성 향상</div>
+              <div className="text-xl font-bold text-white/90 mb-2 relative z-10">업무 효율성 향상</div>
+              <div className="text-sm text-white/70 relative z-10">AI 자동화로 업무 속도 대폭 증가</div>
+              
+              {/* 하단 강조선 */}
+              <div className={`h-1 bg-gradient-to-r from-blue-500 to-indigo-500 mt-4 transition-all duration-500 ease-out relative z-10 ${card2Clicked ? 'w-full' : 'w-0'}`}></div>
             </motion.div>
 
             <motion.div
               initial={{ opacity: 0, y: 50, scale: 0.8 }}
               whileInView={{ opacity: 1, y: 0, scale: 1 }}
-              whileHover={{ 
-                scale: 1.05, 
-                y: -10,
-                boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)"
+              whileTap={{ 
+                scale: 0.95, 
+                y: 5
               }}
+              onClick={() => setCard3Clicked(!card3Clicked)}
               transition={{ 
                 duration: 0.8, 
                 delay: 0.4,
                 type: "spring", 
                 stiffness: 300 
               }}
-              className="bg-slate-800 text-white rounded-2xl p-10 text-center shadow-md hover:shadow-lg transition-all duration-300"
+              className="bg-gradient-to-br from-slate-800 to-slate-900 text-white rounded-2xl p-10 text-center shadow-xl transition-all duration-300 group relative overflow-hidden cursor-pointer"
             >
+              {/* 배경 패턴 */}
+              <div className="absolute inset-0 opacity-10">
+                <div className="absolute inset-0" style={{
+                  backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.1'%3E%3Ccircle cx='30' cy='30' r='1'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+                  backgroundSize: '60px 60px'
+                }}></div>
+              </div>
+              
+
+              
               <motion.div 
-                className="text-5xl font-extrabold mb-2"
-                animate={{ 
+                className="text-5xl font-black mb-3 relative z-10"
+                animate={card3Clicked ? { 
                   scale: [1, 1.1, 1],
                   color: ["#ffffff", "#fbbf24", "#ffffff"]
-                }}
-                transition={{ duration: 2, repeat: Infinity, delay: 1 }}
+                } : {}}
+                transition={{ duration: 0.5 }}
               >
-                80%
+                <CountUpAnimation end={80} duration={2.8} suffix="%" />
               </motion.div>
-              <div className="text-lg text-white/80">회의록 작성 시간 절약</div>
+              <div className="text-xl font-bold text-white/90 mb-2 relative z-10">회의록 작성 시간 절약</div>
+              <div className="text-sm text-white/70 relative z-10">5분 만에 완벽한 회의록 생성</div>
+              
+              {/* 하단 강조선 */}
+              <div className={`h-1 bg-gradient-to-r from-purple-500 to-pink-500 mt-4 transition-all duration-500 ease-out relative z-10 ${card3Clicked ? 'w-full' : 'w-0'}`}></div>
             </motion.div>
 
           </div>
@@ -462,7 +534,7 @@ const Landing = () => {
       <section className="py-20 bg-gradient-to-br from-slate-50 to-neutral-100">
         <div className="max-w-7xl mx-auto px-6">
           <div className="text-center mb-16">
-            <h2 className="text-4xl lg:text-5xl font-bold text-neutral-900 mb-6 hover:scale-105 hover:text-[#e7e972] hover:drop-shadow-[0_0_20px_rgba(231,233,114,0.5)] transition-all duration-300">
+            <h2 className="text-3xl lg:text-4xl font-bold text-neutral-900 mb-6">
               실제 사용 현황
             </h2>
             <p className="text-xl text-neutral-600">
@@ -472,13 +544,13 @@ const Landing = () => {
           
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8 mb-16">
             {[
-              { number: '10,000+', label: '월간 처리 회의', icon: '📊' },
-              { number: '40시간', label: '평균 시간 절약', icon: '⏰' },
-              { number: '95%', label: '사용자 만족도', icon: '😊' },
-              { number: '300+', label: '활성 기업', icon: '🏢' }
+              { number: '10,000+', label: '월간 처리 회의', icon: '/images/stats/회의.png' },
+              { number: '40시간', label: '평균 시간 절약', icon: '/images/stats/시계.png' },
+              { number: '95%', label: '사용자 만족도', icon: '/images/stats/만족.png' },
+              { number: '300+', label: '활성 기업', icon: '/images/stats/우상향.png' }
             ].map((stat, index) => (
               <div key={stat.label} className="text-center">
-                <div className="text-4xl mb-2">{stat.icon}</div>
+                <img src={stat.icon} alt={stat.label} className="w-20 h-20 mx-auto mb-2" />
                 <div className="text-3xl lg:text-4xl font-bold text-neutral-900 mb-2">{stat.number}</div>
                 <div className="text-lg text-neutral-600">{stat.label}</div>
               </div>
@@ -489,32 +561,40 @@ const Landing = () => {
           <div className="grid md:grid-cols-3 gap-8">
             {[
               {
-                company: '대기업 A사',
-                result: '회의 효율성 300% 향상',
-                desc: '월 200회의를 처리하며 회의록 작성 시간을 90% 단축',
+                company: '글로벌 제조업체 A사',
+                result: '회의 효율성 340% 향상',
+                desc: '월 250회의 처리, 회의록 작성 시간 92% 단축, 연간 1,200시간 절약',
                 color: 'from-blue-500 to-purple-600'
               },
               {
-                company: '스타트업 B사',
-                result: '업무 생성 시간 80% 단축',
-                desc: 'AI 자동 업무 배정으로 팀 생산성 대폭 향상',
+                company: 'AI 스타트업 B사',
+                result: '업무 생성 시간 87% 단축',
+                desc: 'AI 자동 업무 배정으로 팀 생산성 3.2배 향상, 월 160시간 절약',
                 color: 'from-green-500 to-blue-600'
               },
               {
-                company: '중소기업 C사',
-                result: '팀 협업 개선',
-                desc: '통합된 업무 관리로 팀 간 소통 효율성 증대',
+                company: '중견 IT기업 C사',
+                result: '팀 협업 효율성 156% 향상',
+                desc: '통합 업무 관리로 팀 간 소통 시간 68% 단축, 프로젝트 완료율 45% 향상',
                 color: 'from-orange-500 to-red-600'
               }
             ].map((story, index) => (
-              <div key={story.company} className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-all duration-300">
-                <div className={`w-16 h-16 bg-gradient-to-r ${story.color} rounded-2xl flex items-center justify-center text-white text-2xl font-bold mb-6`}>
-                  {story.company.charAt(0)}
-                </div>
+              <motion.div 
+                key={story.company} 
+                className="bg-white rounded-2xl p-8 shadow-lg transition-all duration-300 cursor-pointer"
+                whileHover={{ 
+                  scale: 1.05, 
+                  y: -10,
+                  boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)"
+                }}
+              >
                 <h3 className="text-xl font-semibold text-neutral-900 mb-2">{story.company}</h3>
                 <div className="text-lg font-bold text-neutral-800 mb-3">{story.result}</div>
                 <p className="text-neutral-600">{story.desc}</p>
-              </div>
+                
+                {/* 하단 강조선 */}
+                <div className={`h-1 bg-gradient-to-r ${story.color} mt-4 transition-all duration-500 ease-out group-hover:w-full w-0`}></div>
+              </motion.div>
             ))}
           </div>
         </div>
@@ -524,7 +604,7 @@ const Landing = () => {
       <section className="py-20 bg-white">
         <div className="max-w-7xl mx-auto px-6">
           <div className="text-center mb-16">
-            <h2 className="text-4xl lg:text-5xl font-bold text-neutral-900 mb-6 hover:scale-105 hover:text-[#e7e972] hover:drop-shadow-[0_0_20px_rgba(231,233,114,0.5)] transition-all duration-300">
+            <h2 className="text-3xl lg:text-4xl font-bold text-neutral-900 mb-6">
               완벽한 생태계 연동
             </h2>
             <p className="text-xl text-neutral-600">
@@ -537,37 +617,31 @@ const Landing = () => {
               {
                 category: '협업 도구',
                 tools: ['Slack', 'Microsoft Teams', 'Zoom'],
-                icon: '💬',
                 desc: '실시간 메시징과 화상회의 플랫폼과 완벽 연동'
               },
               {
                 category: '프로젝트 관리',
                 tools: ['Jira', 'Notion', 'Asana'],
-                icon: '📋',
                 desc: '업무 생성부터 추적까지 원활한 워크플로우'
               },
               {
                 category: '개발 도구',
                 tools: ['GitHub', 'GitLab', 'Bitbucket'],
-                icon: '💻',
                 desc: '개발팀의 코드 관리와 이슈 추적 연동'
               },
               {
                 category: '문서 관리',
                 tools: ['Google Docs', 'Microsoft 365', 'Dropbox'],
-                icon: '📄',
                 desc: '회의록과 문서를 클라우드에 자동 저장'
               },
               {
                 category: 'CRM & 마케팅',
                 tools: ['Salesforce', 'HubSpot', 'Mailchimp'],
-                icon: '📈',
                 desc: '고객 관리와 마케팅 활동 연동'
               },
               {
                 category: 'API 연동',
                 tools: ['REST API', 'Webhook', 'Custom Integration'],
-                icon: '🔗',
                 desc: '자체 시스템과의 맞춤형 연동 지원'
               }
             ].map((integration, index) => (
@@ -575,7 +649,6 @@ const Landing = () => {
                 key={integration.category}
                 className="bg-neutral-50 rounded-2xl p-8 hover:bg-white hover:shadow-lg transition-all duration-300"
               >
-                <div className="text-3xl mb-4">{integration.icon}</div>
                 <h3 className="text-xl font-semibold text-neutral-900 mb-3">{integration.category}</h3>
                 <div className="flex flex-wrap gap-2 mb-4">
                   {integration.tools.map((tool) => (
@@ -592,74 +665,262 @@ const Landing = () => {
       </section>
 
       {/* 5. ROI & 비용 절약 섹션 */}
-      <section className="py-20 bg-gradient-to-br from-yellow-50 to-orange-50">
+      <section className="py-24 bg-white">
         <div className="max-w-7xl mx-auto px-6">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl lg:text-5xl font-bold text-neutral-900 mb-6 hover:scale-105 hover:text-[#e7e972] hover:drop-shadow-[0_0_20px_rgba(231,233,114,0.5)] transition-all duration-300">
+          <motion.div 
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8 }}
+            className="text-center mb-20"
+          >
+            <h2 className="text-3xl lg:text-4xl font-bold text-neutral-900 hover:text-[#e7e972] transition-colors duration-300 mb-6">
               투자 대비 효과
             </h2>
-            <p className="text-xl text-neutral-600">
-              TtalKkak 도입으로 얻을 수 있는 구체적인 효과
+            <p className="text-lg text-neutral-600 max-w-2xl mx-auto">
+              TtalKkak 도입 첫 달부터 눈에 보이는 변화를 경험하세요
             </p>
-          </div>
+          </motion.div>
           
-          <div className="grid md:grid-cols-2 gap-12">
-            <div>
-              <h3 className="text-2xl font-bold text-neutral-900 mb-8">시간 절약 효과</h3>
-              <div className="space-y-6">
-                {[
-                  { item: '회의록 작성 시간', before: '2시간', after: '5분', savings: '95%' },
-                  { item: '업무 배정 시간', before: '30분', after: '즉시', savings: '100%' },
-                  { item: '정보 검색 시간', before: '15분', after: '1분', savings: '93%' },
-                  { item: '팀 소통 시간', before: '1시간', after: '10분', savings: '83%' }
-                ].map((effect, index) => (
-                  <div
-                    key={effect.item}
-                    className="bg-white rounded-xl p-6 shadow-md"
-                  >
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="font-semibold text-neutral-900">{effect.item}</span>
-                      <span className="text-green-600 font-bold">{effect.savings} 절약</span>
-                    </div>
-                    <div className="flex justify-between text-sm text-neutral-600">
-                      <span>기존: {effect.before}</span>
-                      <span>→</span>
-                      <span>TtalKkak: {effect.after}</span>
+          {/* 1행: 시간 절약 효과 시각화 */}
+          <div className="mb-20">
+            <motion.h3 
+              initial={{ opacity: 0 }}
+              whileInView={{ opacity: 1 }}
+              className="text-2xl font-bold text-neutral-900 mb-12 text-center flex items-center justify-center gap-3"
+            >
+              <span className="text-4xl"></span>
+              시간 절약 효과
+            </motion.h3>
+            <div className="grid md:grid-cols-4 gap-8">
+              {[
+                { item: '회의록 작성', savings: '95%', before: '2시간', after: '5분', color: 'from-emerald-500 to-green-600' },
+                { item: '업무 배정', savings: '100%', before: '30분', after: '즉시', color: 'from-blue-500 to-indigo-600' },
+                { item: '정보 검색', savings: '93%', before: '15분', after: '1분', color: 'from-purple-500 to-pink-600' },
+                { item: '팀 소통', savings: '83%', before: '1시간', after: '10분', color: 'from-orange-500 to-red-600' }
+              ].map((effect, index) => (
+                <motion.div 
+                  key={effect.item} 
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5, delay: index * 0.1 }}
+                  whileHover={{ y: -8, transition: { duration: 0.2 } }}
+                  className="bg-white rounded-3xl p-8 shadow-[0_4px_20px_rgba(0,0,0,0.08)] hover:shadow-[0_8px_30px_rgba(0,0,0,0.12)] transition-all duration-300 border border-gray-100"
+                >
+                  <div className="text-center mb-6">
+                    <span className="font-bold text-neutral-900 text-lg">{effect.item}</span>
+                    <div className="flex items-center justify-center gap-2 mt-2 text-sm">
+                      <span className="text-neutral-600 line-through">{effect.before}</span>
+                      <span className="text-neutral-500">→</span>
+                      <span className="text-emerald-600 font-bold">{effect.after}</span>
                     </div>
                   </div>
-                ))}
-              </div>
+                  
+                    {/* 미니멀한 원형 차트 */}
+                    {/* 미니멀한 원형 차트 */}
+                  <div className="mb-6 flex justify-center">
+                    <div className="relative w-32 h-32">
+                      <svg className="w-32 h-32 transform -rotate-90" viewBox="0 0 64 64">
+                         {/* 배경 원 */}
+                        <circle
+                          cx="32"
+                          cy="32"
+                          r="28"
+                          fill="none"
+                          className="stroke-gray-200"
+                          strokeWidth="4"
+                        />
+                         {/* 데이터 원 - 그라데이션 */}
+                         <defs>
+                           <linearGradient id={`timeGradient-${index}`} x1="0%" y1="0%" x2="100%" y2="100%">
+                             <stop offset="0%" stopColor={
+                               effect.color.includes('emerald') ? '#10b981' :
+                               effect.color.includes('blue') ? '#3b82f6' :
+                               effect.color.includes('purple') ? '#a855f7' :
+                               '#f97316'
+                             } />
+                             <stop offset="100%" stopColor={
+                               effect.color.includes('green') ? '#16a34a' :
+                               effect.color.includes('indigo') ? '#6366f1' :
+                               effect.color.includes('pink') ? '#ec4899' :
+                               '#dc2626'
+                             } />
+                           </linearGradient>
+                         </defs>
+                        <motion.circle
+                          cx="32"
+                          cy="32"
+                          r="28"
+                          fill="none"
+                          stroke={`url(#timeGradient-${index})`}
+                          strokeWidth="6"
+                          strokeDasharray="176"
+                          strokeDashoffset={176}
+                          strokeLinecap="round"
+                          className="filter drop-shadow-md"
+                          initial={{ strokeDashoffset: 176 }}
+                          whileInView={{ strokeDashoffset: 176 - (parseInt(effect.savings) * 1.76) }}
+                          transition={{ duration: 2, delay: index * 0.2, ease: "easeOut" }}
+                          viewport={{ once: false, margin: "-100px" }}
+                        />
+                         {/* 중앙 작은 원 */}
+                        <circle
+                          cx="32"
+                          cy="32"
+                          r="20"
+                          fill="white"
+                          className="filter drop-shadow-sm"
+                        />
+                       </svg>
+                      {/* 중앙 텍스트 */}
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="text-center">
+                          <div className="text-3xl font-black bg-gradient-to-r from-gray-700 to-gray-900 bg-clip-text text-transparent">
+                            <CountUpAnimation end={parseInt(effect.savings)} duration={2 + index * 0.3} suffix="%" />
+                          </div>
+                          <div className="text-xs font-medium text-gray-500">절약</div>
+                        </div>
+                      </div>
+                     </div>
+                   </div>
+                </motion.div>
+              ))}
             </div>
-            
-            <div>
-              <h3 className="text-2xl font-bold text-neutral-900 mb-8">비용 절약 효과</h3>
-              <div className="space-y-6">
-                {[
-                  { category: '인건비 절약', amount: '월 200만원', desc: '회의록 작성 담당자 시간 절약' },
-                  { category: '생산성 향상', amount: '월 300만원', desc: '업무 효율성 증대로 인한 가치 창출' },
-                  { category: '의사결정 속도', amount: '월 150만원', desc: '빠른 정보 공유로 인한 기회비용 절약' },
-                  { category: '팀 협업 개선', amount: '월 100만원', desc: '소통 비용 절약 및 오류 감소' }
-                ].map((saving, index) => (
-                  <div
-                    key={saving.category}
-                    className="bg-white rounded-xl p-6 shadow-md"
-                  >
-                    <div className="flex justify-between items-start mb-2">
-                      <span className="font-semibold text-neutral-900">{saving.category}</span>
-                      <span className="text-green-600 font-bold">{saving.amount}</span>
-                    </div>
-                    <p className="text-sm text-neutral-600">{saving.desc}</p>
+          </div>
+
+          {/* 2행: 비용 절약 효과 시각화 */}
+          <div className="mb-20">
+            <motion.h3 
+              initial={{ opacity: 0 }}
+              whileInView={{ opacity: 1 }}
+              className="text-2xl font-bold text-neutral-900 mb-12 text-center flex items-center justify-center gap-3"
+            >
+              <span className="text-4xl"></span>
+              비용 절약 효과
+            </motion.h3>
+            <div className="grid md:grid-cols-4 gap-8">
+              {[
+                { category: '인건비 절약', amount: '180만원/월', desc: '회의록 작성 시간 단축', color: 'from-blue-500 to-indigo-600' },
+                { category: '생산성 향상', amount: '220만원/월', desc: '업무 자동화로 인한 효율성 증대', color: 'from-green-500 to-emerald-600' },
+                { category: '의사결정 속도', amount: '120만원/월', desc: '빠른 정보 공유로 인한 기회비용 절약', color: 'from-purple-500 to-pink-600' },
+                { category: '팀 협업 개선', amount: '80만원/월', desc: '소통 비용 절약 및 오류 감소', color: 'from-orange-500 to-red-600' }
+              ].map((saving, index) => (
+                <motion.div 
+                  key={saving.category}
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  whileInView={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.5, delay: index * 0.1 }}
+                  whileHover={{ scale: 1.02, transition: { duration: 0.2 } }}
+                  className="bg-white rounded-3xl p-8 shadow-[0_4px_20px_rgba(0,0,0,0.08)] hover:shadow-[0_8px_30px_rgba(0,0,0,0.12)] transition-all duration-300 border border-neutral-100"
+                >
+                  <div className="text-center mb-6">
+                    <span className="font-bold text-neutral-900 text-lg">{saving.category}</span>
                   </div>
-                ))}
+                  
+                  {/* 금액 표시 */}
+                  <div className="mb-4">
+                    <div className="text-center bg-gray-50 rounded-2xl py-6">
+                      <div className="text-neutral-800">
+                        <span className="text-3xl font-black">{saving.amount.split('/')[0]}</span>
+                        <span className="text-xl font-normal text-neutral-600">/{saving.amount.split('/')[1]}</span>
+                      </div>
+                      <div className="text-sm font-medium text-neutral-600"></div>
+                      <div className="text-lg font-bold text-neutral-700 mt-2"></div>
+                    </div>
+                  </div>
+                   
+                  {/* 설명 텍스트 */}
+                  <p className="text-sm text-neutral-600 text-center leading-relaxed font-medium">{saving.desc}</p>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+
+          {/* 3행: ROI 시각화 */}
+          <div>
+            <h3 className="text-3xl font-bold text-neutral-900 mb-8 text-center"> 투자 대비 수익률 (ROI)</h3>
+            <div className="grid md:grid-cols-3 gap-8">
+              {/* 월 절약 효과 */}
+              <div className="bg-gradient-to-br from-emerald-500 to-green-600 rounded-2xl p-8 text-white text-center shadow-xl relative overflow-hidden">
+                <div className="text-4xl mb-2"></div>
+                <div className="text-2xl font-bold mb-2">월 절약 효과</div>
+                <div className="text-4xl font-black mb-2">600만원</div>
+                <div className="text-sm opacity-90">연간 7,200만원 절약</div>
+                
+                {/* 배경 하향 곡선 그래프 (비용 절감) */}
+                <div className="absolute bottom-4 left-4 right-4 h-16 opacity-20">
+                  <svg className="w-full h-full" viewBox="0 0 100 40" preserveAspectRatio="none">
+                    <path
+                      d="M0,5 Q20,10 40,20 T80,35 L100,38"
+                      fill="none"
+                      stroke="white"
+                      strokeWidth="2"
+                      strokeDasharray="5,3"
+                      className="drop-shadow-sm"
+                    />
+                    <path
+                      d="M0,5 Q20,10 40,20 T80,35 L100,38 L100,40 L0,40 Z"
+                      fill="white"
+                      fillOpacity="0.1"
+                    />
+                    <circle cx="0" cy="5" r="2" fill="white" />
+                    <circle cx="20" cy="10" r="2" fill="white" />
+                    <circle cx="40" cy="20" r="2" fill="white" />
+                    <circle cx="60" cy="28" r="2" fill="white" />
+                    <circle cx="80" cy="35" r="2" fill="white" />
+                    <circle cx="100" cy="38" r="2" fill="white" />
+                  </svg>
+                </div>
               </div>
               
-              <div className="mt-8 bg-gradient-to-r from-green-500 to-blue-500 rounded-xl p-6 text-white text-center">
-                <div className="text-2xl font-bold mb-2">총 월 절약 효과</div>
-                <div className="text-4xl font-bold">750만원</div>
-                <div className="text-sm opacity-90">3개월 내 ROI 달성</div>
+              {/* ROI 달성 기간 */}
+              <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl p-8 text-white text-center shadow-xl relative overflow-hidden">
+                <div className="text-4xl mb-2"></div>
+                <div className="text-2xl font-bold mb-2">ROI 달성 기간</div>
+                <div className="text-4xl font-black mb-2">3개월</div>
+                <div className="text-sm opacity-90">초기 투자비 회수 완료</div>
+                
+                {/* 배경 선 그래프 */}
+                <div className="absolute bottom-4 left-4 right-4 h-16 opacity-20">
+                  <svg className="w-full h-full" viewBox="0 0 100 40" preserveAspectRatio="none">
+                    <path
+                      d="M0,30 Q25,20 50,25 T100,15"
+                      fill="none"
+                      stroke="white"
+                      strokeWidth="2"
+                      className="drop-shadow-sm"
+                    />
+                    <circle cx="0" cy="30" r="2" fill="white" />
+                    <circle cx="25" cy="20" r="2" fill="white" />
+                    <circle cx="50" cy="25" r="2" fill="white" />
+                    <circle cx="75" cy="18" r="2" fill="white" />
+                    <circle cx="100" cy="15" r="2" fill="white" />
+                  </svg>
+                </div>
+              </div>
+              
+              {/* 연간 수익률 */}
+              <div className="bg-gradient-to-br from-purple-500 to-pink-600 rounded-2xl p-8 text-white text-center shadow-xl relative overflow-hidden">
+                <div className="text-4xl mb-2"></div>
+                <div className="text-2xl font-bold mb-2">연간 수익률</div>
+                <div className="text-4xl font-black mb-2">400%</div>
+                <div className="text-sm opacity-90">투자 대비 4배 수익</div>
+                
+                {/* 배경 막대 그래프 */}
+                <div className="absolute bottom-4 left-4 right-4 h-16 opacity-20">
+                  <svg className="w-full h-full" viewBox="0 0 100 40" preserveAspectRatio="none">
+                    <rect x="10" y="25" width="8" height="15" fill="white" rx="1" />
+                    <rect x="25" y="20" width="8" height="20" fill="white" rx="1" />
+                    <rect x="40" y="15" width="8" height="25" fill="white" rx="1" />
+                    <rect x="55" y="10" width="8" height="30" fill="white" rx="1" />
+                    <rect x="70" y="5" width="8" height="35" fill="white" rx="1" />
+                    <rect x="85" y="0" width="8" height="40" fill="white" rx="1" />
+                  </svg>
+                </div>
               </div>
             </div>
           </div>
+          
+
         </div>
       </section>
 
@@ -730,8 +991,8 @@ const Landing = () => {
         </div>
       </section>
 
-            {/* 4. 데모 영상 섹션 */}
-        <section className="py-24 bg-neutral-50">
+      {/* 4. 데모 영상 섹션 */}
+      <section className="py-24 bg-neutral-50">
           <div className="max-w-5xl mx-auto px-6 text-center">
             <h2 className="text-4xl lg:text-5xl font-bold text-neutral-900 mb-6 tracking-tight">
               실제 작동 화면을 확인해보세요
@@ -1004,7 +1265,7 @@ const Landing = () => {
             whileInView={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8 }}
           >
-            <h2 className="text-4xl lg:text-5xl font-bold text-slate-800 mb-6">
+            <h2 className="text-3xl lg:text-4xl font-bold text-slate-800 mb-6">
               지금 바로 시작하세요
             </h2>
             <p className="text-xl text-slate-700 mb-8">
@@ -1015,8 +1276,8 @@ const Landing = () => {
                 href={slackUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                whileHover={{ scale: 1.05, y: -2 }}
-                whileTap={{ scale: 0.95 }}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
                 className="group relative px-8 py-4 bg-gradient-to-r from-white to-slate-100 text-slate-800 rounded-xl font-semibold text-lg shadow-lg hover:shadow-xl transition-all duration-300 flex items-center justify-center space-x-3 overflow-hidden"
               >
                 <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700"></div>
@@ -1027,8 +1288,8 @@ const Landing = () => {
               </motion.a>
               <motion.button
                 onClick={() => navigate('/dashboard')}
-                whileHover={{ scale: 1.05, y: -2 }}
-                whileTap={{ scale: 0.95 }}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
                 className="group relative px-8 py-4 border-2 border-slate-700 text-slate-700 rounded-xl font-semibold text-lg hover:bg-slate-700 hover:text-white transition-all duration-300 overflow-hidden"
               >
                 <div className="absolute inset-0 bg-gradient-to-r from-slate-700/0 via-slate-700/10 to-slate-700/0 transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700"></div>
