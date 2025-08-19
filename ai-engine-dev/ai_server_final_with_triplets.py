@@ -2915,7 +2915,6 @@ async def process_pipeline_async(job_id: str, audio_data: Optional[bytes],
         # 결과를 파일로 저장 (RunPod 내부)
         import json
         import os
-        from datetime import datetime
         
         # 저장 디렉토리 생성
         save_dir = "/workspace/ai_results"
@@ -2923,7 +2922,8 @@ async def process_pipeline_async(job_id: str, audio_data: Optional[bytes],
             os.makedirs(save_dir)
         
         # 타임스탬프 기반 파일명
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        from datetime import datetime as dt_save
+        timestamp = dt_save.now().strftime("%Y%m%d_%H%M%S")
         filename = f"{save_dir}/job_{job_id}_{timestamp}.json"
         
         # 결과 저장
