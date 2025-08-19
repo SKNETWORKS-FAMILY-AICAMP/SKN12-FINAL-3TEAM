@@ -157,7 +157,11 @@ WhisperX 기반 STT 엔진이 오디오를 텍스트로 변환 </br>
 ### 3. 회의 종료 & 분석 파이프라인 실행 </br>
 사용자가 회의를 종료하면 ``` POST /meetings/{id}/finish```  요청이 전달되어 전체 분석이 시작 </br>
 #### 주요 처리 단계: 
-``` 화자 분리(Speaker Diarization) -> 키워드 추출(Pyanodot) -> 의도 분류(OpenAI / Qwen3) -> 요약 생성(Claude, Qwen3 등 LLM 엔진) -> Task Master를 통한 업무 분류 및 정리``` </br>
+
+```
+화자 분리(Speaker Diarization) -> 키워드 추출(Pyanodot) -> 의도 분류(OpenAI / Qwen3) ->
+요약 생성(Claude, Qwen3 등 LLM 엔진) -> Task Master를 통한 업무 분류 및 정리
+```
 
 ### 4️. 결과 저장 & 통합 </br>
 분석된 결과는 데이터베이스에 저장 </br>
