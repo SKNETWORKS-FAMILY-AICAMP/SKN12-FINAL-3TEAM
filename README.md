@@ -40,14 +40,8 @@ ICSI 다자 대화록(한글 번역): 75개 세션 / 94,793 발화, 정제 JSONL
 
 각 라인은 아래 4개 필드를 갖습니다. </br>
 
-```
-{
-  "timestamp": "00:11",               // 발화 시점(또는 None)
-  "timestamp_order": "5-1",           // 같은 시점 내 순번
-  "speaker": "Speaker_A",             // 화자
-  "text": "발화 내용"                 // 텍스트
-}
-```
+<img width="732" height="142" alt="image" src="https://github.com/user-attachments/assets/0a30dd26-a1e0-4b51-917b-ea12cd8666e0" />
+
 
 </br>
 국회 회의록은 공식 문서 특성상 장문·논리적 흐름 → 요약/의제전이 실험 적합. </br>
