@@ -575,10 +575,13 @@ class JiraService {
       const userResult = await this.getCurrentJiraUser(tenantId, userId);
       const leadAccountId = userResult.success ? userResult.user?.accountId : undefined;
       
-      // 고유한 프로젝트 키 생성 (타임스탬프 사용)
-      const timestamp = Date.now().toString().slice(-6); // 마지막 6자리
-      const projectKey = `TK${timestamp}`;
-      const projectName = projectData.title || `TtalKkak_${timestamp}`;  // 프로젝트 제목 사용
+      // 고유한 프로젝트 키와 이름 생성 (타임스탬프 + 랜덤 문자 사용)
+      const timestamp = Date.now().toString(); // 전체 타임스탬프
+      const randomSuffix = Math.random().toString(36).substring(2, 5).toUpperCase(); // 3자리 랜덤 문자
+      const shortTimestamp = timestamp.slice(-4); // 마지막 4자리 (프로젝트 키용)
+      const projectKey = `TK${shortTimestamp}${randomSuffix}`; // 예: TK1234ABC
+      // 프로젝트 이름에도 타임스탬프 포함하여 고유하게 만들기
+      const projectName = `${projectData.title || 'TtalKkak'}_${timestamp}`;  // 전체 타임스탬프로 고유성 보장
       
       console.log('🎫 생성할 프로젝트:', { key: projectKey, name: projectName });
       
