@@ -192,7 +192,7 @@ Task 분석 지연: 약 1분 </br>
 </br>
 
 <p align="center">
-  <img src="https://skn12final3team.slack.com/files/U09405Y4YM7/F09B1VB4R0T/1__online-video-cutter.com_.mp4">
+  <img src="https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN12-FINAL-3TEAM/blob/main/%EC%82%B0%EC%B6%9C%EB%AC%BC/%EB%B0%9C%ED%91%9C%EC%9E%90%EB%A3%8C/img/1%20(online-video-cutter.com).mp4">
     <b><시연영상></b><br>
 </p>
 
