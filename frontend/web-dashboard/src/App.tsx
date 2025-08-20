@@ -6,6 +6,7 @@ import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
+import LoginSimple from './pages/LoginSimple';
 import LoginSuccess from './pages/LoginSuccess';
 import MeetingAnalysis from './pages/MeetingAnalysis';
 import TaskManagement from './pages/TaskManagement';

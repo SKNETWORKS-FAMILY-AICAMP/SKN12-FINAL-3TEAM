@@ -1,11 +1,47 @@
 import React, { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import axios from 'axios';
 import MobileNavbar from '../../components/mobile/MobileNavbar';
 import '../../styles/mobile.css';
 import '../../styles/mobile-pages.css';
 
+// API 기본 설정
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3500';
+
+const apiClient = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+    'X-Tenant-Slug': 'default',
+  },
+});
+
+apiClient.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+const fetchProjects = async () => {
+  try {
+    const response = await apiClient.get('/api/projects');
+    return Array.isArray(response.data) ? response.data : [];
+  } catch (error) {
+    console.error('Failed to fetch projects:', error);
+    return [];
+  }
+};
+
 const MobileMeeting: React.FC = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  
+  const { data: projects = [], isLoading } = useQuery({
+    queryKey: ['projects'],
+    queryFn: fetchProjects,
+  });
 
   const handleStartRecording = () => {
     setIsRecording(true);
@@ -17,25 +53,18 @@ const MobileMeeting: React.FC = () => {
     // 실제 녹음 중지 로직 구현
   };
 
-  // 더미 데이터
-  const recentMeetings = [
-    {
-      id: 1,
-      title: '프로젝트 킥오프 미팅',
-      date: '2024-01-15',
-      duration: '45분',
-      participants: ['김철수', '이영희', '박민수'],
-      summary: '프로젝트 목표 및 일정 논의'
-    },
-    {
-      id: 2,
-      title: '주간 스프린트 회의',
-      date: '2024-01-10',
-      duration: '30분',
-      participants: ['김철수', '이영희'],
-      summary: '주간 진행 상황 공유 및 이슈 논의'
-    },
-  ];
+  // 프로젝트 데이터를 회의 형식으로 변환
+  const recentMeetings = projects.slice(0, 5).map((project: any) => ({
+    id: project.id,
+    title: project.title || '제목 없음',
+    date: project.createdAt || new Date().toISOString(),
+    duration: '분석 중',
+    participants: project.tasks ? 
+      [...new Set(project.tasks.filter((t: any) => t.assignee).map((t: any) => 
+        typeof t.assignee === 'string' ? t.assignee : t.assignee?.name
+      ))] : [],
+    summary: project.overview || '프로젝트 요약 정보가 없습니다.'
+  }));
 
   return (
     <div className="mobile-dashboard">
@@ -46,6 +75,12 @@ const MobileMeeting: React.FC = () => {
       />
       
       <div className="mobile-content">
+        {isLoading && (
+          <div className="mobile-loading">
+            <div className="spinner"></div>
+            <p>데이터를 불러오는 중...</p>
+          </div>
+        )}
         {/* 녹음 섹션 */}
         <div className="mobile-recording-section">
           <div className="recording-card">

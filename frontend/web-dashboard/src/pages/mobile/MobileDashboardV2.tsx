@@ -49,6 +49,19 @@ const fetchTasks = async (projectId?: string) => {
   }
 };
 
+const fetchUsers = async () => {
+  try {
+    const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+    const tenantId = currentUser.tenantId;
+    const url = tenantId ? `/test/users?tenantId=${tenantId}` : '/test/users';
+    const response = await apiClient.get(url);
+    return Array.isArray(response.data) ? response.data : [];
+  } catch (error) {
+    console.error('Failed to fetch users:', error);
+    return [];
+  }
+};
+
 const updateTaskStatus = async (taskId: string, status: string) => {
   const response = await apiClient.patch(`/api/tasks/${taskId}/status`, { status });
   return response.data;
@@ -68,6 +81,11 @@ const MobileDashboardV2: React.FC = () => {
     queryFn: () => fetchTasks(selectedProjectId === 'all' ? undefined : selectedProjectId),
   });
 
+  const { data: users = [], isLoading: usersLoading } = useQuery({
+    queryKey: ['users'],
+    queryFn: fetchUsers,
+  });
+
   const handleStatusUpdate = async (taskId: string, newStatus: string) => {
     try {
       await updateTaskStatus(taskId, newStatus);
@@ -84,7 +102,7 @@ const MobileDashboardV2: React.FC = () => {
     }
   }, []);
 
-  if (projectsLoading || tasksLoading) {
+  if (projectsLoading || tasksLoading || usersLoading) {
     return (
       <div className="mobile-loading-v2">
         <div className="loading-spinner"></div>
@@ -121,7 +139,7 @@ const MobileDashboardV2: React.FC = () => {
               <option value="all">All Projects</option>
               {(projects as any[]).map((project: any) => (
                 <option key={project.id} value={project.id}>
-                  {project.name}
+                  {project.title || project.name}
                 </option>
               ))}
             </select>
@@ -142,6 +160,27 @@ const MobileDashboardV2: React.FC = () => {
           <div className="stat-card-v2">
             <div className="stat-value">{(tasks as any[]).filter((t: any) => t.status === 'DONE').length}</div>
             <div className="stat-label">Completed</div>
+          </div>
+        </div>
+        
+        {/* Team Members Section */}
+        <div className="team-section-v2">
+          <h3 className="section-title-v2">Team Members ({users.length})</h3>
+          <div className="team-grid-v2">
+            {(users as any[]).slice(0, 6).map((user: any) => (
+              <div key={user.id} className="team-member-card-v2">
+                <div className="member-avatar-v2">
+                  {user.name?.charAt(0) || 'U'}
+                </div>
+                <div className="member-info-v2">
+                  <div className="member-name-v2">{user.name || 'Unknown'}</div>
+                  <div className="member-role-v2">
+                    {user.role === 'OWNER' ? '오너' : 
+                     user.role === 'ADMIN' ? '관리자' : '팀원'}
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
         

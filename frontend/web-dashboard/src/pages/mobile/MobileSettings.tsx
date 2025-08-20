@@ -1,13 +1,50 @@
 import React, { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import axios from 'axios';
 import MobileNavbar from '../../components/mobile/MobileNavbar';
 import '../../styles/mobile.css';
 import '../../styles/mobile-pages.css';
+
+// API 기본 설정
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3500';
+
+const apiClient = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+    'X-Tenant-Slug': 'default',
+  },
+});
+
+apiClient.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+const fetchIntegrationStatus = async () => {
+  try {
+    const response = await apiClient.get('/api/integrations/status');
+    return response.data;
+  } catch (error) {
+    console.error('Failed to fetch integration status:', error);
+    return { slack: false, jira: false, notion: false };
+  }
+};
 
 const MobileSettings: React.FC = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   
   // 사용자 정보 (로컬스토리지에서 가져오기)
   const user = JSON.parse(localStorage.getItem('user') || '{}');
+  
+  // 연동 상태 가져오기
+  const { data: integrationStatus } = useQuery({
+    queryKey: ['integrationStatus'],
+    queryFn: fetchIntegrationStatus,
+  });
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -30,9 +67,9 @@ const MobileSettings: React.FC = () => {
       title: '연동 서비스',
       icon: '🔗',
       items: [
-        { label: 'Slack 연동', type: 'status', value: '연결됨' },
-        { label: 'JIRA 연동', type: 'status', value: '연결됨' },
-        { label: 'Notion 연동', type: 'status', value: '미연결' },
+        { label: 'Slack 연동', type: 'status', value: integrationStatus?.slack ? '연결됨' : '미연결' },
+        { label: 'JIRA 연동', type: 'status', value: integrationStatus?.jira ? '연결됨' : '미연결' },
+        { label: 'Notion 연동', type: 'status', value: integrationStatus?.notion ? '연결됨' : '미연결' },
       ]
     },
     {

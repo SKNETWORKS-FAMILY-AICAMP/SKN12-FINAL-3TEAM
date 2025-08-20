@@ -297,6 +297,39 @@
   @apply w-4 h-4;
 }
 
+/* Team Members Section */
+.team-section-v2 {
+  @apply mt-6;
+}
+
+.section-title-v2 {
+  @apply text-lg font-semibold text-gray-900 dark:text-white mb-4;
+}
+
+.team-grid-v2 {
+  @apply grid grid-cols-2 gap-3;
+}
+
+.team-member-card-v2 {
+  @apply bg-white dark:bg-gray-800 rounded-lg p-4 shadow-sm flex items-center space-x-3;
+}
+
+.member-avatar-v2 {
+  @apply w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center text-blue-600 dark:text-blue-300 font-semibold text-sm;
+}
+
+.member-info-v2 {
+  @apply flex-1 min-w-0;
+}
+
+.member-name-v2 {
+  @apply text-sm font-medium text-gray-900 dark:text-white truncate;
+}
+
+.member-role-v2 {
+  @apply text-xs text-gray-500 dark:text-gray-400;
+}
+
 /* Responsive adjustments */
 @media (max-width: 375px) {
   .mobile-navbar-v2 {
