@@ -192,9 +192,11 @@ Task 분석 지연: 약 1분 </br>
 </br>
 
 <p align="center">
-  <img src="https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN12-FINAL-3TEAM/blob/main/%EC%82%B0%EC%B6%9C%EB%AC%BC/%EB%B0%9C%ED%91%9C%EC%9E%90%EB%A3%8C/img/1%20(online-video-cutter.com).mp4">
-    <b><시연영상></b><br>
+  <b>시연영상</b><br>
+  <video src="./산출물/발표자료/img/1%20(online-video-cutter.com).mp4?raw=1"
+       controls autoplay muted loop playsinline width="720"></video>
 </p>
+
 
 </br>
 
