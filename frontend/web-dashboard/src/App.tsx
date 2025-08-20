@@ -80,7 +80,7 @@ function App() {
               <Route path="integration" element={<Integration />} />
               <Route path="settings" element={<Settings />} />
             </Route>
-            <Route path="/login" element={<LoginSimple />} />
+            <Route path="/login" element={<Login />} />
             <Route path="/login/success" element={<LoginSuccess />} />
             <Route path="/integration-success" element={<IntegrationSuccess />} />
             <Route path="/jira-success" element={<IntegrationSuccess />} />
