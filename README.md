@@ -176,11 +176,19 @@ Task 분석 지연: 약 1분 </br>
 
 ---
 ## 실행 화면
-**랜딩페이지**
-![랜딩페이지](https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN12-FINAL-3TEAM/blob/main/%EC%82%B0%EC%B6%9C%EB%AC%BC/%EB%B0%9C%ED%91%9C%EC%9E%90%EB%A3%8C/img/image.jpg?raw=true)
+
+<p align="center">
+  <b>랜딩페이지</b><br>
+  <img src="https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN12-FINAL-3TEAM/blob/main/%EC%82%B0%EC%B6%9C%EB%AC%BC/%EB%B0%9C%ED%91%9C%EC%9E%90%EB%A3%8C/img/image.jpg?raw=true">
+</p>
+
 </br>
-**대시보드**
-![대시보드](https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN12-FINAL-3TEAM/blob/main/%EC%82%B0%EC%B6%9C%EB%AC%BC/%EB%B0%9C%ED%91%9C%EC%9E%90%EB%A3%8C/img/%EB%8C%80%EC%8B%9C%EB%B3%B4%EB%93%9C.png?raw=true)
+
+<p align="center">
+  <b>대시보드</b><br>
+  <img src="https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN12-FINAL-3TEAM/blob/main/%EC%82%B0%EC%B6%9C%EB%AC%BC/%EB%B0%9C%ED%91%9C%EC%9E%90%EB%A3%8C/img/%EB%8C%80%EC%8B%9C%EB%B3%B4%EB%93%9C.png?raw=true">
+</p>
+
 
 ---
 ## 💬 팀원 한 줄 회고
