@@ -132,6 +132,7 @@ export interface Task {
   parentId?: string;
   metadata?: TaskMetadata;
   children?: Task[];
+  createdAt?: string;
 }
 
 export interface TaskMetadata {
@@ -452,6 +453,7 @@ export const userAPI = {
     skills?: string[];
     availableHours?: number;
     experienceLevel?: string;
+    preferredTypes?: string[];
   }): Promise<User> => {
     try {
       const response = await apiClient.post<User>('/api/users', userData);

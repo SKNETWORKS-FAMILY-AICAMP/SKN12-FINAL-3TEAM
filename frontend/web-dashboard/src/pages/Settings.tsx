@@ -159,7 +159,6 @@ const Settings = () => {
       name: '', 
       role: '', 
       email: '', 
-      department: '',
       experienceLevel: 'junior',
       availableHours: 40,
       skills: [],
