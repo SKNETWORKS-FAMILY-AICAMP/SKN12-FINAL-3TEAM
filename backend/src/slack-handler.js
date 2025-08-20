@@ -5604,6 +5604,7 @@ async function processUploadedFile(file, projectName, client, userId) {
                 // AI가 생성한 데이터를 Notion 페이지로 변환
                 const notionData = {
                   summary: result.stage1?.notion_project?.project_purpose || projectName,
+                  project_info: result.stage1?.notion_project || {},  // 프로젝트 정보 추가 (expected_effects 포함)
                   action_items: result.stage2.task_master_prd.tasks?.map((task, index) => {
                     // DB에서 해당 태스크 찾기
                     const dbTask = dbTasks.find(t => t.title === (task.title || task.task));
@@ -6275,7 +6276,8 @@ async function checkRecentFiles(client, userId, projectName) {
               
               // 추가 정보들도 전달 (NotionService에서 활용할 수 있도록)
               summary: aiData?.summary,
-              action_items: aiData?.action_items
+              action_items: aiData?.action_items,
+              project_info: result?.stage1?.notion_project || {}  // 프로젝트 정보 추가 (expected_effects 포함)
             };
             
             console.log('📋 Notion 전달 데이터:', {
