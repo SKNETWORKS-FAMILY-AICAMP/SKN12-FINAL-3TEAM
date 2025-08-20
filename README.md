@@ -176,7 +176,7 @@ Task 분석 지연: 약 1분 </br>
 
 ---
 ## 실행 화면
-
+![랜딩페이지](https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN12-FINAL-3TEAM/blob/main/%EC%82%B0%EC%B6%9C%EB%AC%BC/%EB%B0%9C%ED%91%9C%EC%9E%90%EB%A3%8C/img/image.jpg?raw=true)
 
 ---
 ## 💬 팀원 한 줄 회고
