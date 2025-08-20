@@ -34,7 +34,7 @@ const LoginSimple = () => {
     setIsLoading(true);
     
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/auth/login`, {
+      const response = await axios.post<{ token: string; user: any }>(`${API_BASE_URL}/api/auth/login`, {
         email: formData.email,
         password: formData.password
       });
@@ -47,10 +47,7 @@ const LoginSimple = () => {
         localStorage.setItem('isLoggedIn', 'true');
         
         toast.success('로그인 성공!');
-        
-        // 모바일 체크
-        const isMobile = window.innerWidth <= 768;
-        navigate(isMobile ? '/mobile' : '/dashboard');
+        navigate('/dashboard');
       }
     } catch (error: any) {
       console.error('Login error:', error);
@@ -58,7 +55,7 @@ const LoginSimple = () => {
       if (error.response?.status === 404) {
         // 사용자가 없으면 자동으로 회원가입
         try {
-          const signupResponse = await axios.post(`${API_BASE_URL}/api/auth/signup`, {
+          const signupResponse = await axios.post<{ token: string; user: any }>(`${API_BASE_URL}/api/auth/signup`, {
             email: formData.email,
             password: formData.password,
             name: formData.email.split('@')[0], // 이메일 앞부분을 이름으로 사용
@@ -72,9 +69,7 @@ const LoginSimple = () => {
             localStorage.setItem('isLoggedIn', 'true');
             
             toast.success('새 계정이 생성되었습니다!');
-            
-            const isMobile = window.innerWidth <= 768;
-            navigate(isMobile ? '/mobile' : '/dashboard');
+            navigate('/dashboard');
           }
         } catch (signupError: any) {
           toast.error('계정 생성에 실패했습니다');

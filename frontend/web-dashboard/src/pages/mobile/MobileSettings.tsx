@@ -24,9 +24,15 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
-const fetchIntegrationStatus = async () => {
+interface IntegrationStatus {
+  slack: boolean;
+  jira: boolean;
+  notion: boolean;
+}
+
+const fetchIntegrationStatus = async (): Promise<IntegrationStatus> => {
   try {
-    const response = await apiClient.get('/api/integrations/status');
+    const response = await apiClient.get<IntegrationStatus>('/api/integrations/status');
     return response.data;
   } catch (error) {
     console.error('Failed to fetch integration status:', error);
