@@ -193,7 +193,7 @@ Task 분석 지연: 약 1분 </br>
 
 <p align="center">
   <b>시연영상</b><br>
-  <video src="./산출물/발표자료/img/1%20(online-video-cutter.com).mp4?raw=1"
+  <video src="https://raw.githubusercontent.com/<USER>/<REPO>/<BRANCH>/산출물/발표자료/img/1%20(online-video-cutter.com).mp4"
        controls autoplay muted loop playsinline width="720"></video>
 </p>
 
