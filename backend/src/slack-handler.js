@@ -5306,64 +5306,6 @@ async function processUploadedFile(file, projectName, client, userId) {
       // JIRA 결과 변수를 블록 밖에서 선언
       let jiraResult = null;
       
-      // JIRA 프로젝트 생성 및 이슈 생성
-      if (jiraIntegration && result.stage2?.task_master_prd?.tasks) {
-        console.log('🎫 JIRA 프로젝트 및 이슈 생성 시도:', {
-          hasIntegration: !!jiraIntegration,
-          taskCount: result.stage2?.task_master_prd?.tasks?.length || 0,
-          jiraSiteUrl: jiraSiteUrl
-        });
-        
-        try {
-          const JiraService = require('./services/jira-service').default || require('./services/jira-service').JiraService;
-          const jiraService = new JiraService(prisma);
-          
-          // syncTaskMasterToJira를 사용하여 새 프로젝트 생성 및 이슈 추가
-          jiraResult = await jiraService.syncTaskMasterToJira(
-            user.tenantId,
-            user.id,
-            {
-              title: projectName || 'TtalKkak Project',
-              overview: result.stage1?.notion_project?.project_purpose || 'AI generated project',
-              tasks: result.stage2.task_master_prd.tasks.map(task => ({
-                title: task.title || task.task,
-                description: task.description || '',
-                priority: task.priority?.toLowerCase() || 'medium',
-                estimated_hours: task.estimated_hours || 8,
-                complexity: task.complexity || 'MEDIUM',
-                start_date: task.startDate || task.start_date,
-                deadline: task.dueDate || task.due_date || task.deadline,
-                subtasks: task.subtasks?.map(subtask => ({
-                  title: subtask.title,
-                  description: subtask.description || '',
-                  estimated_hours: subtask.estimated_hours || 2,
-                  startDate: subtask.startDate || subtask.start_date,
-                  dueDate: subtask.dueDate || subtask.due_date
-                })) || []
-              }))
-            }
-          );
-          
-          if (jiraResult.success && jiraResult.projectKey) {
-            // JIRA 사이트 URL 구성
-            const jiraConfig = jiraIntegration.config;
-            if (jiraConfig.site_url) {
-              jiraSiteUrl = jiraConfig.site_url;
-              jiraIssueUrl = `${jiraConfig.site_url}/jira/software/c/projects/${jiraResult.projectKey}/summary`;
-            } else if (jiraConfig.cloud_id && jiraConfig.site_name) {
-              jiraSiteUrl = `https://${jiraConfig.site_name}.atlassian.net`;
-              jiraIssueUrl = `https://${jiraConfig.site_name}.atlassian.net/jira/software/c/projects/${jiraResult.projectKey}/summary`;
-            }
-            
-            console.log('✅ JIRA 프로젝트 및 이슈 생성 성공:', jiraResult.projectKey, jiraIssueUrl);
-          } else {
-            console.error('❌ JIRA 프로젝트 생성 실패:', jiraResult.error);
-          }
-        } catch (error) {
-          console.error('❌ JIRA 프로젝트/이슈 생성 실패:', error);
-        }
-      }
-      
       console.log('🔗 생성된 링크:', {
         notionPageUrl,
         jiraIssueUrl,
@@ -5664,8 +5606,8 @@ async function processUploadedFile(file, projectName, client, userId) {
           if (jiraIntegration && createdProject) {
             console.log('🎫 JIRA 연동 확인됨. 이슈 생성 시작...');
             try {
-              const { JiraService } = require('./services/jira-service');
-              const jiraService = new JiraService(jiraIntegration.config);
+              const JiraService = require('./services/jira-service').default || require('./services/jira-service').JiraService;
+              const jiraService = new JiraService(prisma);
               
               // DB에서 생성된 태스크 가져오기 (담당자 정보 포함)
               const dbTasks = await prisma.task.findMany({
@@ -5781,6 +5723,13 @@ async function processUploadedFile(file, projectName, client, userId) {
               
               // JIRA 사이트 URL 구성
               jiraSiteUrl = jiraIntegration.config.site_url;
+              
+              // JIRA 프로젝트 URL 설정
+              if (projectKey && jiraIntegration.config.site_url) {
+                jiraIssueUrl = `${jiraIntegration.config.site_url}/jira/software/c/projects/${projectKey}/summary`;
+              } else if (projectKey && jiraIntegration.config.site_name) {
+                jiraIssueUrl = `https://${jiraIntegration.config.site_name}.atlassian.net/jira/software/c/projects/${projectKey}/summary`;
+              }
               
             } catch (jiraError) {
               console.error('❌ JIRA 이슈 생성 실패:', jiraError);
