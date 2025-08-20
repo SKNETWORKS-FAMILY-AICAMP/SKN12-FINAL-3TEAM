@@ -193,12 +193,10 @@ Task 분석 지연: 약 1분 </br>
 
 <p align="center">
   <b>시연영상</b><br>
-  <video src="https://raw.githubusercontent.com/SKNETWORKS-FAMILY-AICAMP/SKN12-FINAL-3TEAM/edit/main/산출물/발표자료/img/시연영상.mp4"
-       controls autoplay muted loop playsinline width="720"></video>
+  <video controls muted playsinline width="720">
+    <source src="https://raw.githubusercontent.com/SKNETWORKS-FAMILY-AICAMP/SKN12-FINAL-3TEAM/main/%EC%82%B0%EC%B6%9C%EB%AC%BC/%EB%B0%9C%ED%91%9C%EC%9E%90%EB%A3%8C/img/%EC%8B%9C%EC%97%B0%EC%98%81%EC%83%81.mp4" type="video/mp4">
+  </video>
 </p>
-
-
-</br>
 
 
 ---
