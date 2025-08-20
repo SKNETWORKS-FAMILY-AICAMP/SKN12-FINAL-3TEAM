@@ -182,52 +182,110 @@ class TtalKkakChunkingProcessor:
         if len(chunk_results) == 1:
             return chunk_results[0]
         
-        # 여러 청크 통합
-        merged_result = {
-            "action_items": [],
-            "decisions": [],
-            "key_points": [],
-            "next_steps": [],
-            "participants": set(),
-            "summary": "",
-            "metadata": {
-                "total_chunks": len(chunk_results),
-                "processing_method": "chunked"
-            }
-        }
-        
-        # 각 청크 결과 통합
-        for i, result in enumerate(chunk_results):
+        # 모든 청크에서 나타나는 필드 수집
+        all_fields = set()
+        for result in chunk_results:
             if isinstance(result, dict):
-                # 액션 아이템 통합
-                if "action_items" in result and isinstance(result["action_items"], list):
-                    for item in result["action_items"]:
-                        if isinstance(item, dict):
-                            item["source_chunk"] = i
-                            merged_result["action_items"].append(item)
-                
-                # 기타 필드 통합
-                for field in ["decisions", "key_points", "next_steps"]:
+                all_fields.update(result.keys())
+        
+        # 여러 청크 통합 - 동적으로 필드 처리
+        merged_result = {}
+        
+        # 각 필드별로 적절한 병합 전략 적용
+        for field in all_fields:
+            if field == "metadata":
+                # 메타데이터는 특별 처리
+                merged_result["metadata"] = {
+                    "total_chunks": len(chunk_results),
+                    "processing_method": "chunked",
+                    "chunking_applied": True,
+                    "processing_time": 0,
+                    "original_tokens": 0,
+                    "chunks_info": []
+                }
+                for i, result in enumerate(chunk_results):
+                    if "metadata" in result and isinstance(result["metadata"], dict):
+                        merged_result["metadata"]["chunks_info"].append({
+                            "chunk_id": i,
+                            "tokens": result["metadata"].get("tokens", 0),
+                            "has_overlap": i > 0
+                        })
+                        merged_result["metadata"]["original_tokens"] += result["metadata"].get("tokens", 0)
+            
+            # 리스트 필드들 병합
+            elif field in ["action_items", "decisions", "key_points", "next_steps", 
+                          "core_objectives", "expected_effects"]:
+                merged_result[field] = []
+                for i, result in enumerate(chunk_results):
                     if field in result and isinstance(result[field], list):
-                        merged_result[field].extend(result[field])
+                        for item in result[field]:
+                            # action_items의 경우 청크 정보 추가
+                            if field == "action_items" and isinstance(item, dict):
+                                item["source_chunk"] = i
+                            merged_result[field].append(item)
                 
-                # 참석자 통합
-                if "participants" in result and isinstance(result["participants"], list):
-                    merged_result["participants"].update(result["participants"])
+                # 문자열 리스트인 경우 중복 제거
+                if field in ["decisions", "key_points", "next_steps", "core_objectives", "expected_effects"]:
+                    if all(isinstance(item, str) for item in merged_result[field]):
+                        # 순서 유지하며 중복 제거
+                        seen = set()
+                        unique_list = []
+                        for item in merged_result[field]:
+                            if item not in seen:
+                                seen.add(item)
+                                unique_list.append(item)
+                        merged_result[field] = unique_list
+            
+            # 참석자 필드 (set으로 처리)
+            elif field == "participants":
+                participants_set = set()
+                for result in chunk_results:
+                    if field in result:
+                        if isinstance(result[field], list):
+                            participants_set.update(result[field])
+                        elif isinstance(result[field], set):
+                            participants_set.update(result[field])
+                merged_result[field] = list(participants_set)
+            
+            # 문자열 필드들 - 첫 번째 non-empty 값 또는 병합
+            elif field in ["project_name", "project_purpose", "project_period", 
+                          "project_manager", "core_idea", "idea_description", 
+                          "execution_plan", "summary"]:
+                # 각 청크에서 해당 필드 값 수집
+                values = []
+                for result in chunk_results:
+                    if field in result and result[field]:
+                        values.append(str(result[field]))
+                
+                if values:
+                    if field == "summary":
+                        # 요약은 모든 청크의 요약을 합침
+                        merged_result[field] = " ".join(values)
+                    elif field == "execution_plan":
+                        # 실행 계획은 모든 청크의 계획을 합침
+                        merged_result[field] = "\n".join(values)
+                    else:
+                        # 나머지는 첫 번째 non-empty 값 사용
+                        merged_result[field] = values[0]
+                else:
+                    merged_result[field] = ""
+            
+            # 기타 필드는 첫 번째 non-null 값 사용
+            else:
+                for result in chunk_results:
+                    if field in result and result[field] is not None:
+                        merged_result[field] = result[field]
+                        break
         
-        # 중복 제거
-        merged_result["decisions"] = list(set(merged_result["decisions"]))
-        merged_result["key_points"] = list(set(merged_result["key_points"]))
-        merged_result["next_steps"] = list(set(merged_result["next_steps"]))
-        merged_result["participants"] = list(merged_result["participants"])
+        # 통합 요약 생성 (기존 summary가 없거나 비어있으면)
+        if not merged_result.get("summary"):
+            merged_result["summary"] = self._generate_merged_summary(chunk_results)
         
-        # 통합 요약 생성
-        merged_result["summary"] = self._generate_merged_summary(chunk_results)
-        
-        # 액션 아이템 중복 제거 및 우선순위 재정렬
-        merged_result["action_items"] = self._deduplicate_action_items(
-            merged_result["action_items"]
-        )
+        # 액션 아이템 중복 제거 및 우선순위 재정렬 (해당 필드가 있는 경우에만)
+        if "action_items" in merged_result:
+            merged_result["action_items"] = self._deduplicate_action_items(
+                merged_result["action_items"]
+            )
         
         return merged_result
     
