@@ -1,9 +1,9 @@
 <!-- 동적 헤더 배너 -->
-![header](https://capsule-render.vercel.app/api?type=waving&color=gradient&customColorList=14,2,27,27,27&height=300&section=header&text=딸깍%20TtalKkak&fontSize=90&animation=twinkling&fontAlignY=35&desc=AI%20기반%20회의%20분석%20및%20스마트%20업무%20배정%20시스템&descAlignY=51&descAlign=50&fontColor=ffffff)
+![header](https://capsule-render.vercel.app/api?type=waving&color=gradient&customColorList=24,12,2,5,14&height=300&section=header&text=딸깍%20TtalKkak&fontSize=90&animation=twinkling&fontAlignY=35&desc=AI%20기반%20회의%20분석%20및%20스마트%20업무%20배정%20시스템&descAlignY=51&descAlign=50&fontColor=ffffff)
 
 <!-- 타이핑 애니메이션 -->
 <p align="center">
-  <a href="https://git.io/typing-svg"><img src="https://readme-typing-svg.herokuapp.com?font=Fira+Code&weight=700&size=24&pause=1000&color=36BCF7&center=true&vCenter=true&width=700&lines=회의+생산성+80%25+향상;AI+기반+자동+업무+배정;Slack,+Jira,+Notion+실시간+연동;스마트+프로젝트+관리+플랫폼" alt="Typing SVG" /></a>
+  <a href="https://git.io/typing-svg"><img src="https://readme-typing-svg.herokuapp.com?font=Fira+Code&weight=700&size=24&pause=1000&color=7CB342&center=true&vCenter=true&width=700&lines=🎯+회의+생산성+80%25+향상;🤖+AI+기반+자동+업무+배정;🔗+Slack,+Jira,+Notion+실시간+연동;📊+스마트+프로젝트+관리+플랫폼" alt="Typing SVG" /></a>
 </p>
 
 <!-- 프로젝트 상태 뱃지 -->
@@ -58,7 +58,7 @@
 
 <img src="https://user-images.githubusercontent.com/73097560/115834477-dbab4500-a447-11eb-908a-139a6edaec5c.gif">
 
-## 프로젝트 개요
+## 🔍 프로젝트 개요
 
 <div align="center">
   <table>
@@ -85,7 +85,7 @@
 
 Slack, Notion, Jira 등 협업 도구와의 실시간 연동 및 자동화를 통해 중복 작업을 줄이고, 팀 전체의 협업 효율성을 극대화합니다.
 
-## 핵심 기능
+## ✨ 핵심 기능
 
 <div align="center">
 
@@ -130,7 +130,7 @@ Slack, Notion, Jira 등 협업 도구와의 실시간 연동 및 자동화를 �
 
 </div>
 
-## 기술 스택
+## 🛠️ 기술 스택
 
 <table align="center">
   <tr>
@@ -190,7 +190,7 @@ Slack, Notion, Jira 등 협업 도구와의 실시간 연동 및 자동화를 �
   </tr>
 </table>
 
-## 데이터 & 모델
+## 📊 데이터 & 모델
 
 ### 학습 데이터셋
 <table align="center">
@@ -244,7 +244,7 @@ Slack, Notion, Jira 등 협업 도구와의 실시간 연동 및 자동화를 �
 </table>
 </div>
 
-## 시스템 아키텍처
+## 🏗️ 시스템 아키텍처
 
 <div align="center">
   <img src="https://raw.githubusercontent.com/SKNETWORKS-FAMILY-AICAMP/SKN12-FINAL-3TEAM/refs/heads/main/%EC%82%B0%EC%B6%9C%EB%AC%BC/%EB%B0%9C%ED%91%9C%EC%9E%90%EB%A3%8C/img/drawio_27.webp" width="90%">
@@ -254,10 +254,10 @@ Slack, Notion, Jira 등 협업 도구와의 실시간 연동 및 자동화를 �
 - **클라이언트**: React 대시보드, Slack App, 모바일 PWA
 - **API Gateway**: Express.js, JWT 인증, 멀티테넌트
 - **AI 엔진**: FastAPI, WhisperX, BERT, Qwen3
-- **데이터**: PostgreSQL, Prisma ORM, Redis 캐맨우
+- **데이터**: PostgreSQL, Prisma ORM, Redis 캐시
 - **외부 연동**: Slack/Notion/Jira API
 
-## 실행 화면
+## 📱 실행 화면
 
 <div align="center">
   
@@ -274,7 +274,7 @@ Slack, Notion, Jira 등 협업 도구와의 실시간 연동 및 자동화를 �
 
 </div>
 
-## Quick Start
+## 🚀 Quick Start
 
 ```bash
 # Backend 실행
@@ -292,7 +292,7 @@ cd ai-engine-dev
 python ai_server_final_with_triplets.py
 ```
 
-## 성능 지표
+## 📈 성능 지표
 
 <div align="center">
 <table>
@@ -321,7 +321,7 @@ python ai_server_final_with_triplets.py
 </table>
 </div>
 
-## 팀원 회고
+## 💬 팀원 회고
 
 <div align="center">
 <table>
@@ -372,4 +372,4 @@ python ai_server_final_with_triplets.py
 </div>
 
 <!-- Footer 배너 -->
-![footer](https://capsule-render.vercel.app/api?type=waving&color=gradient&customColorList=14,2,27,27,27&height=100&section=footer)
+![footer](https://capsule-render.vercel.app/api?type=waving&color=gradient&customColorList=24,12,2,5,14&height=100&section=footer)
