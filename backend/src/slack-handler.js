@@ -5694,54 +5694,85 @@ async function processUploadedFile(file, projectName, client, userId) {
               }
               
               if (projectKey) {
-                // 메인 이슈 생성
-                const mainIssue = await jiraService.createIssue({
-                  projectKey: projectKey,
-                  summary: projectName || result.stage1?.notion_project?.project_name || 'AI 생성 업무',
-                  description: result.stage1?.notion_project?.project_purpose || result.stage1?.transcript || '회의 내용 기반 업무',
-                  issueType: 'Task'
-                });
-                
-                if (mainIssue && mainIssue.key) {
-                  jiraIssueUrl = `${jiraIntegration.config.site_url}/browse/${mainIssue.key}`;
-                  console.log('✅ JIRA 메인 이슈 생성 성공:', jiraIssueUrl);
-                  
-                  // 서브태스크 생성
-                  for (const task of dbTasks) {
-                    try {
-                      const subtask = await jiraService.createIssue({
+                // 각 메인태스크를 Epic으로 생성
+                for (const mainTask of dbTasks) {
+                  try {
+                    // 메인태스크를 Epic으로 생성
+                    const epicIssue = await jiraService.createJiraIssue(
+                      user.tenantId,
+                      user.id,
+                      {
                         projectKey: projectKey,
-                        summary: task.title,
-                        description: task.description || '',
-                        issueType: 'Sub-task',
-                        parentKey: mainIssue.key,
-                        assignee: task.assignee?.email // 담당자 이메일로 할당
-                      });
+                        summary: mainTask.title,
+                        description: mainTask.description || '',
+                        issueType: 'Epic',
+                        epicName: mainTask.title,
+                        startDate: mainTask.startDate ? new Date(mainTask.startDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+                        dueDate: mainTask.dueDate ? new Date(mainTask.dueDate).toISOString().split('T')[0] : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                        priority: mainTask.priority || 'MEDIUM'
+                      }
+                    );
+                    
+                    if (epicIssue && epicIssue.key) {
+                      console.log(`✅ JIRA Epic 생성: ${epicIssue.key} - ${mainTask.title}`);
                       
-                      if (subtask) {
-                        console.log(`✅ JIRA 서브태스크 생성: ${subtask.key} - ${task.title}`);
-                        
-                        // 하위 서브태스크도 생성 (children 필드 사용)
-                        if (task.children && task.children.length > 0) {
-                          for (const subsubtask of task.children) {
-                            try {
-                              await jiraService.createIssue({
+                      // Epic의 서브태스크들을 Task로 생성
+                      if (mainTask.children && mainTask.children.length > 0) {
+                        for (const subtask of mainTask.children) {
+                          try {
+                            const taskIssue = await jiraService.createJiraIssue(
+                              user.tenantId,
+                              user.id,
+                              {
                                 projectKey: projectKey,
-                                summary: subsubtask.title,
-                                description: subsubtask.description || '',
-                                issueType: 'Sub-task',
-                                parentKey: subtask.key,
-                                assignee: subsubtask.assignee?.email
-                              });
-                            } catch (subError) {
-                              console.error('서브-서브태스크 생성 실패:', subError);
+                                summary: subtask.title,
+                                description: subtask.description || '',
+                                issueType: 'Task',
+                                epicLink: epicIssue.key, // Epic과 연결
+                                startDate: subtask.startDate ? new Date(subtask.startDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+                                dueDate: subtask.dueDate ? new Date(subtask.dueDate).toISOString().split('T')[0] : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                                priority: subtask.priority || 'MEDIUM',
+                                assignee: subtask.assignee?.jiraUserId || subtask.assignee?.email
+                              }
+                            );
+                      
+                            if (taskIssue && taskIssue.key) {
+                              console.log(`  ✅ JIRA Task 생성: ${taskIssue.key} - ${subtask.title}`);
+                              
+                              // Task의 서브태스크가 있으면 Sub-task로 생성
+                              if (subtask.children && subtask.children.length > 0) {
+                                for (const subsubtask of subtask.children) {
+                                  try {
+                                    await jiraService.createJiraIssue(
+                                      user.tenantId,
+                                      user.id,
+                                      {
+                                        projectKey: projectKey,
+                                        summary: subsubtask.title,
+                                        description: subsubtask.description || '',
+                                        issueType: 'Sub-task',
+                                        parentKey: taskIssue.key,
+                                        startDate: subsubtask.startDate ? new Date(subsubtask.startDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+                                        dueDate: subsubtask.dueDate ? new Date(subsubtask.dueDate).toISOString().split('T')[0] : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                                        priority: subsubtask.priority || 'LOW',
+                                        assignee: subsubtask.assignee?.jiraUserId || subsubtask.assignee?.email
+                                      }
+                                    );
+                                    console.log(`    ✅ JIRA Sub-task 생성: ${subsubtask.title}`);
+                                  } catch (subError) {
+                                    console.error('    ❌ Sub-task 생성 실패:', subError);
+                                  }
+                                }
+                              }
                             }
+                          } catch (taskError) {
+                            console.error(`  ❌ Task 생성 실패:`, taskError);
                           }
                         }
                       }
-                    } catch (taskError) {
-                      console.error('서브태스크 생성 실패:', taskError);
                     }
+                  } catch (epicError) {
+                    console.error('❌ Epic 생성 실패:', epicError);
                   }
                 }
               } else {
