@@ -105,6 +105,7 @@ export interface User {
   skills?: string[];
   availableHours?: number;
   experienceLevel?: string;
+  preferredTypes?: string[];
 }
 
 export interface Project {
@@ -469,6 +470,7 @@ export const userAPI = {
     skills?: string[];
     availableHours?: number;
     experienceLevel?: string;
+    preferredTypes?: string[];
   }): Promise<User> => {
     try {
       const response = await apiClient.patch<User>(`/api/users/${userId}`, updates);
