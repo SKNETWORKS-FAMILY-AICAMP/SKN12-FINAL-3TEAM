@@ -403,6 +403,28 @@ Qwen3 생성 (문서화)
       약 1분
     </td>
   </tr>
+  <tr>
+    <td align="center">
+      <h3>📝</h3>
+      <b>YARN 컨텍스트</b><br/>
+      131k 토큰 입력
+    </td>
+    <td align="center">
+      <h3>🚀</h3>
+      <b>동시 처리</b><br/>
+      10개 세션
+    </td>
+    <td align="center">
+      <h3>📊</h3>
+      <b>정확도</b><br/>
+      92.5%
+    </td>
+    <td align="center">
+      <h3>💾</h3>
+      <b>처리 용량</b><br/>
+      100MB/세션
+    </td>
+  </tr>
 </table>
 </div>
 
