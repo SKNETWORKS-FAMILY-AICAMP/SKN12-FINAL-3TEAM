@@ -162,7 +162,7 @@ class JiraService {
 
     try {
       const response = await this.callJiraAPI(integration, '/project', 'GET');
-      return response || [];
+      return Array.isArray(response) ? response : [];
     } catch (error) {
       console.error('❌ JIRA 프로젝트 목록 조회 실패:', error);
       return [];
