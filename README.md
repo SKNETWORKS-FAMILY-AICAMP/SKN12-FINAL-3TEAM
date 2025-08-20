@@ -129,7 +129,7 @@ Qwen3 생성 (문서화)
 ### **TtalKkak AI 프로젝트 관리 시스템**의 전체 아키텍처 </br>
 클라이언트 → 백엔드 API → AI 처리 엔진 → 데이터 레이어 → 비즈니스 서비스 → 외부 연동 API </br>
 
-![시스템 아키텍처](https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN12-FINAL-3TEAM/blob/main/%EC%82%B0%EC%B6%9C%EB%AC%BC/%EB%B0%9C%ED%91%9C%EC%9E%90%EB%A3%8C/img/%EC%8B%9C%EC%8A%A4%ED%85%9C%EC%95%84%ED%82%A4%ED%85%8D%EC%B2%98.png?raw=true)
+![시스템 아키텍처](https://raw.githubusercontent.com/SKNETWORKS-FAMILY-AICAMP/SKN12-FINAL-3TEAM/refs/heads/main/%EC%82%B0%EC%B6%9C%EB%AC%BC/%EB%B0%9C%ED%91%9C%EC%9E%90%EB%A3%8C/img/%EC%8B%9C%EC%8A%A4%ED%85%9C%EC%95%84%ED%82%A4%ED%85%8D%EC%B3%90.webp)
 ### 주요 구성 요소
 - **클라이언트 레이어**: 웹 대시보드(React), Slack App, 모바일 앱
 - **백엔드 API 레이어**: Express 서버, Slack 핸들러, 멀티테넌트 지원
