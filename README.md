@@ -179,7 +179,7 @@ Task 분석 지연: 약 1분 </br>
 
 <table>
   <tr>
-    <th style="width:120px">이름</th>
+    <th style="width:200px">이름</th>
     <th>한 줄 회고</th>
   </tr>
   <tr>
