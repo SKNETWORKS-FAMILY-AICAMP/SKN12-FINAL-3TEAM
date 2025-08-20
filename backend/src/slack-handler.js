@@ -5688,11 +5688,9 @@ async function processUploadedFile(file, projectName, client, userId) {
               // JIRA 프로젝트 키 가져오기
               let projectKey = jiraIntegration.config.default_project;
               if (!projectKey) {
-                // 기본 프로젝트가 없으면 첫 번째 프로젝트 사용
-                const projects = await jiraService.getProjects();
-                if (projects && projects.length > 0) {
-                  projectKey = projects[0].key;
-                }
+                // 기본 프로젝트가 없으면 기본값 사용
+                console.log('⚠️ JIRA 프로젝트 키가 설정되지 않았습니다. 기본값 "TK" 사용');
+                projectKey = 'TK'; // 기본 프로젝트 키
               }
               
               if (projectKey) {
