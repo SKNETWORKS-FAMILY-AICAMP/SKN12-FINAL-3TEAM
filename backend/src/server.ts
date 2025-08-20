@@ -3842,7 +3842,8 @@ app.get('/test/users', async (req, res) => {
         tenantId: true,
         skills: true,
         availableHours: true,
-        experienceLevel: true
+        experienceLevel: true,
+        preferredTypes: true
       }
     });
     console.log(`✅ ${users.length}개의 유저 조회 성공 (tenantId: ${tenantId || 'all'})`);
