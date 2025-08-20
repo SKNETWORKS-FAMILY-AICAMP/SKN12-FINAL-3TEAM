@@ -2200,7 +2200,7 @@ app.delete('/api/integrations/:service',
 // Slack OAuth 시작 (로그인 버튼 클릭 시)
 app.get('/api/auth/slack', (req: Request, res: Response) => {
   const slackClientId = process.env.SLACK_CLIENT_ID || '9123205664802.9178095689748';
-  const redirectUri = process.env.SLACK_REDIRECT_URI || 'https://fecf095abfcc.ngrok-free.app/auth/slack/callback';
+  const redirectUri = process.env.SLACK_REDIRECT_URI || 'https://d2735ad2cc73.ngrok-free.app/auth/slack/callback';
   
   console.log('🔍 환경변수 SLACK_REDIRECT_URI:', process.env.SLACK_REDIRECT_URI);
   console.log('🔍 사용할 redirectUri:', redirectUri);
@@ -2228,7 +2228,7 @@ app.get('/api/auth/slack', (req: Request, res: Response) => {
 // Slack 앱 설치 (OAuth + 채널 초대) - Go to Market 버튼
 app.get('/api/auth/slack/install', (req: Request, res: Response) => {
   const slackClientId = process.env.SLACK_CLIENT_ID || '9123205664802.9178095689748';
-  const redirectUri = process.env.SLACK_REDIRECT_URI || 'https://fecf095abfcc.ngrok-free.app/auth/slack/callback';
+  const redirectUri = process.env.SLACK_REDIRECT_URI || 'https://d2735ad2cc73.ngrok-free.app/auth/slack/callback';
   
   // Slack OAuth URL에 채널 초대 권한 추가
   const scopes = [
@@ -2321,7 +2321,7 @@ app.get('/auth/slack/callback', async (req: Request, res: Response) => {
     console.log('📝 환경변수 확인:', {
       clientId: process.env.SLACK_CLIENT_ID ? '존재' : '없음',
       clientSecret: process.env.SLACK_CLIENT_SECRET ? '존재' : '없음',
-      redirectUri: process.env.SLACK_REDIRECT_URI || 'https://fecf095abfcc.ngrok-free.app/auth/slack/callback'
+      redirectUri: process.env.SLACK_REDIRECT_URI || 'https://d2735ad2cc73.ngrok-free.app/auth/slack/callback'
     });
     
     // 테스트 모드: 실제 API 호출 대신 테스트 데이터 사용
@@ -2365,7 +2365,7 @@ app.get('/auth/slack/callback', async (req: Request, res: Response) => {
         client_id: process.env.SLACK_CLIENT_ID || '9123205664802.9178095689748',
         client_secret: process.env.SLACK_CLIENT_SECRET || '943bff5c993ed1609923e84b7a5e4365',
         code: code as string,
-        redirect_uri: process.env.SLACK_REDIRECT_URI || 'https://fecf095abfcc.ngrok-free.app/auth/slack/callback'
+        redirect_uri: process.env.SLACK_REDIRECT_URI || 'https://d2735ad2cc73.ngrok-free.app/auth/slack/callback'
       })
     });
     
