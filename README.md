@@ -254,7 +254,7 @@ Slack, Notion, Jira 등 협업 도구와의 실시간 연동 및 자동화를 �
 - **클라이언트**: React 대시보드, Slack App, 모바일 PWA
 - **API Gateway**: Express.js, JWT 인증, 멀티테넌트
 - **AI 엔진**: FastAPI, WhisperX, BERT, Qwen3
-- **데이터**: PostgreSQL, Prisma ORM, Redis 캐시
+- **데이터**: PostgreSQL, Prisma ORM, Redis 캐맨우
 - **외부 연동**: Slack/Notion/Jira API
 
 ## 실행 화면
