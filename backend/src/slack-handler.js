@@ -5602,133 +5602,60 @@ async function processUploadedFile(file, projectName, client, userId) {
             }
           }
           
-          // JIRA 이슈 생성
-          if (jiraIntegration && createdProject) {
-            console.log('🎫 JIRA 연동 확인됨. 이슈 생성 시작...');
+          // JIRA 이슈 생성 - syncTaskMasterToJira 사용하여 새 프로젝트 생성
+          if (jiraIntegration && createdProject && result.stage2?.task_master_prd) {
+            console.log('🎫 JIRA 연동 확인됨. 새 프로젝트 및 이슈 생성 시작...');
             try {
               const JiraService = require('./services/jira-service').default || require('./services/jira-service').JiraService;
               const jiraService = new JiraService(prisma);
               
-              // DB에서 생성된 태스크 가져오기 (담당자 정보 포함)
-              const dbTasks = await prisma.task.findMany({
-                where: {
-                  projectId: createdProject.id,
-                  parentId: null  // 메인 태스크만
-                },
-                include: {
-                  assignee: true,
-                  metadata: true,
-                  children: {  // subtasks가 아니라 children
-                    include: {
-                      assignee: true,
-                      metadata: true
-                    }
-                  }
+              // syncTaskMasterToJira를 사용하여 새 프로젝트 생성 및 이슈 추가
+              const jiraResult = await jiraService.syncTaskMasterToJira(
+                user.tenantId,
+                user.id,
+                {
+                  title: projectName || 'TtalKkak Project',
+                  overview: result.stage1?.notion_project?.project_purpose || 'AI generated project',
+                  tasks: result.stage2.task_master_prd.tasks.map(task => ({
+                    title: task.title || task.task,
+                    description: task.description || '',
+                    priority: task.priority?.toLowerCase() || 'medium',
+                    estimated_hours: task.estimated_hours || 8,
+                    complexity: task.complexity || 'MEDIUM',
+                    start_date: task.startDate || task.start_date,
+                    deadline: task.dueDate || task.due_date || task.deadline,
+                    subtasks: task.subtasks?.map(subtask => ({
+                      title: subtask.title,
+                      description: subtask.description || '',
+                      estimated_hours: subtask.estimated_hours || 2,
+                      startDate: subtask.startDate || subtask.start_date,
+                      dueDate: subtask.dueDate || subtask.due_date
+                    })) || []
+                  }))
                 }
-              });
+              );
               
-              // JIRA 프로젝트 키 가져오기
-              let projectKey = jiraIntegration.config.default_project;
-              if (!projectKey) {
-                // 기본 프로젝트가 없으면 기본값 사용
-                console.log('⚠️ JIRA 프로젝트 키가 설정되지 않았습니다. 기본값 "TK" 사용');
-                projectKey = 'TK'; // 기본 프로젝트 키
-              }
-              
-              if (projectKey) {
-                // 각 메인태스크를 Epic으로 생성
-                for (const mainTask of dbTasks) {
-                  try {
-                    // 메인태스크를 Epic으로 생성
-                    const epicIssue = await jiraService.createJiraIssue(
-                      user.tenantId,
-                      user.id,
-                      {
-                        projectKey: projectKey,
-                        summary: mainTask.title,
-                        description: mainTask.description || '',
-                        issueType: 'Epic',
-                        epicName: mainTask.title,
-                        startDate: mainTask.startDate ? new Date(mainTask.startDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-                        dueDate: mainTask.dueDate ? new Date(mainTask.dueDate).toISOString().split('T')[0] : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-                        priority: mainTask.priority || 'MEDIUM'
-                      }
-                    );
-                    
-                    if (epicIssue && epicIssue.key) {
-                      console.log(`✅ JIRA Epic 생성: ${epicIssue.key} - ${mainTask.title}`);
-                      
-                      // Epic의 서브태스크들을 Task로 생성
-                      if (mainTask.children && mainTask.children.length > 0) {
-                        for (const subtask of mainTask.children) {
-                          try {
-                            const taskIssue = await jiraService.createJiraIssue(
-                              user.tenantId,
-                              user.id,
-                              {
-                                projectKey: projectKey,
-                                summary: subtask.title,
-                                description: subtask.description || '',
-                                issueType: 'Task',
-                                epicLink: epicIssue.key, // Epic과 연결
-                                startDate: subtask.startDate ? new Date(subtask.startDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-                                dueDate: subtask.dueDate ? new Date(subtask.dueDate).toISOString().split('T')[0] : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-                                priority: subtask.priority || 'MEDIUM',
-                                assignee: subtask.assignee?.jiraUserId || subtask.assignee?.email
-                              }
-                            );
-                      
-                            if (taskIssue && taskIssue.key) {
-                              console.log(`  ✅ JIRA Task 생성: ${taskIssue.key} - ${subtask.title}`);
-                              
-                              // Task의 서브태스크가 있으면 Sub-task로 생성
-                              if (subtask.children && subtask.children.length > 0) {
-                                for (const subsubtask of subtask.children) {
-                                  try {
-                                    await jiraService.createJiraIssue(
-                                      user.tenantId,
-                                      user.id,
-                                      {
-                                        projectKey: projectKey,
-                                        summary: subsubtask.title,
-                                        description: subsubtask.description || '',
-                                        issueType: 'Sub-task',
-                                        parentKey: taskIssue.key,
-                                        startDate: subsubtask.startDate ? new Date(subsubtask.startDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-                                        dueDate: subsubtask.dueDate ? new Date(subsubtask.dueDate).toISOString().split('T')[0] : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-                                        priority: subsubtask.priority || 'LOW',
-                                        assignee: subsubtask.assignee?.jiraUserId || subsubtask.assignee?.email
-                                      }
-                                    );
-                                    console.log(`    ✅ JIRA Sub-task 생성: ${subsubtask.title}`);
-                                  } catch (subError) {
-                                    console.error('    ❌ Sub-task 생성 실패:', subError);
-                                  }
-                                }
-                              }
-                            }
-                          } catch (taskError) {
-                            console.error(`  ❌ Task 생성 실패:`, taskError);
-                          }
-                        }
-                      }
-                    }
-                  } catch (epicError) {
-                    console.error('❌ Epic 생성 실패:', epicError);
-                  }
+              if (jiraResult && jiraResult.success && jiraResult.projectKey) {
+                console.log('✅ JIRA 프로젝트 생성 성공:', jiraResult.projectKey);
+                
+                // JIRA 사이트 URL 구성
+                jiraSiteUrl = jiraIntegration.config.site_url;
+                
+                // JIRA 프로젝트 URL 설정
+                if (jiraIntegration.config.site_url) {
+                  jiraIssueUrl = `${jiraIntegration.config.site_url}/jira/software/c/projects/${jiraResult.projectKey}/summary`;
+                } else if (jiraIntegration.config.site_name) {
+                  jiraIssueUrl = `https://${jiraIntegration.config.site_name}.atlassian.net/jira/software/c/projects/${jiraResult.projectKey}/summary`;
                 }
+                
+                console.log('✅ JIRA 프로젝트 생성 완료:', {
+                  projectKey: jiraResult.projectKey,
+                  epicsCreated: jiraResult.epicsCreated,
+                  tasksCreated: jiraResult.tasksCreated,
+                  url: jiraIssueUrl
+                });
               } else {
-                console.warn('⚠️ JIRA 프로젝트 키를 찾을 수 없습니다.');
-              }
-              
-              // JIRA 사이트 URL 구성
-              jiraSiteUrl = jiraIntegration.config.site_url;
-              
-              // JIRA 프로젝트 URL 설정
-              if (projectKey && jiraIntegration.config.site_url) {
-                jiraIssueUrl = `${jiraIntegration.config.site_url}/jira/software/c/projects/${projectKey}/summary`;
-              } else if (projectKey && jiraIntegration.config.site_name) {
-                jiraIssueUrl = `https://${jiraIntegration.config.site_name}.atlassian.net/jira/software/c/projects/${projectKey}/summary`;
+                console.error('❌ JIRA 프로젝트 생성 실패:', jiraResult?.error || 'Unknown error');
               }
               
             } catch (jiraError) {

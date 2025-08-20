@@ -152,6 +152,37 @@ class JiraService {
 
 
   /**
+   * JIRA 프로젝트 목록 조회
+   */
+  public async getProjects(tenantId: string, userId: string): Promise<any[]> {
+    const integration = await this.getJiraIntegration(tenantId, userId);
+    if (!integration) {
+      throw new Error('JIRA integration not found');
+    }
+
+    try {
+      const response = await this.callJiraAPI(integration, '/project', 'GET');
+      return response || [];
+    } catch (error) {
+      console.error('❌ JIRA 프로젝트 목록 조회 실패:', error);
+      return [];
+    }
+  }
+
+  /**
+   * 특정 프로젝트 키가 유효한지 확인
+   */
+  public async validateProjectKey(tenantId: string, userId: string, projectKey: string): Promise<boolean> {
+    try {
+      const projects = await this.getProjects(tenantId, userId);
+      return projects.some((project: any) => project.key === projectKey);
+    } catch (error) {
+      console.error('❌ 프로젝트 키 검증 실패:', error);
+      return false;
+    }
+  }
+
+  /**
    * JIRA OAuth 토큰 DB 저장
    */
   public async saveJiraTokens(
