@@ -189,6 +189,15 @@ Task 분석 지연: 약 1분 </br>
     <b><대시보드></b><br>
 </p>
 
+</br>
+
+<p align="center">
+  <img src="https://skn12final3team.slack.com/files/U09405Y4YM7/F09B1VB4R0T/1__online-video-cutter.com_.mp4">
+    <b><시연영상></b><br>
+</p>
+
+</br>
+
 
 ---
 ## 💬 팀원 한 줄 회고
