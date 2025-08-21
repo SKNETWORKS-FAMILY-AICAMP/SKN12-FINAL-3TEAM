@@ -444,7 +444,7 @@ Qwen3 생성 (문서화)
 </br>
 <a href="https://raw.githubusercontent.com/SKNETWORKS-FAMILY-AICAMP/SKN12-FINAL-3TEAM/산출물/발표자료/img/video0.mp4">
 </a>
-<a href="https://youtu.be/2KzR3DA6_5Y">
+<a href="https://youtu.be/q8rb3CaFigI">
   <img src="https://img.shields.io/badge/▶️_시연_영상_자세히_보기-FF0000?style=for-the-badge&logo=youtube&logoColor=white"/>
 </a>
 </div>
