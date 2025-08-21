@@ -440,8 +440,7 @@ Qwen3 생성 (문서화)
 
 
 ### 🎬 시연영상
-![데모](https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN12-FINAL-3TEAM/blob/main/%EC%82%B0%EC%B6%9C%EB%AC%BC/%EB%B0%9C%ED%91%9C%EC%9E%90%EB%A3%8C/img/demo.gif?raw=true)
-</br>
+![데모](https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN12-FINAL-3TEAM/blob/main/%EC%82%B0%EC%B6%9C%EB%AC%BC/%EB%B0%9C%ED%91%9C%EC%9E%90%EB%A3%8C/img/%EC%8B%9C%EC%97%B0%EC%98%81%EC%83%81test.gif?raw=true)</br>
 <a href="https://raw.githubusercontent.com/SKNETWORKS-FAMILY-AICAMP/SKN12-FINAL-3TEAM/산출물/발표자료/img/video0.mp4">
 </a>
 <a href="https://youtu.be/q8rb3CaFigI">
