@@ -438,7 +438,9 @@ Qwen3 생성 (문서화)
 ### 📊 대시보드
 <img src="https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN12-FINAL-3TEAM/blob/main/%EC%82%B0%EC%B6%9C%EB%AC%BC/%EB%B0%9C%ED%91%9C%EC%9E%90%EB%A3%8C/img/%EB%8C%80%EC%8B%9C%EB%B3%B4%EB%93%9C.png?raw=true" width="80%">
 
+
 ### 🎬 시연영상
+![데모](https://github.com/SKNETWORKS-FAMILY-AICAMP/SKN12-FINAL-3TEAM/blob/main/%EC%82%B0%EC%B6%9C%EB%AC%BC/%EB%B0%9C%ED%91%9C%EC%9E%90%EB%A3%8C/img/demo.gif?raw=true)
 <a href="https://raw.githubusercontent.com/SKNETWORKS-FAMILY-AICAMP/SKN12-FINAL-3TEAM/산출물/발표자료/img/video0.mp4">
   <img src="https://img.shields.io/badge/▶️_시연_영상_보기-FF0000?style=for-the-badge&logo=youtube&logoColor=white"/>
 </a>
